@@ -11362,6 +11362,110 @@ unsafe extern "C" {
         invMass: f32,
     );
 }
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct JPH_SoftBodySkinWeight {
+    pub invBindIndex: u32,
+    pub weight: f32,
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    [
+        "Size of JPH_SoftBodySkinWeight",
+    ][::std::mem::size_of::<JPH_SoftBodySkinWeight>() - 8usize];
+    [
+        "Alignment of JPH_SoftBodySkinWeight",
+    ][::std::mem::align_of::<JPH_SoftBodySkinWeight>() - 4usize];
+    [
+        "Offset of field: JPH_SoftBodySkinWeight::invBindIndex",
+    ][::std::mem::offset_of!(JPH_SoftBodySkinWeight, invBindIndex) - 0usize];
+    [
+        "Offset of field: JPH_SoftBodySkinWeight::weight",
+    ][::std::mem::offset_of!(JPH_SoftBodySkinWeight, weight) - 4usize];
+};
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct JPH_SoftBodySkinnedConstraint {
+    pub vertex: u32,
+    pub weights: [JPH_SoftBodySkinWeight; 4usize],
+    pub maxDistance: f32,
+    pub backStopDistance: f32,
+    pub backStopRadius: f32,
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    [
+        "Size of JPH_SoftBodySkinnedConstraint",
+    ][::std::mem::size_of::<JPH_SoftBodySkinnedConstraint>() - 48usize];
+    [
+        "Alignment of JPH_SoftBodySkinnedConstraint",
+    ][::std::mem::align_of::<JPH_SoftBodySkinnedConstraint>() - 4usize];
+    [
+        "Offset of field: JPH_SoftBodySkinnedConstraint::vertex",
+    ][::std::mem::offset_of!(JPH_SoftBodySkinnedConstraint, vertex) - 0usize];
+    [
+        "Offset of field: JPH_SoftBodySkinnedConstraint::weights",
+    ][::std::mem::offset_of!(JPH_SoftBodySkinnedConstraint, weights) - 4usize];
+    [
+        "Offset of field: JPH_SoftBodySkinnedConstraint::maxDistance",
+    ][::std::mem::offset_of!(JPH_SoftBodySkinnedConstraint, maxDistance) - 36usize];
+    [
+        "Offset of field: JPH_SoftBodySkinnedConstraint::backStopDistance",
+    ][::std::mem::offset_of!(JPH_SoftBodySkinnedConstraint, backStopDistance) - 40usize];
+    [
+        "Offset of field: JPH_SoftBodySkinnedConstraint::backStopRadius",
+    ][::std::mem::offset_of!(JPH_SoftBodySkinnedConstraint, backStopRadius) - 44usize];
+};
+unsafe extern "C" {
+    pub fn JPH_SoftBodySharedSettings_AddInvBind(
+        settings: *mut JPH_SoftBodySharedSettings,
+        jointIndex: u32,
+        invBind: *const JPH_Mat4,
+    );
+}
+unsafe extern "C" {
+    pub fn JPH_SoftBodySharedSettings_AddSkinnedConstraint(
+        settings: *mut JPH_SoftBodySharedSettings,
+        constraint: *const JPH_SoftBodySkinnedConstraint,
+    ) -> bool;
+}
+unsafe extern "C" {
+    pub fn JPH_SoftBodySharedSettings_CalculateSkinnedConstraintNormals(
+        settings: *mut JPH_SoftBodySharedSettings,
+    );
+}
+unsafe extern "C" {
+    pub fn JPH_SoftBodySharedSettings_GetInvBindCount(
+        settings: *const JPH_SoftBodySharedSettings,
+    ) -> u32;
+}
+unsafe extern "C" {
+    pub fn JPH_SoftBodySharedSettings_GetSkinnedConstraintCount(
+        settings: *const JPH_SoftBodySharedSettings,
+    ) -> u32;
+}
+unsafe extern "C" {
+    pub fn JPH_Body_GetSoftBodySkinJointCount(body: *const JPH_Body) -> u32;
+}
+unsafe extern "C" {
+    pub fn JPH_Body_SkinSoftBodyVertices(
+        body: *mut JPH_Body,
+        jointMatrices: *const JPH_Mat4,
+        jointCount: u32,
+        hardSkinAll: bool,
+    ) -> bool;
+}
+unsafe extern "C" {
+    pub fn JPH_Body_GetSoftBodySkinnedMaxDistanceMultiplier(
+        body: *const JPH_Body,
+    ) -> f32;
+}
+unsafe extern "C" {
+    pub fn JPH_Body_SetSoftBodySkinnedMaxDistanceMultiplier(
+        body: *mut JPH_Body,
+        multiplier: f32,
+    ) -> bool;
+}
 unsafe extern "C" {
     pub fn JPH_Body_GetSubmergedVolume(
         body: *const JPH_Body,

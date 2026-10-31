@@ -74,6 +74,19 @@ const _: () = {
     assert!(offset_of!(JPH_SoftBodyVertexAttributes, lraType) == 12);
     assert!(offset_of!(JPH_SoftBodyVertexAttributes, lraMaxDistanceMultiplier) == 16);
 
+    assert!(size_of::<JPH_SoftBodySkinWeight>() == 8);
+    assert!(align_of::<JPH_SoftBodySkinWeight>() == 4);
+    assert!(offset_of!(JPH_SoftBodySkinWeight, invBindIndex) == 0);
+    assert!(offset_of!(JPH_SoftBodySkinWeight, weight) == 4);
+
+    assert!(size_of::<JPH_SoftBodySkinnedConstraint>() == 48);
+    assert!(align_of::<JPH_SoftBodySkinnedConstraint>() == 4);
+    assert!(offset_of!(JPH_SoftBodySkinnedConstraint, vertex) == 0);
+    assert!(offset_of!(JPH_SoftBodySkinnedConstraint, weights) == 4);
+    assert!(offset_of!(JPH_SoftBodySkinnedConstraint, maxDistance) == 36);
+    assert!(offset_of!(JPH_SoftBodySkinnedConstraint, backStopDistance) == 40);
+    assert!(offset_of!(JPH_SoftBodySkinnedConstraint, backStopRadius) == 44);
+
     assert!(size_of::<JPH_ContactSettings>() == 52);
     assert!(align_of::<JPH_ContactSettings>() == 4);
 
