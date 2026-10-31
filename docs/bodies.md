@@ -44,6 +44,12 @@ or, when it is not diagonal, is not positive definite and well conditioned
 given. `RagdollSettings::new_stabilized` refuses parts with a provided inertia: Jolt's
 stabilization rescales the inertia with the part's new mass.
 
+`BodyRef::inverse_inertia` reads back what Jolt uses: the inverse inertia tensor about the centre
+of mass in world coordinates (kg⁻¹·m⁻²), in rows like `Inertia::Tensor`. It includes the body's
+current rotation, and the rows and columns of rotation axes locked with `allowed_dofs` are zero,
+so the tensor times an angular impulse is the change of angular velocity
+`add_angular_impulse` gives. It is `None` for static, kinematic and soft bodies.
+
 ```rust
 use oxijolt::*;
 

@@ -31,6 +31,8 @@ what is planned next.
   ([guide](vehicles.md#tuning-a-vehicle-while-it-drives)).
 - A body's mass and inertia given directly instead of computed from its shape
   (`BodySettings::mass_and_inertia`) ([guide](bodies.md#mass-and-inertia)).
+- The world-space inverse inertia a dynamic body has, rotation and locked axes included
+  (`BodyRef::inverse_inertia`) ([guide](bodies.md#mass-and-inertia)).
 - Ragdolls from a skeleton, posed, motor-driven or kinematic, with settle detection, and a skeleton
   mapper to and from a detailed animation skeleton ([guide](guide.md#ragdolls)).
 - Twelve kinds of constraints with motors, springs and limits: fixed, point, distance, hinge,

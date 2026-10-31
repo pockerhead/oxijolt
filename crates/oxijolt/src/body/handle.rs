@@ -130,6 +130,34 @@ impl BodyRef<'_> {
         (inverse_mass != 0.0).then(|| 1.0 / inverse_mass)
     }
 
+    /// The inverse inertia tensor about the centre of mass in world coordinates, in kg⁻¹·m⁻²
+    /// (Jolt `Body::GetInverseInertia`): the body's rotation is applied, and the rows and columns
+    /// of world rotation axes locked by [`allowed_dofs`](Self::allowed_dofs) are zero, so a body
+    /// with every rotation locked reads all zeros. Multiplying it by an angular impulse gives the
+    /// change of angular velocity Jolt applies.
+    ///
+    /// In rows, as [`Inertia::Tensor`](crate::Inertia::Tensor): `tensor[i][j]` is the entry in
+    /// row `i` and column `j`. `None` for a body that is not a dynamic rigid body (static,
+    /// kinematic, soft) or that no longer exists.
+    pub fn inverse_inertia(&self) -> Option<[[f32; 3]; 3]> {
+        with_read_locked_body(self.body_lock_interface, self.id, |body| {
+            // SAFETY: `body` is locked for reading for the duration of the closure. Jolt's
+            // `GetInverseInertia` reads the motion properties of a dynamic body (it asserts
+            // `IsDynamic`), so it is called only for a dynamic rigid body; it is a const getter,
+            // so the mutable pointer joltc takes is only read through. An all-zero `JPH_Mat4` is
+            // valid (floats); joltc copies the whole matrix into it, a live local.
+            unsafe {
+                if !JPH_Body_IsRigidBody(body.as_ptr()) || !JPH_Body_IsDynamic(body.as_ptr()) {
+                    return None;
+                }
+                let mut matrix: JPH_Mat4 = std::mem::zeroed();
+                JPH_Body_GetInverseInertia(body.as_ptr(), &mut matrix);
+                Some(rows(&matrix))
+            }
+        })
+        .flatten()
+    }
+
     /// The degrees of freedom the body may move in, as created
     /// ([`BodySettings::allowed_dofs`](crate::BodySettings::allowed_dofs)). A body without
     /// motion properties, a static body that cannot move, reports [`AllowedDofs::ALL`].
@@ -193,6 +221,12 @@ impl BodyRef<'_> {
         })
         .unwrap_or(false)
     }
+}
+
+/// The upper-left 3x3 block of Jolt's column-major `matrix`, in rows.
+fn rows(matrix: &JPH_Mat4) -> [[f32; 3]; 3] {
+    let [x, y, z, _] = matrix.column;
+    [[x.x, y.x, z.x], [x.y, y.y, z.y], [x.z, y.z, z.z]]
 }
 
 /// Read and write access to one body, borrowed mutably from its world.
