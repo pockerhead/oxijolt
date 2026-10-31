@@ -21,6 +21,7 @@ mod handle;
 mod settings;
 mod shared;
 mod skin;
+mod skinning;
 
 pub use handle::{SoftBodyMut, SoftBodyRef, SoftBodyVertexState};
 pub use settings::SoftBodySettings;

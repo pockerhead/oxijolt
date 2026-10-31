@@ -317,8 +317,11 @@ fn to_jph(
             require(has_skinned_face, BACK_STOP_FACE_RULE)?;
             (back_stop.distance, back_stop.radius)
         }
-        // Jolt's defaults: `FLT_MAX` disables the back stop.
-        None => (f32::MAX, DEFAULT_BACK_STOP_RADIUS),
+        // Jolt applies a back stop while its distance is below the max distance times the
+        // multiplier. Its default `FLT_MAX` would apply once an unlimited max distance
+        // (`FLT_MAX`) times a multiplier above 1 becomes infinite, as a 40 m sphere around the
+        // skinned position wherever the normal is zero. Infinity is never below it.
+        None => (f32::INFINITY, DEFAULT_BACK_STOP_RADIUS),
     };
     Ok(JPH_SoftBodySkinnedConstraint {
         vertex: constraint.vertex,

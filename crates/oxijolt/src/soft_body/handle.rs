@@ -218,9 +218,9 @@ pub struct SoftBodyVertexState {
 /// The view borrows the world, so the world cannot step while it exists. Not `Send` or `Sync`;
 /// share the world instead.
 pub struct SoftBodyRef<'w> {
-    body_interface: NonNull<JPH_BodyInterface>,
-    body_lock_interface: NonNull<JPH_BodyLockInterface>,
-    id: BodyId,
+    pub(super) body_interface: NonNull<JPH_BodyInterface>,
+    pub(super) body_lock_interface: NonNull<JPH_BodyLockInterface>,
+    pub(super) id: BodyId,
     _world: PhantomData<&'w PhysicsWorld>,
 }
 
@@ -487,14 +487,14 @@ impl SoftBodyMut<'_> {
 
     /// Wakes the body. Called after the write lock is released: `ActivateBody` locks the body
     /// again, and Jolt's body mutexes are not recursive.
-    fn activate(&mut self) {
+    pub(super) fn activate(&mut self) {
         // SAFETY: the world is borrowed mutably through this view and holds the body; this
         // thread holds no body lock.
         unsafe { JPH_BodyInterface_ActivateBody(self.body_interface.as_ptr(), self.id.to_raw()) };
     }
 }
 
-fn require_body(valid: bool, what: &'static str) -> Result<(), BodyError> {
+pub(super) fn require_body(valid: bool, what: &'static str) -> Result<(), BodyError> {
     if valid {
         Ok(())
     } else {

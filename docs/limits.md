@@ -832,6 +832,15 @@ point to at most `2√3 E + √3 E = 3√3 E` from it. The weights are normalise
 1 within a few `f32` roundings, so their blend is within the same bound up to a relative error of a
 few `2^-24`, below `4√3 E` (about 13 900 m), far inside `f32`.
 
+The skinned max distance multiplier is within `0..=MAX_RATIO`, so a limited max distance times it
+is at most `E · MAX_RATIO` (2e7 m), finite. An unlimited max distance is Jolt's `FLT_MAX`, and a
+multiplier above 1 makes it infinite, which Jolt still treats as unlimited
+(`ApplySkinConstraints`, `SoftBodyMotionProperties.cpp:529-570`). Jolt applies a back stop while its
+distance is below that product; its default for "no back stop", `FLT_MAX`, is below infinity and
+would turn into a 40 m sphere around the skinned position wherever the vertex has no normal. A
+constraint without a back stop therefore gets an infinite back stop distance, which no product
+exceeds.
+
 ## Vehicle gravity
 
 Jolt adds `gravity / inverse_mass` to the chassis (`VehicleConstraint::OnStep`); the chassis is a
