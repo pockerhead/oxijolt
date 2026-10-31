@@ -134,7 +134,8 @@ impl BodyRef<'_> {
     /// (Jolt `Body::GetInverseInertia`): the body's rotation is applied, and the rows and columns
     /// of world rotation axes locked by [`allowed_dofs`](Self::allowed_dofs) are zero, so a body
     /// with every rotation locked reads all zeros. Multiplying it by an angular impulse gives the
-    /// change of angular velocity Jolt applies.
+    /// change of angular velocity Jolt applies before it clamps the angular velocity to
+    /// [`limits::MAX_ANGULAR_VELOCITY`](crate::limits::MAX_ANGULAR_VELOCITY).
     ///
     /// In rows, as [`Inertia::Tensor`](crate::Inertia::Tensor): `tensor[i][j]` is the entry in
     /// row `i` and column `j`. `None` for a body that is not a dynamic rigid body (static,

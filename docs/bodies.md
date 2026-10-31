@@ -48,7 +48,7 @@ stabilization rescales the inertia with the part's new mass.
 of mass in world coordinates (kg⁻¹·m⁻²), in rows like `Inertia::Tensor`. It includes the body's
 current rotation, and the rows and columns of rotation axes locked with `allowed_dofs` are zero,
 so the tensor times an angular impulse is the change of angular velocity
-`add_angular_impulse` gives. It is `None` for static, kinematic and soft bodies.
+`add_angular_impulse` gives, up to Jolt's clamp at `limits::MAX_ANGULAR_VELOCITY`. It is `None` for static, kinematic and soft bodies.
 
 ```rust
 use oxijolt::*;
