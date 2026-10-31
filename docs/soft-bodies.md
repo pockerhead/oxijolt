@@ -152,7 +152,110 @@ diverge, are not covered ([coverage.md](coverage.md#not-covered)).
   `soft_body_validations`), and a `ContactListener` can change or reject a soft body contact
   ([events.md](events.md)).
 
-## Not bound
+## Skinning
 
-Skinned soft bodies (Jolt's skin constraints, which pin vertices to an animated skeleton) are in
-neither layer.
+Skinned constraints tie vertices to the joints of an animated skeleton: a cape on a character's
+shoulders, a skirt on its hips. Each skinning call moves every skinned vertex's target, its skinned
+position, with the joints; the step then keeps the simulated vertex within a max distance of that
+target and outside a back stop sphere behind it.
+
+```rust
+use oxijolt::*;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut world = PhysicsWorld::new(WorldSettings::default())?;
+
+    // The character's skeleton in the world, as `RagdollRef::pose` returns it: one joint, the
+    // chest, 1.4 m up and `x` to the side.
+    let chest_at = |x: f32| SkeletonPose {
+        root_offset: RVec3::new(0.0, 1.4, 0.0),
+        joints: vec![JointTransform { translation: Vec3::new(x, 0.0, 0.0), rotation: Quat::IDENTITY }],
+    };
+
+    // A 5 x 5 cape of 1 m hanging behind the chest. Its top row is attached to the chest and
+    // kinematic, the next row may stray 5 cm from its skinned position, the rest is free.
+    let n: u32 = 5;
+    let mut vertices = Vec::new();
+    for row in 0..n {
+        for x in 0..n {
+            let position = Vec3::new(0.25 * x as f32 - 0.5, -0.25 * row as f32, 0.0);
+            vertices.push(if row == 0 {
+                SoftBodyVertex::kinematic(position)
+            } else {
+                SoftBodyVertex { inverse_mass: 10.0, ..SoftBodyVertex::new(position) }
+            });
+        }
+    }
+    let mut faces = Vec::new();
+    for row in 0..n - 1 {
+        for x in 0..n - 1 {
+            let i = row * n + x;
+            faces.push([i, i + n, i + n + 1]);
+            faces.push([i, i + n + 1, i + 1]);
+        }
+    }
+    // The cape's vertex frame sits 20 cm behind the chest while the chest is in its start pose.
+    let cape_position = RVec3::new(0.0, 1.4, -0.2);
+    let binds = SoftBodyInvBind::from_pose(&chest_at(0.0), cape_position, Quat::IDENTITY)?;
+    let mut chest_only = [SoftBodySkinWeight::default(); 4];
+    chest_only[0] = SoftBodySkinWeight::new(0, 1.0);
+    let mut builder = SoftBodySharedSettings::builder(vertices, faces)
+        .create_constraints(SoftBodyBendType::Distance, SoftBodyVertexAttributes::default())
+        .inv_binds(binds);
+    for x in 0..n {
+        builder = builder
+            .skinned(SoftBodySkinned { max_distance: Some(0.0), ..SoftBodySkinned::new(x, chest_only) })
+            .skinned(SoftBodySkinned { max_distance: Some(0.05), ..SoftBodySkinned::new(n + x, chest_only) });
+    }
+    let cape = builder.build()?;
+    let id = world.create_soft_body(&cape, &SoftBodySettings::default().position(cape_position))?;
+
+    // Skin before every step: the chest moves 0.5 m to the side within a second.
+    for tick in 1..=60 {
+        world.soft_body_mut(id)?.skin_vertices(&chest_at(tick as f32 / 120.0))?;
+        assert!(world.step(1.0 / 60.0)?.is_complete());
+    }
+    // The attached corner, bound 0.5 m left of the chest, went with it.
+    let corner = world.soft_body(id)?.vertices()[0].position;
+    assert!(corner.x.abs() < 1.0e-3);
+    Ok(())
+}
+```
+
+- **Frames.** An inverse bind (`SoftBodyInvBind`) is a joint's pose in the settings frame, the
+  frame of the vertex positions, at the moment the vertices are in their bind positions.
+  `SoftBodyInvBind::from_pose(pose, position, rotation)` makes one per joint from a world pose and
+  the place the settings frame had in the world then. `skin_vertices` takes a world pose, such as
+  `RagdollRef::pose` returns, and converts it to the body's centre of mass frame itself, in double
+  precision with the `double-precision` feature. Each bound joint must stay within
+  `limits::MAX_SHAPE_EXTENT` (per axis) of the body's centre of mass
+  ([limits.md](limits.md#soft-body-skinning)).
+- **Start.** A new skinned body starts with its skin at the bind pose and holds it until the first
+  skinning call.
+- **Weights.** A vertex takes up to four `SoftBodySkinWeight`s, each naming an inverse bind by the
+  order the binds were added. Zero weights are ignored; the others are normalised to add up to 1.
+- **Max distance.** `None` leaves the vertex free, `Some(0.0)` attaches it to its skinned position,
+  `Some(d)` keeps it within `d` metres.
+- **Back stop.** `SoftBodyBackStop { distance, radius }` is a sphere whose surface is `distance`
+  behind the skinned position, against the average normal of the faces around the vertex whose
+  three vertices are all skinned; a large radius approximates a plane. `build` refuses a back stop
+  on a vertex without such a face, and one whose distance is not below the max distance, since Jolt
+  would ignore it.
+- **Calls per step.** Call `skin_vertices` once before each step; during the step the skinned
+  positions move from those of the previous call to these. A step without a call holds the last
+  skinned positions. With several collision steps the first one moves the skinned positions and
+  the later ones hold them. `hard_skin_vertices` also puts every skinned vertex on its skinned
+  position at once with zero velocity, for a teleport. Each call wakes the body.
+- **Multiplier.** `set_skinned_max_distance_multiplier` scales every max distance of a body: 0
+  attaches every skinned vertex, values above 1 loosen the cloth.
+- **Attached rows.** Jolt solves the skinned constraints before the edges in each step, so the edges
+  pull an attached vertex that has mass a little off its target; in the tests' cloth the attached
+  row ended a few millimetres away. Make the attached row kinematic (inverse mass 0), as in the
+  example, and the edges cannot move it.
+- **Pressure.** Animation can squeeze a pressurised body below the volume its pressure was checked
+  against at creation, a case that is not covered ([coverage.md](coverage.md#not-covered)).
+
+A `WorldState` saves each skinned vertex's skinned positions and normal. It does not save the
+multiplier, nor whether a skinning call is waiting for the next step. A restore followed by a replay
+is exact when the caller skins before every step and saves between a step and the next skinning
+call; this is what the tests check ([state.md](state.md#what-is-not-saved)).
