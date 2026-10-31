@@ -20,6 +20,7 @@ use crate::{SoftBodyError, Vec3};
 mod handle;
 mod settings;
 mod shared;
+mod skin;
 
 pub use handle::{SoftBodyMut, SoftBodyRef, SoftBodyVertexState};
 pub use settings::SoftBodySettings;
@@ -28,6 +29,7 @@ pub use shared::{
     SoftBodyDihedralBend, SoftBodyEdge, SoftBodySharedSettings, SoftBodySharedSettingsBuilder,
     SoftBodyVolume,
 };
+pub use skin::{SoftBodyBackStop, SoftBodyInvBind, SoftBodySkinWeight, SoftBodySkinned};
 
 /// One particle of a soft body as [`SoftBodySharedSettings`] describe it.
 #[derive(Clone, Copy, Debug, PartialEq)]

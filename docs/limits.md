@@ -811,6 +811,27 @@ at least `MIN_DELTA_TIME` divided by
 below `f32::MAX`; Jolt's average of two compliances, `0.5 · (c1 + c2)`, stays finite as well. This
 proves that the product is finite, not that the solver is stable at every compliance.
 
+## Soft body skinning
+
+`MAX_SKIN_JOINTS` (4096) is crate policy. A skinning call passes one matrix per joint up to the
+largest bound joint, and Jolt allocates one 64-byte skin matrix per inverse bind from its temp
+allocator with a `uint` byte count (`SoftBodyMotionProperties.cpp:1142-1144`); with one bind per
+joint the cap keeps both at 256 KiB per call.
+
+Jolt packs the normal of each skinned constraint into 32 bits: the number of faces that touch the
+vertex and whose three vertices are all skinned in the top 8 bits, the start of its face list in the
+low 24 (`Skinned::mNormalInfo`, asserted in `SoftBodySharedSettings.cpp:596,602`).
+`SoftBodySharedSettingsBuilder::build` counts these faces per skinned vertex as Jolt collects them
+and refuses 256 or more at one vertex, or 2^24 or more in total.
+
+Skinned positions stay finite. Let `E = MAX_SHAPE_EXTENT`. Vertex positions and bind positions are
+within `E` per axis of the settings frame, so a rigid inverse bind takes a vertex `v` to
+`R_B⁻¹ (v − t_B)`, at most `2√3 E` long. The joints a skinning call passes, and the bind pose a new
+body starts in, are within `E` per axis of the body's centre of mass, so a joint matrix moves that
+point to at most `2√3 E + √3 E = 3√3 E` from it. The weights are normalised in `f64` and add up to
+1 within a few `f32` roundings, so their blend is within the same bound up to a relative error of a
+few `2^-24`, below `4√3 E` (about 13 900 m), far inside `f32`.
+
 ## Vehicle gravity
 
 Jolt adds `gravity / inverse_mass` to the chassis (`VehicleConstraint::OnStep`); the chassis is a

@@ -4,12 +4,15 @@ use std::collections::BTreeMap;
 
 use oxijolt_sys::*;
 
-use super::{SoftBodyBendType, SoftBodyVertex, SoftBodyVertexAttributes};
+use super::skin::{validate_skin, SkinBinding};
+use super::{
+    SoftBodyBendType, SoftBodyInvBind, SoftBodySkinned, SoftBodyVertex, SoftBodyVertexAttributes,
+};
 use crate::limits::{
     self, is_compliance, is_linear_velocity, is_local_offset, is_vertex_inverse_mass,
     SoftBodyMassDistribution, SoftBodyPressureGeometry, LINEAR_VELOCITY_RULE,
 };
-use crate::math::jolt_length;
+use crate::math::{inverse_rigid_matrix, jolt_length};
 use crate::owned::{JoltObject, Owned};
 use crate::world::ensure_initialized;
 use crate::{SoftBodyError, Vec3};
@@ -71,6 +74,7 @@ pub struct SoftBodySharedSettings {
     settings: Owned<JPH_SoftBodySharedSettings>,
     pub(super) pressure_geometry: SoftBodyPressureGeometry,
     pub(super) mass_distribution: SoftBodyMassDistribution,
+    pub(super) skin: Option<SkinBinding>,
 }
 
 impl std::fmt::Debug for SoftBodySharedSettings {
@@ -142,6 +146,8 @@ impl SoftBodySharedSettings {
             edges: Vec::new(),
             dihedral_bends: Vec::new(),
             volumes: Vec::new(),
+            inv_binds: Vec::new(),
+            skinned: Vec::new(),
         }
     }
 
@@ -185,6 +191,24 @@ impl SoftBodySharedSettings {
         // SAFETY: as in `vertex_count`.
         unsafe { JPH_SoftBodySharedSettings_GetLRAConstraintCount(self.as_ptr()) as usize }
     }
+
+    /// Number of inverse binds.
+    pub fn inv_bind_count(&self) -> usize {
+        // SAFETY: as in `vertex_count`.
+        unsafe { JPH_SoftBodySharedSettings_GetInvBindCount(self.as_ptr()) as usize }
+    }
+
+    /// Number of skinned constraints.
+    pub fn skinned_constraint_count(&self) -> usize {
+        // SAFETY: as in `vertex_count`.
+        unsafe { JPH_SoftBodySharedSettings_GetSkinnedConstraintCount(self.as_ptr()) as usize }
+    }
+
+    /// How many joint transforms a skinning call needs: 1 + the largest joint of the inverse
+    /// binds, 0 for settings without skinning.
+    pub fn skin_joint_count(&self) -> u32 {
+        self.skin.as_ref().map_or(0, |skin| skin.joint_count)
+    }
 }
 
 /// Collects the vertices, faces and constraints of [`SoftBodySharedSettings`]; made by
@@ -198,6 +222,8 @@ pub struct SoftBodySharedSettingsBuilder {
     edges: Vec<SoftBodyEdge>,
     dihedral_bends: Vec<SoftBodyDihedralBend>,
     volumes: Vec<SoftBodyVolume>,
+    inv_binds: Vec<SoftBodyInvBind>,
+    skinned: Vec<SoftBodySkinned>,
 }
 
 impl SoftBodySharedSettingsBuilder {
@@ -243,6 +269,28 @@ impl SoftBodySharedSettingsBuilder {
         self
     }
 
+    /// Adds the bind pose of a joint for skinning; skinned constraints name binds by the order
+    /// in which they were added. See [docs/soft-bodies.md].
+    ///
+    /// [docs/soft-bodies.md]: https://github.com/pockerhead/oxijolt/blob/main/docs/soft-bodies.md
+    pub fn inv_bind(mut self, bind: SoftBodyInvBind) -> Self {
+        self.inv_binds.push(bind);
+        self
+    }
+
+    /// Adds several binds as [`inv_bind`](Self::inv_bind) does, for example those of
+    /// [`SoftBodyInvBind::from_pose`].
+    pub fn inv_binds(mut self, binds: impl IntoIterator<Item = SoftBodyInvBind>) -> Self {
+        self.inv_binds.extend(binds);
+        self
+    }
+
+    /// Skins a vertex to the joints of the inverse binds.
+    pub fn skinned(mut self, skinned: SoftBodySkinned) -> Self {
+        self.skinned.push(skinned);
+        self
+    }
+
     /// Checks everything and builds the settings; nothing is allocated when a check fails.
     ///
     /// Fails with [`SoftBodyError::InvalidValue`] when:
@@ -260,12 +308,32 @@ impl SoftBodySharedSettingsBuilder {
     ///   vertex;
     /// - an explicit constraint names a vertex that does not exist or one vertex twice, has a
     ///   compliance out of range or an edge (or a bend's shared edge) shorter than
-    ///   [`limits::MIN_SOFT_BODY_EDGE_LENGTH`], or is a tetrahedron without volume.
+    ///   [`limits::MIN_SOFT_BODY_EDGE_LENGTH`], or is a tetrahedron without volume;
+    /// - there are inverse binds without skinned constraints or the reverse; an inverse bind's
+    ///   joint is not below [`limits::MAX_SKIN_JOINTS`] or has another bind, or its position is
+    ///   beyond [`limits::MAX_SHAPE_EXTENT`] or its rotation not a unit quaternion;
+    /// - a skinned constraint names a vertex that does not exist or has another skinned
+    ///   constraint; a weight is negative or not finite, none is positive, a positive one names
+    ///   no inverse bind or rounds to 0 once normalised; the max distance is beyond
+    ///   [`limits::MAX_SHAPE_EXTENT`]; the back stop's distance is beyond it or not below the
+    ///   max distance, its radius not within `(0, MAX_SHAPE_EXTENT]`, or no face around the
+    ///   vertex has three skinned vertices;
+    /// - a skinned vertex touches 256 faces or more whose vertices are all skinned, or these
+    ///   counts add up to 2^24 or more (Jolt packs them into 8 and 24 bits; see
+    ///   [docs/limits.md#soft-body-skinning]).
+    ///
+    /// [docs/limits.md#soft-body-skinning]: https://github.com/pockerhead/oxijolt/blob/main/docs/limits.md#soft-body-skinning
     pub fn build(self) -> Result<SoftBodySharedSettings, SoftBodyError> {
         if !ensure_initialized() {
             return Err(SoftBodyError::InitFailed);
         }
         self.validate()?;
+        let skin = validate_skin(
+            self.vertices.len(),
+            &self.faces,
+            &self.inv_binds,
+            &self.skinned,
+        )?;
         let positions: Vec<Vec3> = self.vertices.iter().map(|v| v.position).collect();
         let pressure_geometry = SoftBodyPressureGeometry::new(&positions, &self.faces);
         let mass_distribution = SoftBodyMassDistribution::new(
@@ -279,6 +347,7 @@ impl SoftBodySharedSettingsBuilder {
             settings: owned,
             pressure_geometry,
             mass_distribution,
+            skin: skin.as_ref().map(|skin| skin.binding.clone()),
         };
         let ptr = settings.settings.as_ptr();
         let vertices: Vec<JPH_SoftVertex> = self.vertices.iter().map(|v| v.to_jph()).collect();
@@ -322,6 +391,9 @@ impl SoftBodySharedSettingsBuilder {
         }
         // Generating constraints replaces the edges, so explicit ones come after it.
         self.add_explicit_constraints(ptr);
+        if let Some(skin) = &skin {
+            add_skin(ptr, &skin.binding, &skin.constraints);
+        }
         // SAFETY: `ptr` is live; Jolt reorders the constraints for its solver, the last change
         // the settings get.
         unsafe { JPH_SoftBodySharedSettings_Optimize(ptr) };
@@ -515,6 +587,34 @@ impl SoftBodySharedSettingsBuilder {
         }
         Ok(())
     }
+}
+
+/// Adds the inverse binds and the skinned constraints to `ptr` and computes the skinned
+/// normals, which must come before `Optimize` reorders the constraints.
+fn add_skin(
+    ptr: *mut JPH_SoftBodySharedSettings,
+    binding: &SkinBinding,
+    constraints: &[JPH_SoftBodySkinnedConstraint],
+) {
+    for &(joint, position, rotation) in &binding.binds {
+        let inverse = inverse_rigid_matrix(position, rotation);
+        // SAFETY: `ptr` is the live settings object `build` owns; `inverse` is a live local
+        // that joltc copies.
+        unsafe { JPH_SoftBodySharedSettings_AddInvBind(ptr, joint, &inverse) };
+    }
+    for constraint in constraints {
+        // SAFETY: `ptr` is live and holds the vertices and every inverse bind; `constraint` is
+        // a live element that joltc copies.
+        let added = unsafe { JPH_SoftBodySharedSettings_AddSkinnedConstraint(ptr, constraint) };
+        if !added {
+            // `validate_skin` checked the vertex and the inverse bind of every positive weight,
+            // the only refusals of the native call.
+            unreachable!("a validated skinned constraint was refused");
+        }
+    }
+    // SAFETY: `ptr` is live; `validate_skin` kept the per-vertex face counts below 256 and
+    // their total below 2^24, as Jolt asserts.
+    unsafe { JPH_SoftBodySharedSettings_CalculateSkinnedConstraintNormals(ptr) };
 }
 
 /// What the inverse mass of a soft body vertex must satisfy: 0 (kinematic), or the inverse

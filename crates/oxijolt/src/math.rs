@@ -5,8 +5,8 @@
 //! Jolt copy the fields and never round, so values read back with the same bits.
 
 use oxijolt_sys::{
-    JPH_Quat, JPH_Quat_GetAxisAngle, JPH_Quat_Multiply, JPH_Quat_Rotate, JPH_RVec3, JPH_Vec3,
-    JPH_Vec3_Length, JPH_Vec3_LengthSquared,
+    JPH_Mat4, JPH_Mat4_RotationTranslation, JPH_Quat, JPH_Quat_GetAxisAngle, JPH_Quat_Multiply,
+    JPH_Quat_Rotate, JPH_RVec3, JPH_Vec3, JPH_Vec3_Length, JPH_Vec3_LengthSquared, JPH_Vec4,
 };
 
 /// Scalar type of world positions: `f64` with the `double-precision` feature, `f32` otherwise.
@@ -48,6 +48,43 @@ pub(crate) fn jolt_product(a: Quat, b: Quat) -> Quat {
     // initialization.
     unsafe { JPH_Quat_Multiply(&a, &b, &mut result) };
     Quat::from_jph(result)
+}
+
+/// A matrix of zeros, to be overwritten by Jolt.
+pub(crate) fn zero_matrix() -> JPH_Mat4 {
+    let column = JPH_Vec4 {
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+        w: 0.0,
+    };
+    JPH_Mat4 {
+        column: [column; 4],
+    }
+}
+
+/// The matrix of a validated rigid transform. The rotation is normalised first: a rotation
+/// within Rust's unit tolerance can be just outside Jolt's, which sums the squares in another
+/// order.
+pub(crate) fn matrix(translation: Vec3, rotation: Quat) -> JPH_Mat4 {
+    let mut result = zero_matrix();
+    // SAFETY: joltc only reads the two live locals and writes `result`; the rotation is a unit
+    // quaternion within Jolt's tolerance, as `Mat44::sRotation` asserts.
+    unsafe {
+        JPH_Mat4_RotationTranslation(
+            &mut result,
+            &rotation.normalized().to_jph(),
+            &translation.to_jph(),
+        )
+    };
+    result
+}
+
+/// The inverse of the validated rigid transform `matrix(translation, rotation)`:
+/// `matrix(-(q⁻¹ · t), q⁻¹)` with `q` the normalised rotation.
+pub(crate) fn inverse_rigid_matrix(translation: Vec3, rotation: Quat) -> JPH_Mat4 {
+    let inverse = rotation.normalized().conjugated();
+    matrix(inverse.rotate(translation).scale(-1.0), inverse)
 }
 
 /// The angular velocity that turns by `rotation` in `delta_time` seconds, as Jolt's

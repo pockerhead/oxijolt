@@ -268,6 +268,15 @@ pub const MAX_LEVER_ARM_RATIO: f32 = 1000.0;
 /// [docs/limits.md#soft-body-edge-length]: https://github.com/pockerhead/oxijolt/blob/main/docs/limits.md#soft-body-edge-length
 pub const MIN_SOFT_BODY_EDGE_LENGTH: f32 = 1.0e-3;
 
+/// Most joints a skinned soft body may use: every
+/// [`SoftBodyInvBind::joint`](crate::SoftBodyInvBind::joint) is below it. It bounds the joint
+/// array built for each skinning call.
+///
+/// See [docs/limits.md#soft-body-skinning].
+///
+/// [docs/limits.md#soft-body-skinning]: https://github.com/pockerhead/oxijolt/blob/main/docs/limits.md#soft-body-skinning
+pub const MAX_SKIN_JOINTS: u32 = 4096;
+
 /// Shortest direction of a skeleton mapper chain, in metres: the ragdoll joints at its ends must
 /// be exactly together or at least this far apart, and the animation chain between them at least
 /// this long. A constant of the native mapper, not a setting; shorter chains give

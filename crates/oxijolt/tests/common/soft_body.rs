@@ -76,6 +76,28 @@ impl Cloth {
         SoftBodySharedSettings::builder(self.vertices.clone(), self.faces.clone())
     }
 
+    /// The cloth without constraints, its rows `z < rows.len()` skinned to joint 0 (bound at
+    /// the origin, unturned), row `z` with `rows[z]` as its max distance.
+    pub fn skinned(&self, rows: &[Option<f32>]) -> SoftBodySharedSettingsBuilder {
+        let mut builder =
+            self.builder()
+                .inv_bind(SoftBodyInvBind::new(0, Vec3::ZERO, Quat::IDENTITY));
+        let only = |inv_bind| {
+            let mut weights = [SoftBodySkinWeight::default(); 4];
+            weights[0] = SoftBodySkinWeight::new(inv_bind, 1.0);
+            weights
+        };
+        for (z, &max_distance) in rows.iter().enumerate() {
+            for x in 0..self.side {
+                builder = builder.skinned(SoftBodySkinned {
+                    max_distance,
+                    ..SoftBodySkinned::new(self.index(x, z as u32), only(0))
+                });
+            }
+        }
+        builder
+    }
+
     /// Shared settings with dihedral bends and geodesic long range attachments.
     pub fn settings(&self) -> SoftBodySharedSettings {
         self.builder()

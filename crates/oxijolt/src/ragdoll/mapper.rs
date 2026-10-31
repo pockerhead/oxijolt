@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use oxijolt_sys::*;
 
 use super::settings::{validate_local, JointTransform, Skeleton, SkeletonPose};
+use crate::math::{matrix, zero_matrix};
 use crate::owned::{JoltObject, Owned};
 use crate::{Quat, RVec3, RagdollError, Real, Vec3};
 
@@ -373,35 +374,6 @@ fn reexpress(pose: &SkeletonPose, root_offset: RVec3) -> Vec<JointTransform> {
             }
         })
         .collect()
-}
-
-fn zero_matrix() -> JPH_Mat4 {
-    let column = JPH_Vec4 {
-        x: 0.0,
-        y: 0.0,
-        z: 0.0,
-        w: 0.0,
-    };
-    JPH_Mat4 {
-        column: [column; 4],
-    }
-}
-
-/// The matrix of a validated joint transform. The rotation is normalised first: a rotation
-/// within Rust's unit tolerance can be just outside Jolt's, which sums the squares in another
-/// order.
-fn matrix(translation: Vec3, rotation: Quat) -> JPH_Mat4 {
-    let mut result = zero_matrix();
-    // SAFETY: joltc only reads the two live locals and writes `result`; the rotation is a unit
-    // quaternion within Jolt's tolerance, as `Mat44::sRotation` asserts.
-    unsafe {
-        JPH_Mat4_RotationTranslation(
-            &mut result,
-            &rotation.normalized().to_jph(),
-            &translation.to_jph(),
-        )
-    };
-    result
 }
 
 fn matrices(joints: &[JointTransform]) -> Vec<JPH_Mat4> {
