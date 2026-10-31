@@ -279,6 +279,69 @@ fn a_back_stop_needs_an_all_skinned_face() {
     assert_eq!(rejected(builder), BACK_STOP_FACE_RULE);
 }
 
+/// Two triangles on the edge from vertex 0 to vertex 1, the second turned about that edge by
+/// `fold` radians out of the plane of the first, every vertex skinned to joint 0 and vertex 0
+/// back-stopped. Their unit normals add up to `2 cos(fold / 2)`.
+fn folded_pair(fold: f32) -> SoftBodySharedSettingsBuilder {
+    let (sin, cos) = fold.sin_cos();
+    let vertices = vec![
+        SoftBodyVertex::new(Vec3::new(0.0, 0.0, 0.0)),
+        SoftBodyVertex::new(Vec3::new(1.0, 0.0, 0.0)),
+        SoftBodyVertex::new(Vec3::new(0.0, 0.0, 1.0)),
+        SoftBodyVertex::new(Vec3::new(0.0, -sin, -cos)),
+    ];
+    let mut builder =
+        SoftBodySharedSettings::builder(vertices, vec![[0, 2, 1], [0, 1, 3]]).inv_bind(bind(0));
+    for vertex in 1..4 {
+        builder = builder.skinned(SoftBodySkinned::new(vertex, single(weight(0, 1.0))));
+    }
+    builder.skinned(SoftBodySkinned {
+        back_stop: Some(SoftBodyBackStop {
+            distance: 0.1,
+            radius: 1.0,
+        }),
+        ..SoftBodySkinned::new(0, single(weight(0, 1.0)))
+    })
+}
+
+#[test]
+fn a_back_stop_needs_faces_whose_normals_do_not_cancel() {
+    // Unfolded, the two faces are one plane; folded flat onto each other (a face listed with
+    // both windings) their normals cancel exactly.
+    folded_pair(0.0).build().unwrap();
+    assert_eq!(
+        rejected(folded_pair(std::f32::consts::PI)),
+        BACK_STOP_FACE_RULE
+    );
+    // 2 cos(fold / 2) crosses MIN_BACK_STOP_NORMAL_SUM = 0.1 at a fold of about 174.27 degrees.
+    folded_pair(174.0_f32.to_radians()).build().unwrap();
+    assert_eq!(
+        rejected(folded_pair(174.5_f32.to_radians())),
+        BACK_STOP_FACE_RULE
+    );
+}
+
+#[test]
+fn a_back_stop_on_a_face_listed_with_both_windings_is_refused() {
+    let vertices = vec![
+        SoftBodyVertex::new(Vec3::new(0.0, 0.0, 0.0)),
+        SoftBodyVertex::new(Vec3::new(1.0, 0.0, 0.0)),
+        SoftBodyVertex::new(Vec3::new(0.0, 0.0, 1.0)),
+    ];
+    let builder = SoftBodySharedSettings::builder(vertices, vec![[0, 1, 2], [0, 2, 1]])
+        .inv_bind(bind(0))
+        .skinned(SoftBodySkinned::new(0, single(weight(0, 1.0))))
+        .skinned(SoftBodySkinned::new(1, single(weight(0, 1.0))))
+        .skinned(SoftBodySkinned {
+            back_stop: Some(SoftBodyBackStop {
+                distance: 0.05,
+                radius: 1.0,
+            }),
+            ..SoftBodySkinned::new(2, single(weight(0, 1.0)))
+        });
+    assert_eq!(rejected(builder), BACK_STOP_FACE_RULE);
+}
+
 /// A fan of `faces` triangles around vertex 0, every vertex skinned to joint 0.
 fn skinned_fan(faces: u32) -> SoftBodySharedSettingsBuilder {
     let step = 1.5 * std::f32::consts::PI / faces as f32;
@@ -314,7 +377,16 @@ fn validate_skinned_triangles(groups: u32, extra: u32) -> Result<(), SoftBodyErr
     let skinned: Vec<SoftBodySkinned> = (0..3 * triangles)
         .map(|vertex| SoftBodySkinned::new(vertex, single(weight(0, 1.0))))
         .collect();
-    validate_skin(3 * triangles as usize, &faces, &[bind(0)], &skinned).map(|_| ())
+    let positions: Vec<Vec3> = (0..triangles)
+        .flat_map(|_| {
+            [
+                Vec3::ZERO,
+                Vec3::new(1.0, 0.0, 0.0),
+                Vec3::new(0.0, 0.0, 1.0),
+            ]
+        })
+        .collect();
+    validate_skin(&positions, &faces, &[bind(0)], &skinned).map(|_| ())
 }
 
 #[test]

@@ -227,8 +227,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   `SoftBodyInvBind::from_pose(pose, position, rotation)` makes one per joint from a world pose and
   the place the settings frame had in the world then. `skin_vertices` takes a world pose, such as
   `RagdollRef::pose` returns, and converts it to the body's centre of mass frame itself, in double
-  precision with the `double-precision` feature. Each bound joint must stay within
-  `limits::MAX_SHAPE_EXTENT` (per axis) of the body's centre of mass
+  precision with the `double-precision` feature. Every joint up to the largest bound one, bound
+  or not, must stay within `limits::MAX_SHAPE_EXTENT` (per axis) of the body's centre of mass
   ([limits.md](limits.md#soft-body-skinning)).
 - **Start.** A new skinned body starts with its skin at the bind pose and holds it until the first
   skinning call.
@@ -239,15 +239,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 - **Back stop.** `SoftBodyBackStop { distance, radius }` is a sphere whose surface is `distance`
   behind the skinned position, against the average normal of the faces around the vertex whose
   three vertices are all skinned; a large radius approximates a plane. `build` refuses a back stop
-  on a vertex without such a face, and one whose distance is not below the max distance, since Jolt
-  would ignore it.
+  whose distance is not below the max distance, since Jolt would ignore it, and one on a vertex whose
+  faces give it no normal at the bind pose: none of its faces has three skinned vertices, or their
+  normals cancel, as for a face listed with both windings
+  ([limits.md](limits.md#soft-body-skinning)). Jolt computes the normal again from the skinned
+  positions at each skinning call. A pose that folds two such faces exactly onto each other, or
+  collapses them, leaves the vertex without a normal until the next call; the sphere then sits on
+  the skinned position and pushes the vertex out to its radius. Faces whose three vertices follow
+  one joint keep their bind normal in every pose.
 - **Calls per step.** Call `skin_vertices` once before each step; during the step the skinned
   positions move from those of the previous call to these. A step without a call holds the last
   skinned positions. With several collision steps the first one moves the skinned positions and
   the later ones hold them. `hard_skin_vertices` also puts every skinned vertex on its skinned
   position at once with zero velocity, for a teleport. Each call wakes the body.
 - **Multiplier.** `set_skinned_max_distance_multiplier` scales every max distance of a body: 0
-  attaches every skinned vertex, values above 1 loosen the cloth.
+  attaches every skinned vertex, values above 1 loosen the cloth. Jolt applies a back stop only
+  while its distance is below the scaled max distance, so a multiplier below 1 switches off the
+  back stops that this no longer holds for.
 - **Attached rows.** Jolt solves the skinned constraints before the edges in each step, so the edges
   pull an attached vertex that has mass a little off its target; in the tests' cloth the attached
   row ended a few millimetres away. Make the attached row kinematic (inverse mass 0), as in the

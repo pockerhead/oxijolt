@@ -841,6 +841,18 @@ would turn into a 40 m sphere around the skinned position wherever the vertex ha
 constraint without a back stop therefore gets an infinite back stop distance, which no product
 exceeds.
 
+A back stop's sphere sits behind the skinned position along the vertex's skinned normal, which
+Jolt computes at each skinning call as the normalised sum of the unit normals of the all-skinned
+faces around the vertex, or zero when that sum has a squared length of at most `FLT_MIN`
+(`SoftBodyMotionProperties.cpp:1181-1202`). With a zero normal the sphere is centred on the skinned
+position and pushes a vertex near it out to its radius: a vertex with an unlimited max distance
+was thrown 15 m in three ticks. `build` computes the sum at the bind pose in `f64` and refuses a back
+stop where its length is below 0.1, crate policy: a face listed with both windings sums to exactly
+0, and two faces folded within about 6° of flat onto each other sum to below 0.1. A rigid motion of
+the faces keeps the sum's length, so faces whose three vertices follow one joint keep their bind
+normal. Faces on different joints can be folded onto each other by a pose; that case is a run-time
+property of the animation and is documented in the [guide](soft-bodies.md#skinning).
+
 ## Vehicle gravity
 
 Jolt adds `gravity / inverse_mass` to the chassis (`VehicleConstraint::OnStep`); the chassis is a

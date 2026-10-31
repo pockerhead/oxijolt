@@ -316,8 +316,9 @@ impl SoftBodySharedSettingsBuilder {
     ///   constraint; a weight is negative or not finite, none is positive, a positive one names
     ///   no inverse bind or rounds to 0 once normalised; the max distance is beyond
     ///   [`limits::MAX_SHAPE_EXTENT`]; the back stop's distance is beyond it or not below the
-    ///   max distance, its radius not within `(0, MAX_SHAPE_EXTENT]`, or no face around the
-    ///   vertex has three skinned vertices;
+    ///   max distance, its radius not within `(0, MAX_SHAPE_EXTENT]`, or the faces around the
+    ///   vertex whose three vertices are skinned give it no normal (their unit normals add up
+    ///   to less than 0.1, as for a face listed with both windings);
     /// - a skinned vertex touches 256 faces or more whose vertices are all skinned, or these
     ///   counts add up to 2^24 or more (Jolt packs them into 8 and 24 bits; see
     ///   [docs/limits.md#soft-body-skinning]).
@@ -328,13 +329,8 @@ impl SoftBodySharedSettingsBuilder {
             return Err(SoftBodyError::InitFailed);
         }
         self.validate()?;
-        let skin = validate_skin(
-            self.vertices.len(),
-            &self.faces,
-            &self.inv_binds,
-            &self.skinned,
-        )?;
         let positions: Vec<Vec3> = self.vertices.iter().map(|v| v.position).collect();
+        let skin = validate_skin(&positions, &self.faces, &self.inv_binds, &self.skinned)?;
         let pressure_geometry = SoftBodyPressureGeometry::new(&positions, &self.faces);
         let mass_distribution = SoftBodyMassDistribution::new(
             self.vertices.iter().map(|v| (v.position, v.inverse_mass)),

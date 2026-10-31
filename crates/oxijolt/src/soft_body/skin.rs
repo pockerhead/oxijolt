@@ -28,7 +28,8 @@ const BACK_STOP_DISTANCE_RULE: &str =
 const BACK_STOP_RADIUS_RULE: &str =
     "a back stop radius must be above 0 and at most limits::MAX_SHAPE_EXTENT";
 const BACK_STOP_ORDER_RULE: &str = "a back stop distance must be below the max distance";
-const BACK_STOP_FACE_RULE: &str = "a back stop needs a face whose three vertices are skinned";
+const BACK_STOP_FACE_RULE: &str =
+    "a back stop needs all-skinned faces around its vertex whose normals do not cancel";
 const FACES_PER_VERTEX_RULE: &str =
     "a skinned vertex must touch fewer than 256 faces whose vertices are all skinned";
 const FACE_TOTAL_RULE: &str =
@@ -38,6 +39,14 @@ const POSE_RULE: &str =
 
 /// Jolt's default back stop radius, passed when a constraint has no back stop.
 const DEFAULT_BACK_STOP_RADIUS: f32 = 40.0;
+
+/// Shortest sum of the unit normals of the all-skinned faces around a back-stopped vertex, at
+/// the bind pose: Jolt normalises that sum into the back stop's direction, and a shorter one
+/// is faces that nearly cancel, such as a face listed with both windings. See
+/// [docs/limits.md#soft-body-skinning].
+///
+/// [docs/limits.md#soft-body-skinning]: https://github.com/pockerhead/oxijolt/blob/main/docs/limits.md#soft-body-skinning
+const MIN_BACK_STOP_NORMAL_SUM: f64 = 0.1;
 
 /// The bind pose of one joint (Jolt `SoftBodySharedSettings::InvBind`): where the joint is in
 /// the frame of the vertex positions ([`SoftBodyVertex::position`](super::SoftBodyVertex::position))
@@ -140,6 +149,14 @@ impl SoftBodySkinWeight {
 /// The sphere's surface is `distance` behind the skinned position, against the average normal
 /// of the faces around the vertex whose three vertices are all skinned; its centre is
 /// `distance + radius` behind it. A large radius approximates a plane.
+///
+/// Those faces must give the vertex a normal at the bind pose: their unit normals must add up to
+/// at least 0.1, which refuses a face listed with both windings. Jolt computes the normal again
+/// at every skinning call; a pose that folds the faces exactly onto each other or collapses them
+/// leaves the vertex without one, and the sphere then pushes the vertex out to its radius from
+/// the skinned position. See [docs/soft-bodies.md].
+///
+/// [docs/soft-bodies.md]: https://github.com/pockerhead/oxijolt/blob/main/docs/soft-bodies.md#skinning
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SoftBodyBackStop {
     /// Distance behind the skinned position, in metres, finite and within
@@ -216,10 +233,10 @@ pub(super) struct ValidatedSkin {
     pub(super) constraints: Vec<JPH_SoftBodySkinnedConstraint>,
 }
 
-/// Checks the skinning inputs of settings with `vertex_count` vertices and `faces`, and
-/// converts the constraints with normalised weights. `None` without skinning.
+/// Checks the skinning inputs of settings with the vertices at `positions` and the checked
+/// `faces`, and converts the constraints with normalised weights. `None` without skinning.
 pub(super) fn validate_skin(
-    vertex_count: usize,
+    positions: &[Vec3],
     faces: &[[u32; 3]],
     inv_binds: &[SoftBodyInvBind],
     skinned: &[SoftBodySkinned],
@@ -229,6 +246,7 @@ pub(super) fn validate_skin(
         return Ok(None);
     }
     let binding = validate_inv_binds(inv_binds)?;
+    let vertex_count = positions.len();
     let mut is_skinned = vec![false; vertex_count];
     for constraint in skinned {
         let vertex = constraint.vertex as usize;
@@ -236,15 +254,15 @@ pub(super) fn validate_skin(
         require(!is_skinned[vertex], UNIQUE_VERTEX_RULE)?;
         is_skinned[vertex] = true;
     }
-    let skinned_faces = skinned_face_counts(&is_skinned, faces);
+    let skinned_faces = skinned_faces(positions, &is_skinned, faces);
     let mut total_faces = 0_u64;
     let constraints = skinned
         .iter()
         .map(|constraint| {
-            let faces = skinned_faces[constraint.vertex as usize];
-            require(faces < 256, FACES_PER_VERTEX_RULE)?;
-            total_faces += u64::from(faces);
-            to_jph(constraint, inv_binds.len(), faces > 0)
+            let faces = &skinned_faces[constraint.vertex as usize];
+            require(faces.count < 256, FACES_PER_VERTEX_RULE)?;
+            total_faces += u64::from(faces.count);
+            to_jph(constraint, inv_binds.len(), faces.has_normal())
         })
         .collect::<Result<Vec<_>, _>>()?;
     require(total_faces < 1 << 24, FACE_TOTAL_RULE)?;
@@ -271,26 +289,58 @@ fn validate_inv_binds(inv_binds: &[SoftBodyInvBind]) -> Result<SkinBinding, Soft
     })
 }
 
-/// For each vertex, the number of faces whose three vertices are all skinned that touch it, as
-/// Jolt's `CalculateSkinnedConstraintNormals` collects them.
-fn skinned_face_counts(is_skinned: &[bool], faces: &[[u32; 3]]) -> Vec<u32> {
-    let mut counts = vec![0_u32; is_skinned.len()];
+/// The faces whose three vertices are all skinned around one vertex, as Jolt's
+/// `CalculateSkinnedConstraintNormals` collects them.
+#[derive(Clone, Copy, Default)]
+struct SkinnedFaces {
+    count: u32,
+    /// The sum of their unit normals at the bind pose, in `f64`: the skinned normal before Jolt
+    /// normalises it (`SoftBodyMotionProperties::SkinVertices`).
+    normal_sum: [f64; 3],
+}
+
+impl SkinnedFaces {
+    /// Whether the faces give the vertex a normal for a back stop.
+    fn has_normal(&self) -> bool {
+        let [x, y, z] = self.normal_sum;
+        (x * x + y * y + z * z).sqrt() >= MIN_BACK_STOP_NORMAL_SUM
+    }
+}
+
+/// The all-skinned faces around each vertex at `positions`.
+fn skinned_faces(positions: &[Vec3], is_skinned: &[bool], faces: &[[u32; 3]]) -> Vec<SkinnedFaces> {
+    let mut result = vec![SkinnedFaces::default(); is_skinned.len()];
+    let wide = |index: u32| {
+        let p = positions[index as usize];
+        [p.x, p.y, p.z].map(f64::from)
+    };
     for face in faces {
-        if face.iter().all(|&vertex| is_skinned[vertex as usize]) {
-            for &vertex in face {
-                counts[vertex as usize] += 1;
+        if !face.iter().all(|&vertex| is_skinned[vertex as usize]) {
+            continue;
+        }
+        let [p0, p1, p2] = face.map(wide);
+        // Jolt's winding: (v1 - v0) x (v2 - v0); the face checks gave it an area.
+        let normal = limits::normalized(limits::cross(
+            [0, 1, 2].map(|k| p1[k] - p0[k]),
+            [0, 1, 2].map(|k| p2[k] - p0[k]),
+        ));
+        for &vertex in face {
+            let faces = &mut result[vertex as usize];
+            faces.count += 1;
+            for (sum, component) in faces.normal_sum.iter_mut().zip(normal) {
+                *sum += component;
             }
         }
     }
-    counts
+    result
 }
 
-/// Checks one constraint and converts it; `has_skinned_face` says whether the vertex has a
-/// normal for a back stop.
+/// Checks one constraint and converts it; `has_normal` says whether the vertex's all-skinned
+/// faces give it a normal for a back stop.
 fn to_jph(
     constraint: &SoftBodySkinned,
     inv_bind_count: usize,
-    has_skinned_face: bool,
+    has_normal: bool,
 ) -> Result<JPH_SoftBodySkinnedConstraint, SoftBodyError> {
     let weights = normalized_weights(&constraint.weights, inv_bind_count)?;
     if let Some(max_distance) = constraint.max_distance {
@@ -313,8 +363,9 @@ fn to_jph(
                     .is_none_or(|max_distance| back_stop.distance < max_distance),
                 BACK_STOP_ORDER_RULE,
             )?;
-            // Without such a face the normal is zero and the sphere sits on the skin position.
-            require(has_skinned_face, BACK_STOP_FACE_RULE)?;
+            // Without a normal the sphere sits on the skinned position and throws the vertex
+            // out to its radius.
+            require(has_normal, BACK_STOP_FACE_RULE)?;
             (back_stop.distance, back_stop.radius)
         }
         // Jolt applies a back stop while its distance is below the max distance times the

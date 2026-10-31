@@ -38,9 +38,9 @@ impl SoftBodyMut<'_> {
     ///
     /// `pose` is a world pose, as [`RagdollRef::pose`](crate::RagdollRef::pose) returns it:
     /// joint `j` of the inverse binds is `pose.joints[j]`. The pose needs a transform for every
-    /// bound joint (more are ignored), each finite with a unit rotation, every joint within
-    /// [`limits::MAX_POSITION`] and within [`limits::MAX_SHAPE_EXTENT`] (per axis) of the body's
-    /// centre of mass. The conversion to the body's frame is done in double precision with
+    /// bound joint (more are ignored), each finite with a unit rotation, and every joint up to
+    /// the largest bound one, bound or not, within [`limits::MAX_POSITION`] and within
+    /// [`limits::MAX_SHAPE_EXTENT`] (per axis) of the body's centre of mass. The conversion to the body's frame is done in double precision with
     /// the `double-precision` feature. Fails with [`BodyError::InvalidValue`] otherwise, or
     /// when the body has no skinned constraints; then nothing changes.
     ///
@@ -66,8 +66,9 @@ impl SoftBodyMut<'_> {
 
     /// Sets the factor Jolt multiplies every skinned constraint's max distance with, finite
     /// and within `0..=`[`limits::MAX_RATIO`]: 0 attaches every skinned vertex to its skinned
-    /// position, also those without a max distance, and values above 1 loosen the cloth. The
-    /// body needs skinned constraints. Fails with [`BodyError::InvalidValue`] otherwise; then
+    /// position, also those without a max distance, and values above 1 loosen the cloth. Jolt
+    /// applies a back stop only while its distance is below the scaled max distance, so a
+    /// multiplier below 1 can switch back stops off. The body needs skinned constraints. Fails with [`BodyError::InvalidValue`] otherwise; then
     /// nothing changes. Wakes the body.
     ///
     /// The multiplier is configuration that a [`WorldState`](crate::WorldState) does not save.
