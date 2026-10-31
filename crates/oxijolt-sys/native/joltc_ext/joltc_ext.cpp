@@ -63,6 +63,8 @@ void JPH_ConstraintSettings_Init(const JPH::ConstraintSettings& joltSettings, JP
 void JPH_ConstraintSettings_ToJolt(JPH::ConstraintSettings* joltSettings, const JPH_ConstraintSettings* settings);
 
 using joltc_ext::AsJoltPhysicsSystem;
+using joltc_ext::AsSoftBodyMotionProperties;
+using joltc_ext::AsSoftBodySharedSettings;
 using joltc_ext::ToVec3;
 
 namespace
@@ -981,34 +983,6 @@ float JPH_RackAndPinionConstraint_GetTotalLambda(const JPH_RackAndPinionConstrai
 }
 
 /* SoftBodySharedSettings */
-namespace
-{
-	JPH::SoftBodySharedSettings* AsSoftBodySharedSettings(JPH_SoftBodySharedSettings* settings)
-	{
-		return reinterpret_cast<JPH::SoftBodySharedSettings*>(settings);
-	}
-
-	const JPH::SoftBodySharedSettings* AsSoftBodySharedSettings(const JPH_SoftBodySharedSettings* settings)
-	{
-		return reinterpret_cast<const JPH::SoftBodySharedSettings*>(settings);
-	}
-
-	// The soft body motion properties of body, or null when it is not a soft body.
-	JPH::SoftBodyMotionProperties* AsSoftBodyMotionProperties(JPH::Body* body)
-	{
-		if (body == nullptr || !body->IsSoftBody())
-			return nullptr;
-		return static_cast<JPH::SoftBodyMotionProperties*>(body->GetMotionProperties());
-	}
-
-	const JPH::SoftBodyMotionProperties* AsSoftBodyMotionProperties(const JPH::Body* body)
-	{
-		if (body == nullptr || !body->IsSoftBody())
-			return nullptr;
-		return static_cast<const JPH::SoftBodyMotionProperties*>(body->GetMotionProperties());
-	}
-}
-
 void JPH_SoftBodyVertexAttributes_Init(JPH_SoftBodyVertexAttributes* attributes)
 {
 	JPH_ASSERT(attributes);

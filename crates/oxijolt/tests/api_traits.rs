@@ -13,6 +13,7 @@ fn error<T: Clone + Copy + Debug + PartialEq + Eq + Error>() {}
 fn settings<T: Clone + Debug + PartialEq>() {}
 fn default<T: Default>() {}
 fn copy<T: Copy>() {}
+fn thread_safe<T: Send + Sync>() {}
 
 #[test]
 fn ids_compare_order_and_hash() {
@@ -62,6 +63,7 @@ fn settings_are_clone_and_comparable() {
     settings::<EventSettings>();
     settings::<ContactSettings>();
     settings::<SoftBodyContactSettings>();
+    for_skinning();
     settings::<PointConstraintSettings>();
     settings::<DistanceConstraintSettings>();
     settings::<FixedConstraintSettings>();
@@ -89,6 +91,22 @@ fn settings_are_clone_and_comparable() {
     settings::<DebugLineSettings>();
 }
 
+/// The plain inputs of soft body skinning: copyable, comparable and free to send.
+fn for_skinning() {
+    settings::<SoftBodyInvBind>();
+    settings::<SoftBodySkinWeight>();
+    settings::<SoftBodySkinned>();
+    settings::<SoftBodyBackStop>();
+    copy::<SoftBodyInvBind>();
+    copy::<SoftBodySkinWeight>();
+    copy::<SoftBodySkinned>();
+    copy::<SoftBodyBackStop>();
+    thread_safe::<SoftBodyInvBind>();
+    thread_safe::<SoftBodySkinWeight>();
+    thread_safe::<SoftBodySkinned>();
+    thread_safe::<SoftBodyBackStop>();
+}
+
 #[test]
 fn settings_without_required_inputs_have_defaults() {
     default::<WorldSettings>();
@@ -98,6 +116,7 @@ fn settings_without_required_inputs_have_defaults() {
     default::<MeshSettings>();
     default::<HeightFieldSettings>();
     default::<SoftBodySettings>();
+    default::<SoftBodySkinWeight>();
     default::<EventSettings>();
     default::<PointConstraintSettings>();
     default::<DistanceConstraintSettings>();

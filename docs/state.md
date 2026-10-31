@@ -177,7 +177,8 @@ documentation asks for body friction. These setters change such configuration:
   `set_transmission`, `set_differentials`, `set_tracks`, `set_tire_max_impulse_callback` and
   `clear_tire_max_impulse_callback` (a restore keeps the callback and does not rewind what it
   captured; the engine's rpm, the gear, the clutch and the track speeds are state and are restored);
-- soft body: `set_vertex_inverse_mass` (a restore keeps the inverse masses set last).
+- soft body: `set_vertex_inverse_mass` (a restore keeps the inverse masses set last) and
+  `set_skinned_max_distance_multiplier`.
 
 Body properties set at creation (shape, mass, friction, layers) are not saved either; the body
 setters change only poses and velocities, which are saved, and the shape and motion type changes
@@ -193,6 +194,12 @@ hinge's target angle, is part of the saved state and is undone.
 
 A setting the caller applies again before every step, such as a vehicle's gravity on a planet,
 replays exactly as long as that gravity is not zero.
+
+A skinned soft body saves its skinned positions and normals, but Jolt does not save whether a
+skinning call is waiting for the next step (`SoftBodyMotionProperties::SaveState`). A restore and
+replay is exact when the caller skins before every step and saves between a step and the next
+skinning call, which `tests/soft_body_skinning.rs` checks after a detour
+([soft-bodies.md](soft-bodies.md#skinning)); other save points are not checked.
 
 A vehicle's world up is not saved, and Jolt has no setter for it, so a restore cannot put it back.
 Each step sets the world up to the opposite of the gravity the vehicle uses (world gravity or

@@ -323,6 +323,63 @@ JPH_CAPI void JPH_Body_SetSoftBodyVertexVelocity(JPH_Body* body, uint32_t index,
    inertia (JPH::SoftBodyMotionProperties::CalculateMassAndInertia). */
 JPH_CAPI void JPH_Body_SetSoftBodyVertexInvMass(JPH_Body* body, uint32_t index, float invMass);
 
+/* Soft body skinning */
+/* JPH::SoftBodySharedSettings::SkinWeight, copied field by field (not a layout mirror). */
+typedef struct JPH_SoftBodySkinWeight {
+	uint32_t invBindIndex;
+	float weight;
+} JPH_SoftBodySkinWeight;
+
+/* JPH::SoftBodySharedSettings::Skinned without mNormalInfo, copied field by field (not a layout
+   mirror). The weights end at the first zero weight, as in Jolt, and should add up to 1. maxDistance
+   FLT_MAX is unlimited and 0 hard-skins the vertex. Jolt applies the back stop only while
+   backStopDistance is below maxDistance times the body's skinned max distance multiplier, which is
+   infinite for FLT_MAX times a multiplier above 1: INFINITY turns the back stop off for every
+   multiplier (Jolt's default FLT_MAX does not; its default radius is 40). */
+typedef struct JPH_SoftBodySkinnedConstraint {
+	uint32_t vertex;
+	JPH_SoftBodySkinWeight weights[4];
+	float maxDistance;
+	float backStopDistance;
+	float backStopRadius;
+} JPH_SoftBodySkinnedConstraint;
+
+/* Appends a JPH::SoftBodySharedSettings::InvBind: invBind takes a vertex in its bind pose (the
+   settings' vertex position) to the local space of joint jointIndex. invBind may be 4-aligned.
+   Returns false and adds nothing when jointIndex is UINT32_MAX, whose joint count does not fit in a
+   uint32_t. */
+JPH_CAPI bool JPH_SoftBodySharedSettings_AddInvBind(JPH_SoftBodySharedSettings* settings, uint32_t jointIndex, const JPH_Mat4* invBind);
+/* Appends a skinned constraint. Add it after its vertex and the inverse binds it names: returns false
+   and adds nothing when vertex >= the vertex count or a weight before the first zero weight names
+   invBindIndex >= the inverse bind count. */
+JPH_CAPI bool JPH_SoftBodySharedSettings_AddSkinnedConstraint(JPH_SoftBodySharedSettings* settings, const JPH_SoftBodySkinnedConstraint* constraint);
+/* Jolt's CalculateSkinnedConstraintNormals, from the faces whose three vertices are all skinned. Call
+   it after the faces and skinned constraints are added and before JPH_SoftBodySharedSettings_Optimize.
+   The caller keeps every skinned vertex below 256 such faces and their total below 2^24 (Jolt
+   asserts). */
+JPH_CAPI void JPH_SoftBodySharedSettings_CalculateSkinnedConstraintNormals(JPH_SoftBodySharedSettings* settings);
+JPH_CAPI uint32_t JPH_SoftBodySharedSettings_GetInvBindCount(const JPH_SoftBodySharedSettings* settings);
+JPH_CAPI uint32_t JPH_SoftBodySharedSettings_GetSkinnedConstraintCount(const JPH_SoftBodySharedSettings* settings);
+
+/* The number of joint matrices JPH_Body_SkinSoftBodyVertices needs: 1 + the largest joint index of the
+   inverse binds. 0 for a rigid body or a soft body without skinned constraints. */
+JPH_CAPI uint32_t JPH_Body_GetSoftBodySkinJointCount(const JPH_Body* body);
+/* Jolt's SoftBodyMotionProperties::SkinVertices with the body's centre of mass transform and a temp
+   allocator of its own. jointMatrices holds jointCount model matrices relative to
+   Body::GetCenterOfMassTransform() and may be 4-aligned. With hardSkinAll the skinned vertices move to
+   their skinned positions and their velocities become zero. Jolt does not call this during a step: the
+   caller holds the body write lock while no step runs, and the next step uses the result. Returns
+   false and changes nothing when body is null, rigid or has no skinned constraints, jointMatrices is
+   null, jointCount is not above every inverse bind's joint index, or the inverse binds do not fit in
+   UINT32_MAX bytes of matrices. Nothing transfers ownership. */
+JPH_CAPI bool JPH_Body_SkinSoftBodyVertices(JPH_Body* body, const JPH_Mat4* jointMatrices, uint32_t jointCount, bool hardSkinAll);
+/* Jolt's multiplier of every skinned constraint's maxDistance (0 hard-skins all of them). 1 for a body
+   that is not a soft body. */
+JPH_CAPI float JPH_Body_GetSoftBodySkinnedMaxDistanceMultiplier(const JPH_Body* body);
+/* Sets the multiplier; returns false and changes nothing for a body that is not a soft body. The
+   caller passes a finite, non-negative value and holds the body write lock. */
+JPH_CAPI bool JPH_Body_SetSoftBodySkinnedMaxDistanceMultiplier(JPH_Body* body, float multiplier);
+
 /* Body (buoyancy) */
 /* Jolt's Body::GetSubmergedVolume for a fluid surface through surfacePosition with surfaceNormal pointing
    out of the fluid: total volume, submerged volume and the submerged volume's centre relative to the

@@ -9,7 +9,7 @@ use oxijolt_sys::*;
 use super::settings::creation_settings;
 use super::shared::{vertex_mass, INERTIA_RULE, TOTAL_MASS_RULE, VERTEX_INVERSE_MASS_RULE};
 use super::{SoftBodySettings, SoftBodySharedSettings};
-use crate::body::{with_locked_body, with_read_locked_body, INVALID_BODY_ID};
+use crate::body::{with_locked_body, with_read_locked_body};
 use crate::limits::{
     self, is_in_frame, is_linear_velocity, is_soft_body_force, is_soft_body_inertia,
     is_soft_body_pressure, is_vertex_inverse_mass, SoftBodyMassDistribution, LINEAR_VELOCITY_RULE,
@@ -27,6 +27,9 @@ impl PhysicsWorld {
     /// [`soft_body_mut`](Self::soft_body_mut) give access to its vertices. With
     /// [`SoftBodySettings::make_rotation_identity`] (the default) the vertices start at
     /// `position + rotation · vertex position`.
+    ///
+    /// A skinned body ([`SoftBodySharedSettingsBuilder::skinned`](crate::SoftBodySharedSettingsBuilder::skinned)) starts with its skin at the
+    /// bind pose of its inverse binds and holds that pose until it is skinned again.
     ///
     /// Fails with [`BodyError::UnknownObjectLayer`] or [`BodyError::InvalidValue`] when a
     /// setting is out of range or the pressure is too high for the volume the faces of
@@ -107,19 +110,47 @@ impl PhysicsWorld {
         if !self.has_room_for_bodies(1) {
             return Err(BodyError::TooManyBodies);
         }
+        let bind_pose = shared
+            .skin
+            .as_ref()
+            .map(|skin| skin.bind_pose_matrices(baked_rotation));
         self.note_structure_change();
         // SAFETY: the body interface belongs to this live world, borrowed mutably; `creation` is
         // a fully set up settings object whose layer exists in this world.
-        let raw = unsafe {
-            JPH_BodyInterface_CreateAndAddSoftBody(
-                self.body_interface.as_ptr(),
-                creation.as_ptr(),
-                settings.activation.to_jph(),
-            )
+        let body = unsafe {
+            JPH_BodyInterface_CreateSoftBody(self.body_interface.as_ptr(), creation.as_ptr())
         };
-        if raw == INVALID_BODY_ID {
+        if body.is_null() {
             return Err(BodyError::TooManyBodies);
         }
+        if let Some(joints) = &bind_pose {
+            // Two calls make the previous and the current skin positions the bind positions,
+            // so the first step neither jumps nor starts from Jolt's NaN skin state.
+            for _ in 0..2 {
+                // SAFETY: `body` was just created and is not added to the world yet, and the
+                // world is borrowed mutably, so no step and no other thread reaches it. `joints`
+                // holds one matrix per joint up to the largest bound one and lives for the call.
+                let skinned = unsafe {
+                    JPH_Body_SkinSoftBodyVertices(body, joints.as_ptr(), joints.len() as u32, false)
+                };
+                if !skinned {
+                    // The settings have skinned constraints and `joints` covers every bound
+                    // joint, the only refusals of the native call.
+                    unreachable!("skinning a new soft body to its bind pose was refused");
+                }
+            }
+        }
+        // SAFETY: `body` is the live body created above; adding it is what Jolt's
+        // `CreateAndAddSoftBody` does after `CreateSoftBody`.
+        let raw = unsafe {
+            let raw = JPH_Body_GetID(body);
+            JPH_BodyInterface_AddBody(
+                self.body_interface.as_ptr(),
+                raw,
+                settings.activation.to_jph(),
+            );
+            raw
+        };
         Ok(BodyId::new(raw, self.tag))
     }
 
@@ -187,9 +218,9 @@ pub struct SoftBodyVertexState {
 /// The view borrows the world, so the world cannot step while it exists. Not `Send` or `Sync`;
 /// share the world instead.
 pub struct SoftBodyRef<'w> {
-    body_interface: NonNull<JPH_BodyInterface>,
-    body_lock_interface: NonNull<JPH_BodyLockInterface>,
-    id: BodyId,
+    pub(super) body_interface: NonNull<JPH_BodyInterface>,
+    pub(super) body_lock_interface: NonNull<JPH_BodyLockInterface>,
+    pub(super) id: BodyId,
     _world: PhantomData<&'w PhysicsWorld>,
 }
 
@@ -456,14 +487,14 @@ impl SoftBodyMut<'_> {
 
     /// Wakes the body. Called after the write lock is released: `ActivateBody` locks the body
     /// again, and Jolt's body mutexes are not recursive.
-    fn activate(&mut self) {
+    pub(super) fn activate(&mut self) {
         // SAFETY: the world is borrowed mutably through this view and holds the body; this
         // thread holds no body lock.
         unsafe { JPH_BodyInterface_ActivateBody(self.body_interface.as_ptr(), self.id.to_raw()) };
     }
 }
 
-fn require_body(valid: bool, what: &'static str) -> Result<(), BodyError> {
+pub(super) fn require_body(valid: bool, what: &'static str) -> Result<(), BodyError> {
     if valid {
         Ok(())
     } else {

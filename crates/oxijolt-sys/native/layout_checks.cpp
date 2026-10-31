@@ -128,6 +128,18 @@ static_assert(int(JPH_SoftBodyBendType_Dihedral) == int(JPH::SoftBodySharedSetti
 static_assert(int(JPH_SoftBodyLRAType_None) == int(JPH::SoftBodySharedSettings::ELRAType::None), "JPH_SoftBodyLRAType_None");
 static_assert(int(JPH_SoftBodyLRAType_EuclideanDistance) == int(JPH::SoftBodySharedSettings::ELRAType::EuclideanDistance), "JPH_SoftBodyLRAType_EuclideanDistance");
 static_assert(int(JPH_SoftBodyLRAType_GeodesicDistance) == int(JPH::SoftBodySharedSettings::ELRAType::GeodesicDistance), "JPH_SoftBodyLRAType_GeodesicDistance");
+// The extension copies JPH_SoftBodySkinWeight and JPH_SoftBodySkinnedConstraint field by field
+// (JPH_SoftBodySharedSettings_AddSkinnedConstraint), so only the C ABI is pinned here.
+OXIJOLT_SYS_ASSERT_LAYOUT(JPH_SoftBodySkinWeight, 8, 4);
+OXIJOLT_SYS_ASSERT_OFFSET(JPH_SoftBodySkinWeight, invBindIndex, 0);
+OXIJOLT_SYS_ASSERT_OFFSET(JPH_SoftBodySkinWeight, weight, 4);
+OXIJOLT_SYS_ASSERT_LAYOUT(JPH_SoftBodySkinnedConstraint, 48, 4);
+OXIJOLT_SYS_ASSERT_OFFSET(JPH_SoftBodySkinnedConstraint, vertex, 0);
+OXIJOLT_SYS_ASSERT_OFFSET(JPH_SoftBodySkinnedConstraint, weights, 4);
+OXIJOLT_SYS_ASSERT_OFFSET(JPH_SoftBodySkinnedConstraint, maxDistance, 36);
+OXIJOLT_SYS_ASSERT_OFFSET(JPH_SoftBodySkinnedConstraint, backStopDistance, 40);
+OXIJOLT_SYS_ASSERT_OFFSET(JPH_SoftBodySkinnedConstraint, backStopRadius, 44);
+static_assert(JPH::SoftBodySharedSettings::Skinned::cMaxSkinWeights == 4, "JPH_SoftBodySkinnedConstraint: weight count");
 
 // Contact settings. joltc's listener and the extension's JPH_ContactListener2 copy
 // JPH_ContactSettings field by field (FromJolt/ToJolt of ContactSettings), the extension's soft body

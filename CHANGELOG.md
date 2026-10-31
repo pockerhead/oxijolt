@@ -11,6 +11,18 @@ All notable changes to this fork. The format follows [Keep a Changelog](https://
 - The `glam033` feature adds the `glam032` conversions for glam 0.33, the version Bevy 0.20 uses:
   `Vec3`, `Quat` and the vector of `Real` (`DVec3` in double precision), both ways, bit for bit.
   Both glam features can be enabled together. Refs #4.
+- Soft body skinning (Jolt's skinned constraints): `SoftBodySharedSettingsBuilder::inv_bind`,
+  `inv_binds` and `skinned` take the joints' bind pose (`SoftBodyInvBind`, with
+  `SoftBodyInvBind::from_pose` for a world pose) and the skinned vertices (`SoftBodySkinned` with
+  up to four `SoftBodySkinWeight`s, a max distance and a `SoftBodyBackStop`), checked by `build`
+  and bounded by the new `limits::MAX_SKIN_JOINTS`. `SoftBodyMut::skin_vertices` and
+  `hard_skin_vertices` move the skin to a world `SkeletonPose` such as `RagdollRef::pose` returns,
+  and `set_skinned_max_distance_multiplier` with `SoftBodyRef::skinned_max_distance_multiplier`
+  scale the max distances. A new skinned body starts at its bind pose. The C wrapper extension
+  gains `JPH_SoftBodySharedSettings_AddInvBind`, `AddSkinnedConstraint`,
+  `CalculateSkinnedConstraintNormals`, `GetInvBindCount`, `GetSkinnedConstraintCount` and
+  `JPH_Body_GetSoftBodySkinJointCount`, `SkinSoftBodyVertices`,
+  `Get`/`SetSoftBodySkinnedMaxDistanceMultiplier` ([guide](docs/soft-bodies.md#skinning)). Refs #6.
 
 ## 1.4.0 — 2026-10-28
 

@@ -41,6 +41,8 @@ what is planned next.
   ([guide](constraints.md#breakable-constraints), [scene](playground.md#-breakable-bonds-bonds)).
 - Soft bodies: cloth, pressurised and volume-preserving bodies, with vertex readout and pinning
   ([guide](soft-bodies.md)).
+- Soft body skinning: cloth such as a cape skinned to an animated skeleton or a ragdoll's pose,
+  with max distances, back stops and hard skinning ([guide](soft-bodies.md#skinning)).
 - Contact, activation and soft body contact events in an order that does not depend on the
   thread count, and a contact listener that changes friction, restitution, mass scales or surface
   velocity per contact, or rejects contacts before they form (one-way platforms), and Jolt's

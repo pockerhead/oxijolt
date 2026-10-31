@@ -3511,3 +3511,79 @@ fn stabilized_ragdoll_inertia_at_its_bound_decomposes() {
         assert!(build(refused).is_none(), "case {case}");
     }
 }
+
+/// The unit square of [`soft_square`] at the world origin, every vertex skinned to joint 0
+/// with `max_distance`.
+fn skinned_square(world: &mut PhysicsWorld, max_distance: Option<f32>) -> BodyId {
+    let mut builder =
+        soft_square(1.0).inv_bind(SoftBodyInvBind::new(0, Vec3::ZERO, Quat::IDENTITY));
+    for vertex in 0..4 {
+        let mut weights = [SoftBodySkinWeight::default(); 4];
+        weights[0] = SoftBodySkinWeight::new(0, 1.0);
+        builder = builder.skinned(SoftBodySkinned {
+            max_distance,
+            ..SoftBodySkinned::new(vertex, weights)
+        });
+    }
+    world
+        .create_soft_body(&builder.build().unwrap(), &SoftBodySettings::default())
+        .unwrap()
+}
+
+/// A pose of one unturned joint at `x` on the X axis.
+fn joint_on_x(x: Real) -> SkeletonPose {
+    SkeletonPose {
+        root_offset: RVec3::new(x, 0.0, 0.0),
+        joints: vec![JointTransform {
+            translation: Vec3::ZERO,
+            rotation: Quat::IDENTITY,
+        }],
+    }
+}
+
+fn assert_soft_body_finite(world: &PhysicsWorld, id: BodyId, what: &str) {
+    for vertex in world.soft_body(id).unwrap().vertices() {
+        let state = [v3(vertex.position), f3(vertex.velocity)];
+        assert!(
+            state.iter().flatten().all(|value| value.is_finite()),
+            "{what}: {state:?}"
+        );
+    }
+}
+
+#[test]
+fn soft_body_skinning_is_bounded() {
+    // Skin joints within MAX_SHAPE_EXTENT of the centre of mass, which is at the origin before
+    // the first step.
+    let mut world = world(Vec3::new(0.0, -9.81, 0.0), 1);
+    let id = skinned_square(&mut world, Some(0.0));
+    let extent = Real::from(limits::MAX_SHAPE_EXTENT);
+    let beyond = Real::from(limits::MAX_SHAPE_EXTENT.next_up());
+    let mut body = world.soft_body_mut(id).unwrap();
+    assert!(body_invalid(body.skin_vertices(&joint_on_x(beyond))));
+    assert!(body_invalid(body.hard_skin_vertices(&joint_on_x(-beyond))));
+    body.hard_skin_vertices(&joint_on_x(extent)).unwrap();
+    step(&mut world, 2);
+    assert_soft_body_finite(&world, id, "skinned at the extent");
+    // The multiplier is within 0..=MAX_RATIO; at the bound the longest max distance stays
+    // finite.
+    let mut world = common::world(Vec3::new(0.0, -9.81, 0.0), 1);
+    let id = skinned_square(&mut world, Some(limits::MAX_SHAPE_EXTENT));
+    let mut body = world.soft_body_mut(id).unwrap();
+    for multiplier in [-f32::MIN_POSITIVE, limits::MAX_RATIO.next_up()]
+        .into_iter()
+        .chain(NON_FINITE)
+    {
+        assert!(body_invalid(
+            body.set_skinned_max_distance_multiplier(multiplier)
+        ));
+    }
+    for multiplier in [0.0, limits::MAX_RATIO] {
+        body.set_skinned_max_distance_multiplier(multiplier)
+            .unwrap();
+        assert_eq!(body.skinned_max_distance_multiplier(), multiplier);
+    }
+    body.skin_vertices(&joint_on_x(0.5)).unwrap();
+    step(&mut world, 30);
+    assert_soft_body_finite(&world, id, "multiplier at the bound");
+}

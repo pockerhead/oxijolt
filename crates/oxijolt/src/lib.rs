@@ -240,9 +240,10 @@ pub use shape::{
     MeshSettings, MutableCompound, Shape, SubShapeId,
 };
 pub use soft_body::{
-    LongRangeAttachment, SoftBodyBendType, SoftBodyDihedralBend, SoftBodyEdge, SoftBodyMut,
-    SoftBodyRef, SoftBodySettings, SoftBodySharedSettings, SoftBodySharedSettingsBuilder,
-    SoftBodyVertex, SoftBodyVertexAttributes, SoftBodyVertexState, SoftBodyVolume,
+    LongRangeAttachment, SoftBodyBackStop, SoftBodyBendType, SoftBodyDihedralBend, SoftBodyEdge,
+    SoftBodyInvBind, SoftBodyMut, SoftBodyRef, SoftBodySettings, SoftBodySharedSettings,
+    SoftBodySharedSettingsBuilder, SoftBodySkinWeight, SoftBodySkinned, SoftBodyVertex,
+    SoftBodyVertexAttributes, SoftBodyVertexState, SoftBodyVolume,
 };
 pub use state::{BodySelection, WorldState};
 pub use vehicle::{
