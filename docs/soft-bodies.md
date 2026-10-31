@@ -245,8 +245,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   ([limits.md](limits.md#soft-body-skinning)). Jolt computes the normal again from the skinned
   positions at each skinning call. A pose that folds two such faces exactly onto each other, or
   collapses them, leaves the vertex without a normal until the next call; the sphere then sits on
-  the skinned position and pushes the vertex out to its radius. Faces whose three vertices follow
-  one joint keep their bind normal in every pose.
+  the skinned position and pushes the vertex out to its radius. Jolt skins in `f32`, so a sliver
+  face, thinner than about `1e-7` of its size, can lose its normal the same way without any fold.
 - **Calls per step.** Call `skin_vertices` once before each step; during the step the skinned
   positions move from those of the previous call to these. A step without a call holds the last
   skinned positions. With several collision steps the first one moves the skinned positions and
