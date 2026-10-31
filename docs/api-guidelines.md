@@ -122,8 +122,8 @@ breaks one needs a reason written next to it. The Rust API Guidelines
 - Features are additive, except `double-precision`, which changes `Real` in every signature. Only
   the final application enables it; libraries built on `oxijolt` forward it.
 - `bindgen` is a build switch outside the semver promise.
-- A feature for a public dependency carries the dependency's version in its name (`glam032`), so a
-  later version can be added next to it in a minor release. `mint` (0.5) keeps its name.
+- A feature for a public dependency carries the dependency's version in its name (`glam032`,
+  `glam033`), so a later version can be added next to it in a minor release. `mint` (0.5) keeps its name.
 
 ## R13. Minimum supported Rust version
 

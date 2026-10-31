@@ -13,7 +13,7 @@ categories = ["game-development", "simulation"]
 exclude = ["tests/real_meshes*", "tests/character_study.rs"]
 
 [package.metadata.docs.rs]
-features = ["glam032", "mint", "debug-renderer"]
+features = ["glam032", "glam033", "mint", "debug-renderer"]
 targets = ["x86_64-unknown-linux-gnu"]
 
 [features]
@@ -37,13 +37,17 @@ bindgen = ["oxijolt-sys/bindgen"]
 # `Real` (`DVec3` in double precision). The name carries glam's version, so a later glam can get
 # a feature of its own next to it.
 glam032 = ["dep:glam"]
+# The same conversions for glam 0.33. Both glam features can be enabled together.
+glam033 = ["dep:glam033"]
 # `From` conversions between the math types and mint's `Vector3` and `Quaternion`.
 mint = ["dep:mint"]
 
 [dependencies]
 oxijolt-sys = { version = "1.4.0", path = "../oxijolt-sys", default-features = false }
-# The glam version Bevy uses; `std` is glam's math backend and adds nothing to the conversions.
+# The glam versions Bevy uses (0.33 in Bevy 0.20); `std` is glam's math backend and adds
+# nothing to the conversions. glam 0.33 has its `f64` types (`DVec3`) behind a feature.
 glam = { version = "0.32", optional = true, default-features = false, features = ["std"] }
+glam033 = { package = "glam", version = "0.33", optional = true, default-features = false, features = ["std", "f64"] }
 mint = { version = "0.5", optional = true, default-features = false }
 
 [dev-dependencies]

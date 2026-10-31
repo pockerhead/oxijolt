@@ -8,6 +8,9 @@ All notable changes to this fork. The format follows [Keep a Changelog](https://
   of mass in world coordinates (Jolt `Body::GetInverseInertia`), in rows like `Inertia::Tensor`,
   with the body's rotation applied and locked rotation axes zeroed; `None` for static, kinematic
   and soft bodies. The idea comes from pull request #3 by @def9a2a4.
+- The `glam033` feature adds the `glam032` conversions for glam 0.33, the version Bevy 0.20 uses:
+  `Vec3`, `Quat` and the vector of `Real` (`DVec3` in double precision), both ways, bit for bit.
+  Both glam features can be enabled together. Refs #4.
 
 ## 1.4.0 — 2026-10-28
 

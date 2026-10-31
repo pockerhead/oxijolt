@@ -64,7 +64,8 @@ what is planned next.
 - Several collision steps in one update (`PhysicsWorld::step_with_collision_steps`, up to
   `MAX_COLLISION_STEPS`) to sub-step a fast scene ([limits](limits.md#collision-steps)).
 - Debug wireframes as line data (feature `debug-renderer`); nothing is drawn.
-- Optional `glam032` and `mint` features with exact conversions for `Vec3`, `RVec3` and `Quat`.
+- Optional `glam032`, `glam033` (glam 0.33, Bevy 0.20) and `mint` features with exact conversions
+  for `Vec3`, `RVec3` and `Quat`.
 - The poses of every awake body in one call, in a deterministic order
   (`PhysicsWorld::active_body_poses`).
 - `oxijolt::prelude` for the common types, and `oxijolt::error::{Error, Result}` that wraps the

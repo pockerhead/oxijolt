@@ -19,9 +19,9 @@
 //! ```
 //!
 //! The prelude names no math type and no `Result`, so it can be glob-imported next to
-//! `bevy::prelude::*`: `Vec3`, `Quat` and `Result` stay Bevy's. With the `glam032` feature,
-//! `.into()` converts poses to Bevy's types; `?` in a system that returns Bevy's `Result`
-//! converts any oxijolt error.
+//! `bevy::prelude::*`: `Vec3`, `Quat` and `Result` stay Bevy's. With the glam feature of
+//! Bevy's glam version (`glam033` for Bevy 0.20), `.into()` converts poses to Bevy's types; `?`
+//! in a system that returns Bevy's `Result` converts any oxijolt error.
 //!
 //! ```ignore
 //! use bevy::prelude::*;

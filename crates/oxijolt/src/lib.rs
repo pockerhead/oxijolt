@@ -107,6 +107,8 @@
 //! - `bindgen`: generates the raw bindings with libclang at build time.
 //! - `glam032`: `From` conversions both ways between [`Vec3`], [`Quat`], [`RVec3`] and glam
 //!   0.32's `Vec3`, `Quat` and vector of [`Real`] (`DVec3` in double precision).
+//! - `glam033`: the same conversions for glam 0.33, the version Bevy 0.20 uses. Both glam
+//!   features can be enabled together.
 //! - `mint`: `From` conversions both ways between [`Vec3`], [`Quat`], [`RVec3`] and mint's
 //!   `Vector3<f32>`, `Quaternion<f32>` and `Vector3<Real>`.
 //!
@@ -114,7 +116,9 @@
 //! nothing is normalized or checked until a call takes the value.
 //!
 //! ```
-//! # #[cfg(feature = "glam032")]
+//! # #[cfg(feature = "glam033")]
+//! # use glam033 as glam;
+//! # #[cfg(any(feature = "glam032", feature = "glam033"))]
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! use oxijolt::{BodySettings, PhysicsWorld, Shape, WorldSettings};
 //!
@@ -129,7 +133,7 @@
 //! assert_eq!(velocity, glam::Vec3::X);
 //! # Ok(())
 //! # }
-//! # #[cfg(not(feature = "glam032"))]
+//! # #[cfg(not(any(feature = "glam032", feature = "glam033")))]
 //! # fn main() {}
 //! ```
 //!
@@ -161,7 +165,7 @@ mod constraint;
 mod debug;
 pub mod error;
 mod filter;
-#[cfg(feature = "glam032")]
+#[cfg(any(feature = "glam032", feature = "glam033"))]
 mod glam_interop;
 mod job_system;
 mod jolt_assert;
