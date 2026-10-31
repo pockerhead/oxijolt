@@ -142,7 +142,8 @@ jobs:
         if: matrix.features == '' || matrix.features == 'double-precision' || matrix.features == 'debug-renderer'
         run: cargo check -p oxijolt-sys --features "oxijolt-sys/bindgen${{ matrix.features && format(',oxijolt-sys/{0}', matrix.features) || '' }}"
       # The glam and mint conversions in single and double precision, each feature alone and
-      # both together. Neither crate may be in the dependency graph without its feature.
+      # all together. No glam version and no mint may be in the dependency graph without its
+      # feature.
       - name: glam and mint conversions
         if: matrix.features == '' || matrix.features == 'double-precision'
         run: |
@@ -150,8 +151,9 @@ jobs:
             echo "glam or mint is in the dependency graph without its feature"; exit 1
           fi
           cargo clippy -p oxijolt --lib $FEATURE_ARGS --features oxijolt/glam032 -- -D warnings
+          cargo clippy -p oxijolt --lib $FEATURE_ARGS --features oxijolt/glam033 -- -D warnings
           cargo clippy -p oxijolt --lib $FEATURE_ARGS --features oxijolt/mint -- -D warnings
-          interop="--features oxijolt/glam032,oxijolt/mint"
+          interop="--features oxijolt/glam032,oxijolt/glam033,oxijolt/mint"
           cargo clippy --workspace --exclude playground --exclude comparison --all-targets $FEATURE_ARGS $interop -- -D warnings
           cargo test -p oxijolt --lib $FEATURE_ARGS $interop interop
           cargo test -p oxijolt --doc $FEATURE_ARGS $interop

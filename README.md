@@ -90,6 +90,7 @@ Everything planned for 1.0 is done; what works today, with links to the guides, 
 - [x] Collision sub-steps and a single-threaded job system
 - [x] Vehicle tuning: tire impulse callback, live drivetrain, mass and inertia override
 - [x] World-space inverse inertia readout
+- [x] glam 0.33 conversions for Bevy 0.20
 
 ## Status
 
