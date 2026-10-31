@@ -89,6 +89,7 @@ Everything planned for 1.0 is done; what works today, with links to the guides, 
 - [x] Playground: debris that breaks again when it hits the ground
 - [x] Collision sub-steps and a single-threaded job system
 - [x] Vehicle tuning: tire impulse callback, live drivetrain, mass and inertia override
+- [x] World-space inverse inertia readout
 
 ## Status
 

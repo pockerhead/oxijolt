@@ -254,6 +254,174 @@ fn impulses_respect_locked_axes() {
     assert_eq!(world.body(plane).unwrap().position(), RVec3::ZERO);
 }
 
+type Mat3 = [[f32; 3]; 3];
+
+/// A rotation of 0.7 rad about (1, 1, 1): no world axis stays a principal axis.
+fn tilted() -> Quat {
+    let (s, c) = (0.35_f32.sin() / 3.0_f32.sqrt(), 0.35_f32.cos());
+    Quat::from_xyzw(s, s, s, c)
+}
+
+fn rotation_matrix(q: Quat) -> Mat3 {
+    let Quat { x, y, z, w } = q;
+    [
+        [
+            1.0 - 2.0 * (y * y + z * z),
+            2.0 * (x * y - w * z),
+            2.0 * (x * z + w * y),
+        ],
+        [
+            2.0 * (x * y + w * z),
+            1.0 - 2.0 * (x * x + z * z),
+            2.0 * (y * z - w * x),
+        ],
+        [
+            2.0 * (x * z - w * y),
+            2.0 * (y * z + w * x),
+            1.0 - 2.0 * (x * x + y * y),
+        ],
+    ]
+}
+
+fn mul(a: Mat3, b: Mat3) -> Mat3 {
+    std::array::from_fn(|i| std::array::from_fn(|j| (0..3).map(|k| a[i][k] * b[k][j]).sum()))
+}
+
+fn transpose(a: Mat3) -> Mat3 {
+    std::array::from_fn(|i| std::array::from_fn(|j| a[j][i]))
+}
+
+fn inverse(a: Mat3) -> Mat3 {
+    let cofactor = |i: usize, j: usize| {
+        let (r0, r1) = ((i + 1) % 3, (i + 2) % 3);
+        let (c0, c1) = ((j + 1) % 3, (j + 2) % 3);
+        a[r0][c0] * a[r1][c1] - a[r0][c1] * a[r1][c0]
+    };
+    let determinant: f32 = (0..3).map(|j| a[0][j] * cofactor(0, j)).sum();
+    std::array::from_fn(|i| std::array::from_fn(|j| cofactor(j, i) / determinant))
+}
+
+/// `R · inverse(tensor) · Rᵀ`: the world inverse inertia of a body with every axis free.
+fn world_inverse(rotation: Quat, tensor: Mat3) -> Mat3 {
+    let r = rotation_matrix(rotation);
+    mul(mul(r, inverse(tensor)), transpose(r))
+}
+
+fn times(a: Mat3, v: Vec3) -> Vec3 {
+    let row = |i: usize| a[i][0] * v.x + a[i][1] * v.y + a[i][2] * v.z;
+    Vec3::new(row(0), row(1), row(2))
+}
+
+fn assert_close(actual: Mat3, expected: Mat3, tolerance: f32) {
+    for i in 0..3 {
+        for j in 0..3 {
+            assert!(
+                (actual[i][j] - expected[i][j]).abs() <= tolerance,
+                "[{i}][{j}]: {actual:?} vs {expected:?}"
+            );
+        }
+    }
+}
+
+fn gap(a: Vec3, b: Vec3) -> f32 {
+    ((a.x - b.x).powi(2) + (a.y - b.y).powi(2) + (a.z - b.z).powi(2)).sqrt()
+}
+
+#[test]
+fn inverse_inertia_is_the_rotated_principal_inverse() {
+    let mut world = world(Vec3::ZERO, 1);
+    let moments = Vec3::new(1.0, 2.0, 4.0);
+    let id = world
+        .create_body(
+            &cube_shape(),
+            &BodySettings::new_dynamic()
+                .mass_and_inertia(3.0, Inertia::Principal(moments))
+                .rotation(tilted()),
+        )
+        .unwrap();
+    let matrix = world.body(id).unwrap().inverse_inertia().unwrap();
+    let tensor = [[1.0, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 4.0]];
+    let expected = world_inverse(tilted(), tensor);
+    assert!(expected[0][1].abs() > 0.05, "{expected:?}");
+    assert_close(matrix, expected, 1.0e-5);
+    assert_close(matrix, transpose(matrix), 1.0e-6);
+}
+
+#[test]
+fn inverse_inertia_masks_locked_rotation_axes_as_impulses_do() {
+    let mut world = world(Vec3::ZERO, 1);
+    // Off-diagonal products of inertia: the principal axes are not the body axes either.
+    let tensor = [[2.0, -0.5, 0.3], [-0.5, 3.0, -0.4], [0.3, -0.4, 4.0]];
+    let only_yaw = AllowedDofs::TRANSLATION_X
+        | AllowedDofs::TRANSLATION_Y
+        | AllowedDofs::TRANSLATION_Z
+        | AllowedDofs::ROTATION_Y;
+    let id = world
+        .create_body(
+            &cube_shape(),
+            &BodySettings::new_dynamic()
+                .mass_and_inertia(3.0, Inertia::Tensor(tensor))
+                .rotation(tilted())
+                .allowed_dofs(only_yaw),
+        )
+        .unwrap();
+    let matrix = world.body(id).unwrap().inverse_inertia().unwrap();
+    let unmasked = world_inverse(tilted(), tensor);
+    for i in [0, 2] {
+        assert_eq!(matrix[i], [0.0; 3], "{matrix:?}");
+        assert_eq!([matrix[0][i], matrix[1][i], matrix[2][i]], [0.0; 3]);
+    }
+    assert!((matrix[1][1] - unmasked[1][1]).abs() <= 1.0e-5 * unmasked[1][1]);
+
+    let impulse = Vec3::new(0.3, 0.5, -0.2);
+    let mut body = world.body_mut(id).unwrap();
+    body.add_angular_impulse(impulse).unwrap();
+    let w = body.angular_velocity();
+    assert!(gap(w, times(matrix, impulse)) <= 1.0e-6, "{w:?}");
+    // The unmasked tensor would predict a spin about the locked axes.
+    assert!(gap(w, times(unmasked, impulse)) > 0.05, "{w:?}");
+}
+
+#[test]
+fn inverse_inertia_is_zero_with_every_rotation_locked() {
+    let mut world = world(Vec3::ZERO, 1);
+    let sliding =
+        AllowedDofs::TRANSLATION_X | AllowedDofs::TRANSLATION_Y | AllowedDofs::TRANSLATION_Z;
+    let id = world
+        .create_body(
+            &cube_shape(),
+            &BodySettings::new_dynamic()
+                .rotation(tilted())
+                .allowed_dofs(sliding),
+        )
+        .unwrap();
+    assert_eq!(
+        world.body(id).unwrap().inverse_inertia(),
+        Some([[0.0; 3]; 3])
+    );
+}
+
+#[test]
+fn inverse_inertia_is_none_for_static_kinematic_and_soft_bodies() {
+    let mut world = world(Vec3::ZERO, 1);
+    let fixed = world
+        .create_body(
+            &cube_shape(),
+            &BodySettings::new_static().allow_dynamic_or_kinematic(true),
+        )
+        .unwrap();
+    let platform = world
+        .create_body(
+            &cube_shape(),
+            &BodySettings::new_kinematic().position(RVec3::new(3.0, 0.0, 0.0)),
+        )
+        .unwrap();
+    let cloth = add_cloth(&mut world, RVec3::new(0.0, 5.0, 0.0), Quat::IDENTITY);
+    for id in [fixed, platform, cloth] {
+        assert_eq!(world.body(id).unwrap().inverse_inertia(), None);
+    }
+}
+
 #[test]
 fn impulses_ignore_static_and_kinematic_bodies_and_refuse_soft_bodies() {
     let mut world = world(Vec3::ZERO, 1);

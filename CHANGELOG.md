@@ -2,6 +2,13 @@
 
 All notable changes to this fork. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+- `BodyRef::inverse_inertia` reads a dynamic rigid body's inverse inertia tensor about its centre
+  of mass in world coordinates (Jolt `Body::GetInverseInertia`), in rows like `Inertia::Tensor`,
+  with the body's rotation applied and locked rotation axes zeroed; `None` for static, kinematic
+  and soft bodies. The idea comes from pull request #3 by @def9a2a4.
+
 ## 1.4.0 — 2026-10-28
 
 - `BodySettings::mass_and_inertia(mass, inertia)` gives a body its mass and inertia, and Jolt
