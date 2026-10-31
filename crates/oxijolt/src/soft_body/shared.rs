@@ -600,7 +600,12 @@ fn add_skin(
         let inverse = inverse_rigid_matrix(position, rotation);
         // SAFETY: `ptr` is the live settings object `build` owns; `inverse` is a live local
         // that joltc copies.
-        unsafe { JPH_SoftBodySharedSettings_AddInvBind(ptr, joint, &inverse) };
+        let added = unsafe { JPH_SoftBodySharedSettings_AddInvBind(ptr, joint, &inverse) };
+        if !added {
+            // `validate_skin` kept every joint below `MAX_SKIN_JOINTS`, so none is the refused
+            // `u32::MAX`.
+            unreachable!("a validated inverse bind was refused");
+        }
     }
     for constraint in constraints {
         // SAFETY: `ptr` is live and holds the vertices and every inverse bind; `constraint` is

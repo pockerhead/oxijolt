@@ -304,6 +304,31 @@ fn skinned_constraints_with_bad_indices_are_refused() {
 }
 
 #[test]
+fn an_inverse_bind_whose_joint_count_overflows_is_refused() {
+    let settings = cloth();
+    let identity = translation(0.0, 0.0, 0.0);
+    // SAFETY: `settings` is live; `identity` is a live local the calls copy.
+    let (largest, overflowing) = unsafe {
+        (
+            JPH_SoftBodySharedSettings_AddInvBind(settings, u32::MAX - 1, &identity),
+            JPH_SoftBodySharedSettings_AddInvBind(settings, u32::MAX, &identity),
+        )
+    };
+    assert!(largest, "joint u32::MAX - 1 needs u32::MAX joint matrices");
+    assert!(
+        !overflowing,
+        "joint u32::MAX would need 2^32 joint matrices"
+    );
+    assert_eq!(
+        skin_counts(settings),
+        [1, 0],
+        "a refused inverse bind adds nothing"
+    );
+    // SAFETY: the settings hold the one reference `_Create` added, released here.
+    unsafe { JPH_SoftBodySharedSettings_Destroy(settings) };
+}
+
+#[test]
 fn skinned_normals_are_calculated_before_optimize() {
     let settings = skinned_cloth();
     assert_eq!(skin_counts(settings), [2, SIDE * SIDE]);

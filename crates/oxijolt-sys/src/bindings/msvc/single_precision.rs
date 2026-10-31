@@ -11359,7 +11359,7 @@ unsafe extern "C" {
         settings: *mut JPH_SoftBodySharedSettings,
         jointIndex: u32,
         invBind: *const JPH_Mat4,
-    );
+    ) -> bool;
 }
 unsafe extern "C" {
     pub fn JPH_SoftBodySharedSettings_AddSkinnedConstraint(

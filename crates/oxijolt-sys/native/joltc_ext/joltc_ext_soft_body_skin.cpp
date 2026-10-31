@@ -48,13 +48,23 @@ namespace
 		return true;
 	}
 
-	// 1 + the largest joint index of the inverse binds, 0 without inverse binds.
+	// 1 + the largest joint index of the inverse binds, 0 without inverse binds. AddInvBind refuses
+	// the joint index UINT32_MAX, so the sum does not wrap.
 	uint32_t SkinJointCount(const JPH::SoftBodySharedSettings& settings)
 	{
 		uint32_t count = 0;
 		for (const JPH::SoftBodySharedSettings::InvBind& invBind : settings.mInvBindMatrices)
 			count = std::max(count, invBind.mJointIndex + 1);
 		return count;
+	}
+
+	// Whether jointCount joint matrices cover the joint index of every inverse bind.
+	bool CoversEveryJoint(const JPH::SoftBodySharedSettings& settings, uint32_t jointCount)
+	{
+		for (const JPH::SoftBodySharedSettings::InvBind& invBind : settings.mInvBindMatrices)
+			if (invBind.mJointIndex >= jointCount)
+				return false;
+		return true;
 	}
 
 	// The motion properties of a soft body with skinned constraints, or null.
@@ -67,11 +77,15 @@ namespace
 	}
 }
 
-void JPH_SoftBodySharedSettings_AddInvBind(JPH_SoftBodySharedSettings* settings, uint32_t jointIndex, const JPH_Mat4* invBind)
+bool JPH_SoftBodySharedSettings_AddInvBind(JPH_SoftBodySharedSettings* settings, uint32_t jointIndex, const JPH_Mat4* invBind)
 {
 	JPH_ASSERT(settings && invBind);
 
+	// The joint count of such a bind, 2^32, does not fit the uint32_t of SkinSoftBodyVertices.
+	if (jointIndex == UINT32_MAX)
+		return false;
 	AsSoftBodySharedSettings(settings)->mInvBindMatrices.emplace_back(jointIndex, ToMat44(*invBind));
+	return true;
 }
 
 bool JPH_SoftBodySharedSettings_AddSkinnedConstraint(JPH_SoftBodySharedSettings* settings, const JPH_SoftBodySkinnedConstraint* constraint)
@@ -124,7 +138,7 @@ bool JPH_Body_SkinSoftBodyVertices(JPH_Body* body, const JPH_Mat4* jointMatrices
 	if (uint64_t(settings.mInvBindMatrices.size()) * sizeof(JPH::Mat44) > UINT32_MAX)
 		return false;
 	// SkinVertices indexes the joint matrices with the joint indices unchecked.
-	if (jointCount < SkinJointCount(settings))
+	if (!CoversEveryJoint(settings, jointCount))
 		return false;
 
 	JPH::Array<JPH::Mat44> matrices;

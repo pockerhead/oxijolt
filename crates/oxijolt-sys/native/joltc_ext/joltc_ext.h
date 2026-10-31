@@ -332,8 +332,10 @@ typedef struct JPH_SoftBodySkinWeight {
 
 /* JPH::SoftBodySharedSettings::Skinned without mNormalInfo, copied field by field (not a layout
    mirror). The weights end at the first zero weight, as in Jolt, and should add up to 1. maxDistance
-   FLT_MAX is unlimited and 0 hard-skins the vertex; a back stop is off when backStopDistance >=
-   maxDistance (Jolt's default is FLT_MAX with radius 40). */
+   FLT_MAX is unlimited and 0 hard-skins the vertex. Jolt applies the back stop only while
+   backStopDistance is below maxDistance times the body's skinned max distance multiplier, which is
+   infinite for FLT_MAX times a multiplier above 1: INFINITY turns the back stop off for every
+   multiplier (Jolt's default FLT_MAX does not; its default radius is 40). */
 typedef struct JPH_SoftBodySkinnedConstraint {
 	uint32_t vertex;
 	JPH_SoftBodySkinWeight weights[4];
@@ -343,8 +345,10 @@ typedef struct JPH_SoftBodySkinnedConstraint {
 } JPH_SoftBodySkinnedConstraint;
 
 /* Appends a JPH::SoftBodySharedSettings::InvBind: invBind takes a vertex in its bind pose (the
-   settings' vertex position) to the local space of joint jointIndex. invBind may be 4-aligned. */
-JPH_CAPI void JPH_SoftBodySharedSettings_AddInvBind(JPH_SoftBodySharedSettings* settings, uint32_t jointIndex, const JPH_Mat4* invBind);
+   settings' vertex position) to the local space of joint jointIndex. invBind may be 4-aligned.
+   Returns false and adds nothing when jointIndex is UINT32_MAX, whose joint count does not fit in a
+   uint32_t. */
+JPH_CAPI bool JPH_SoftBodySharedSettings_AddInvBind(JPH_SoftBodySharedSettings* settings, uint32_t jointIndex, const JPH_Mat4* invBind);
 /* Appends a skinned constraint. Add it after its vertex and the inverse binds it names: returns false
    and adds nothing when vertex >= the vertex count or a weight before the first zero weight names
    invBindIndex >= the inverse bind count. */

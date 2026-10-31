@@ -429,6 +429,11 @@ fn max_distance_limits_how_far_a_vertex_strays() {
             );
         }
     }
+    // Multiplier 0 hard-skins unlimited vertices too.
+    let (strays, _) = hang(None, 0.0);
+    for stray in strays {
+        assert!(stray <= 1.0e-4, "unlimited at multiplier 0: stray {stray}");
+    }
 }
 
 /// A 2 x 2 cloth at [`POSITION`] with vertices 0, 2 and 3 attached and vertex 1 skinned with

@@ -302,6 +302,33 @@ fn a_skinned_vertex_touches_fewer_than_256_all_skinned_faces() {
     assert_eq!(rejected(skinned_fan(256)), FACES_PER_VERTEX_RULE);
 }
 
+/// Checks `groups` skinned triangles of their own, each listed 255 times, plus `extra` more
+/// such triangles listed once.
+fn validate_skinned_triangles(groups: u32, extra: u32) -> Result<(), SoftBodyError> {
+    let triangles = groups + extra;
+    let faces: Vec<[u32; 3]> = (0..groups)
+        .flat_map(|group| std::iter::repeat_n(group, 255))
+        .chain(groups..triangles)
+        .map(|group| [3 * group, 3 * group + 1, 3 * group + 2])
+        .collect();
+    let skinned: Vec<SoftBodySkinned> = (0..3 * triangles)
+        .map(|vertex| SoftBodySkinned::new(vertex, single(weight(0, 1.0))))
+        .collect();
+    validate_skin(3 * triangles as usize, &faces, &[bind(0)], &skinned).map(|_| ())
+}
+
+#[test]
+fn the_skinned_vertices_touch_fewer_than_2_pow_24_all_skinned_faces_in_total() {
+    // 21931 triangles x 255 listings x 3 vertices = 2^24 - 1 incidences, the most below 2^24
+    // (every face adds 3); one more face makes 2^24 + 2.
+    assert_eq!(21931 * 255 * 3, (1 << 24) - 1);
+    validate_skinned_triangles(21931, 0).unwrap();
+    match validate_skinned_triangles(21931, 1) {
+        Err(SoftBodyError::InvalidValue(what)) => assert_eq!(what, FACE_TOTAL_RULE),
+        other => panic!("expected the face total rule, got {other:?}"),
+    }
+}
+
 /// `value` as `f64`; a no-op with the `double-precision` feature.
 #[allow(clippy::useless_conversion)]
 fn wide(value: Real) -> f64 {
