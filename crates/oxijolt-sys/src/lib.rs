@@ -4,8 +4,8 @@
 //! fork's `native/joltc_ext/joltc_ext.h`, and keeps their `JPH_*` names. The output is
 //! committed under `src/bindings/`, one file per ABI family and configuration, so building
 //! needs no libclang; the `bindgen` feature generates it at build time instead. The
-//! supported targets are the registry in `build/targets.rs`; 32-bit targets are not
-//! supported. The
+//! supported targets are the registry in `build/targets.rs`. Of the 32-bit targets only
+//! `wasm32-unknown-unknown` builds. The
 //! extension adds functions in joltc's naming that are compiled into the joltc
 //! archive: a `JPH_StateRecorder`, `JPH_CharacterVirtual_SaveState` and
 //! `RestoreState`, `JPH_CharacterVirtual_ExtendedUpdate2` and

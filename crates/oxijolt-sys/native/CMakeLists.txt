@@ -28,6 +28,20 @@ endif()
 # install rules, and takes Jolt from JOLT_PHYSICS_ROOT instead of downloading it.
 add_subdirectory(${JOLTC_SOURCE_DIR} joltc)
 
+# wasi-sdk builds for wasm32-unknown-unknown. Jolt recognises wasm only through __EMSCRIPTEN__, so
+# the platform is named here, and Jolt.cmake's -pthread (added off Windows and Emscripten) would ask
+# for wasm threads, which the single-threaded Rust module does not have.
+if (CMAKE_SYSTEM_NAME STREQUAL "WASI")
+    target_compile_definitions(Jolt PUBLIC JPH_PLATFORM_WASM)
+    foreach(property COMPILE_OPTIONS INTERFACE_COMPILE_OPTIONS LINK_OPTIONS INTERFACE_LINK_OPTIONS)
+        get_target_property(options Jolt ${property})
+        if (options)
+            list(REMOVE_ITEM options -pthread)
+            set_target_properties(Jolt PROPERTIES ${property} "${options}")
+        endif()
+    endforeach()
+endif()
+
 if (DOUBLE_PRECISION)
     set(JOLTC_TARGET joltc_double)
 else()

@@ -48,10 +48,15 @@ mod prebuilt_curl;
 #[allow(dead_code)]
 #[path = "build/targets.rs"]
 mod targets;
+// Shared with the xtask tests.
+#[allow(dead_code)]
+#[path = "build/wasi_sdk.rs"]
+mod wasi_sdk;
 
 use cmake_options::{AndroidNdk, FeatureSwitches, ANDROID_GENERATOR};
 use prebuilt::{Mode, Unavailable};
 use targets::Family;
+use wasi_sdk::{SdkIdentity, WasiSdk};
 
 /// joltc commit of the `vendor/joltc` submodule. Must match the gitlink; CI checks this.
 const JOLTC_COMMIT: &str = "886e088675bae3a086f8318c7803f8ee962c2f2c";
@@ -64,6 +69,8 @@ const JOLT_VERSION: &str = "5.6.0";
 const JOLTC_EXT_REVISION: &str = "28";
 /// Name of the manifest file in an install prefix.
 const MANIFEST_FILE: &str = "oxijolt-sys-manifest.txt";
+/// The one wasm32 target that builds; it links wasi-sdk's C++ runtime.
+const WASM_TARGET: &str = "wasm32-unknown-unknown";
 
 /// Everything about the target and the crate features that shapes the native build.
 struct NativeConfig {
@@ -80,6 +87,8 @@ struct NativeConfig {
     family: &'static Family,
     /// MSVC runtime library in CMake's spelling, or `"none"` off MSVC.
     crt: &'static str,
+    /// wasi-sdk of a wasm32-unknown-unknown build that links; `None` otherwise.
+    wasi_sdk: Option<(WasiSdk, SdkIdentity)>,
 }
 
 impl NativeConfig {
@@ -114,6 +123,7 @@ impl NativeConfig {
             target_arch: var("CARGO_CFG_TARGET_ARCH"),
             family,
             crt,
+            wasi_sdk: None,
         })
     }
 
@@ -148,9 +158,10 @@ fn on_off(value: bool) -> &'static str {
 /// Every input that changes the ABI or the archive contents, in manifest order.
 ///
 /// Both the CMake path (writing) and the prebuilt path (validating) use this
-/// one list, so they cannot drift apart.
+/// one list, so they cannot drift apart. wasm builds add the wasi-sdk that compiled the prefix
+/// and links its runtime.
 fn manifest_entries(cfg: &NativeConfig) -> Vec<(&'static str, String)> {
-    vec![
+    let mut entries = vec![
         ("format", "1".to_owned()),
         ("joltc_commit", JOLTC_COMMIT.to_owned()),
         ("joltc_ext", JOLTC_EXT_REVISION.to_owned()),
@@ -169,7 +180,11 @@ fn manifest_entries(cfg: &NativeConfig) -> Vec<(&'static str, String)> {
         ("floating_point_exceptions", "OFF".to_owned()),
         ("profiler", "OFF".to_owned()),
         ("joltc_lib", cfg.joltc_lib().to_owned()),
-    ]
+    ];
+    if let Some((_, id)) = &cfg.wasi_sdk {
+        entries.push(("wasi_sdk", id.manifest_value().to_owned()));
+    }
+    entries
 }
 
 /// The manifest file contents: one `key=value` per line.
@@ -206,14 +221,13 @@ fn main() -> anyhow::Result<()> {
     }
     println!("cargo:rerun-if-changed=build.rs");
 
-    let cfg = NativeConfig::from_env()?;
-    if cfg.family.name == "wasm32" {
-        bail!(
-            "{}: building for wasm32 is not supported yet; only its bindings are committed",
-            cfg.target
-        );
+    let mut cfg = NativeConfig::from_env()?;
+    check_wasm_target(&cfg)?;
+    let docs_rs = env::var_os("DOCS_RS").is_some();
+    if cfg.target == WASM_TARGET && !docs_rs {
+        cfg.wasi_sdk = Some(locate_wasi_sdk()?);
     }
-    let prefix = if env::var_os("DOCS_RS").is_some() {
+    let prefix = if docs_rs {
         headers_only_prefix()?
     } else {
         let prefix = match env::var_os("JOLTC_LIB_DIR") {
@@ -230,6 +244,57 @@ fn main() -> anyhow::Result<()> {
     println!("cargo:rustc-env=OXIJOLT_SYS_JOLTC_COMMIT={JOLTC_COMMIT}");
     println!("cargo:rustc-env=OXIJOLT_SYS_JOLTC_EXT_REVISION={JOLTC_EXT_REVISION}");
     Ok(())
+}
+
+/// Refuses the wasm32 targets that only have committed bindings, and Rust releases too old for
+/// [`WASM_TARGET`]. Off the wasm32 family it checks nothing.
+fn check_wasm_target(cfg: &NativeConfig) -> anyhow::Result<()> {
+    if cfg.family.name != "wasm32" {
+        return Ok(());
+    }
+    if cfg.target != WASM_TARGET {
+        bail!(
+            "`{}`: of the wasm32 targets only {WASM_TARGET} builds; this one has committed bindings only",
+            cfg.target
+        );
+    }
+    let rustc = env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
+    let output = std::process::Command::new(&rustc)
+        .arg("--version")
+        .output()
+        .with_context(|| format!("cannot run `{} --version`", rustc.to_string_lossy()))?;
+    let output = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    let version = wasi_sdk::rustc_version(&output)
+        .with_context(|| format!("cannot read the Rust version from `{output}`"))?;
+    if version < wasi_sdk::MIN_RUSTC {
+        bail!("{WASM_TARGET} needs Rust 1.89 or newer (its standard C ABI); this is {output}");
+    }
+    Ok(())
+}
+
+/// The wasi-sdk named by `WASI_SDK_PATH`, after checking that it has every file the build uses.
+fn locate_wasi_sdk() -> anyhow::Result<(WasiSdk, SdkIdentity)> {
+    println!("cargo:rerun-if-env-changed={}", wasi_sdk::WASI_SDK_PATH_VAR);
+    let sdk = WasiSdk::locate(|name| env::var(name).ok())?;
+    let version_file = sdk.version_file();
+    let text =
+        fs::read_to_string(&version_file).with_context(|| format!("cannot read {version_file}"))?;
+    let id = SdkIdentity::parse(&text)?;
+    for file in sdk.required_files(&id) {
+        if !Path::new(&file).is_file() {
+            return Err(wasi_sdk::WasiSdkError::Missing(file).into());
+        }
+    }
+    println!("cargo:rerun-if-changed={version_file}");
+    println!("cargo:rerun-if-changed={}", sdk.toolchain_file());
+    if id.version() != wasi_sdk::TESTED_SDK_VERSION {
+        println!(
+            "cargo:warning=wasi-sdk {} is untested; oxijolt-sys is tested with wasi-sdk {}",
+            id.version(),
+            wasi_sdk::TESTED_SDK_VERSION
+        );
+    }
+    Ok((sdk, id))
 }
 
 /// A prefix with only `include/joltc.h` and `include/joltc_ext.h`, copied from the package.
@@ -499,6 +564,18 @@ fn build_with_cmake(cfg: &NativeConfig) -> anyhow::Result<PathBuf> {
         config.generator(ANDROID_GENERATOR);
     }
 
+    if let Some((sdk, _)) = &cfg.wasi_sdk {
+        for (name, value) in sdk.cmake_options() {
+            config.define(name, value);
+        }
+        // The cmake crate would otherwise pass cc's flags for wasm32-unknown-unknown, whose
+        // --target overrides the toolchain file's wasm32-wasip1.
+        for flags in ["CMAKE_C_FLAGS", "CMAKE_CXX_FLAGS", "CMAKE_ASM_FLAGS"] {
+            config.define(flags, "");
+        }
+        config.generator(wasi_sdk::WASI_GENERATOR);
+    }
+
     let prefix = config.build();
     write_manifest(&prefix, cfg)?;
     Ok(prefix)
@@ -666,6 +743,14 @@ fn link(prefix: &Path, cfg: &NativeConfig) {
         "macos" | "ios" => println!("cargo:rustc-link-lib=dylib=c++"),
         "linux" => println!("cargo:rustc-link-lib=dylib=stdc++"),
         _ => {}
+    }
+    if let Some((sdk, id)) = &cfg.wasi_sdk {
+        for dir in sdk.link_search_dirs(id) {
+            println!("cargo:rustc-link-search=native={dir}");
+        }
+        for lib in wasi_sdk::RUNTIME_LIBRARIES {
+            println!("cargo:rustc-link-lib=static={lib}");
+        }
     }
 
     println!("cargo:include={}", prefix.join("include").display());

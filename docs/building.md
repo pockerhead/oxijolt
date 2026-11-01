@@ -191,8 +191,13 @@ configuration. The supported targets are those with committed bindings (`build/t
 | `gnu` | `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin`, `aarch64-apple-darwin`, `x86_64-linux-android`, `aarch64-linux-android`, `x86_64-pc-windows-gnu` |
 | `wasm32` | `wasm32-unknown-unknown`, `wasm32-unknown-emscripten`, `wasm32-wasip1` |
 
-Other 32-bit targets and unregistered ones are refused when the build starts. The `wasm32` family
-has committed bindings only: the build script refuses to build for it, also under `DOCS_RS`. CI builds and tests
+Other 32-bit targets and unregistered ones are refused when the build starts.
+`wasm32-unknown-unknown` builds from source with [wasi-sdk](https://github.com/WebAssembly/wasi-sdk):
+`WASI_SDK_PATH` names its install directory, Ninja is on `PATH` and Rust is 1.89 or newer; wasi-sdk
+34.0 is tested. A `JOLTC_LIB_DIR` prefix for it records the SDK and needs the same `WASI_SDK_PATH`
+to link. No archive is published for wasm, so the default `prebuilt` feature falls back to the
+source build. `wasm32-unknown-emscripten` and `wasm32-wasip1` have committed bindings only and are
+refused, also under `DOCS_RS`. CI builds and tests
 `x86_64-pc-windows-msvc`, `x86_64-unknown-linux-gnu` and `aarch64-apple-darwin`; the other
 targets have bindings that the generator produced byte-identical to their family's, but nothing
 builds or tests them. Android cross
