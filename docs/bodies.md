@@ -414,7 +414,8 @@ Waking:
 - The object layer, the collision group and the sensor flag change which pairs collide. Jolt
   collides a pair only when one of its bodies is awake, so these setters wake the changed body
   with `Activation::Activate` and, with either activation, every other non-static body whose
-  bounds overlap or touch it, in body-id order, as `set_shape` does. A body resting on a floor
+  bounds come within the speculative contact distance of its bounds, the range in which Jolt
+  pairs bodies, in body-id order. A body resting on a floor
   that stops colliding with it falls. The same layer, group or flag changes nothing and wakes
   nothing.
 - Queries see a new layer at once. A pair that the new layer or group excludes ends with

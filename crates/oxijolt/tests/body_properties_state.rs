@@ -6,6 +6,7 @@
 
 mod common;
 
+use common::soft_body::Cloth;
 use common::*;
 use oxijolt::*;
 
@@ -685,6 +686,242 @@ fn filter_setters_change_the_run() {
     let nothing = states(Filter::Nothing);
     for filter in FILTERS {
         assert_ne!(states(filter), nothing, "{filter:?}");
+    }
+}
+
+/// One setter applied to a cloth.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum ClothProperty {
+    Friction,
+    Restitution,
+    GravityFactor,
+    LinearDamping,
+    Layer,
+    Group,
+    Nothing,
+}
+
+const CLOTH_PROPERTIES: [ClothProperty; 6] = [
+    ClothProperty::Friction,
+    ClothProperty::Restitution,
+    ClothProperty::GravityFactor,
+    ClothProperty::LinearDamping,
+    ClothProperty::Layer,
+    ClothProperty::Group,
+];
+
+/// A tilted cloth falling onto a cube that rests on the floor. The played layer and group let
+/// the cloth pass the cube; the detour values make it collide again.
+struct ClothScene {
+    world: PhysicsWorld,
+    bodies: Vec<BodyId>,
+    cloth: BodyId,
+    moving: ObjectLayer,
+    ghost: ObjectLayer,
+    /// The cloth's played group: it does not collide with the cube's.
+    cloth_group: CollisionGroup,
+}
+
+impl ClothScene {
+    fn new(threads: u32) -> Self {
+        let mut layers = CollisionLayers::new(2);
+        let fixed = layers.add_object_layer(BroadPhaseLayer::new(0));
+        let moving = layers.add_object_layer(BroadPhaseLayer::new(1));
+        let ghost = layers.add_object_layer(BroadPhaseLayer::new(1));
+        layers.enable_collision(moving, fixed);
+        layers.enable_collision(moving, moving);
+        layers.enable_collision(ghost, fixed);
+        let mut world = PhysicsWorld::new(jobs::with_threads(
+            WorldSettings::default().gravity(GRAVITY).layers(layers),
+            threads,
+        ))
+        .unwrap();
+        world.set_event_settings(
+            EventSettings::default()
+                .contacts(true)
+                .body_activation(true),
+        );
+        let mut builder = GroupFilterTableBuilder::new(2).unwrap();
+        builder.disable_collision(0, 1).unwrap();
+        let table = builder.build();
+        let cloth_group = CollisionGroup::new(&table, 1, 0).unwrap();
+        let floor = add_floor(&mut world);
+        let cube = world
+            .create_body(
+                &Shape::new_box(Vec3::new(0.5, 0.5, 0.5)).unwrap(),
+                &BodySettings::new_dynamic()
+                    .position(RVec3::new(0.0, 0.5, 0.0))
+                    .object_layer(moving)
+                    .collision_group(CollisionGroup::new(&table, 1, 1).unwrap()),
+            )
+            .unwrap();
+        let shared = Cloth::new(6, 0.2)
+            .builder()
+            .create_constraints(SoftBodyBendType::None, SoftBodyVertexAttributes::default())
+            .build()
+            .unwrap();
+        let cloth = world
+            .create_soft_body(
+                &shared,
+                &SoftBodySettings::default()
+                    .position(RVec3::new(0.0, 1.6, 0.0))
+                    .rotation(Quat::from_xyzw(0.0, 0.0, 0.15_f32.sin(), 0.15_f32.cos()))
+                    .object_layer(moving)
+                    .friction(0.0),
+            )
+            .unwrap();
+        Self {
+            world,
+            bodies: vec![floor, cube, cloth],
+            cloth,
+            moving,
+            ghost,
+            cloth_group,
+        }
+    }
+
+    /// Sets `property` of the cloth to `value`.
+    fn set(&mut self, property: ClothProperty, value: Value) {
+        let played = value == Value::Played;
+        let pick = |played_value: f32, detour_value: f32| {
+            if played {
+                played_value
+            } else {
+                detour_value
+            }
+        };
+        let mut cloth = self.world.body_mut(self.cloth).unwrap();
+        let result = match property {
+            ClothProperty::Friction => cloth.set_friction(pick(1.0, 0.0)),
+            ClothProperty::Restitution => cloth.set_restitution(pick(0.9, 0.0)),
+            ClothProperty::GravityFactor => cloth.set_gravity_factor(pick(0.3, 2.0)),
+            ClothProperty::LinearDamping => cloth.set_linear_damping(pick(3.0, 0.0)),
+            ClothProperty::Layer => cloth.set_object_layer(
+                if played { self.ghost } else { self.moving },
+                Activation::Activate,
+            ),
+            ClothProperty::Group => cloth.set_collision_group(
+                played.then_some(&self.cloth_group),
+                Activation::DontActivate,
+            ),
+            ClothProperty::Nothing => Ok(()),
+        };
+        result.unwrap();
+    }
+
+    /// Steps once and appends every body's state and property values, the cloth's vertices
+    /// and the step's events to `digest`.
+    fn tick(&mut self, digest: &mut Vec<Record>) {
+        step(&mut self.world, 1);
+        let mut record = Record::default();
+        for &id in &self.bodies {
+            record_body(&self.world, id, &mut record.states);
+            let body = self.world.body(id).unwrap();
+            // Floats print in their shortest exact form.
+            record.values += &format!(
+                "{:?}{:?}{:?}{:?}{:?}{}",
+                body.friction(),
+                body.restitution(),
+                body.gravity_factor(),
+                body.linear_damping(),
+                body.object_layer(),
+                body.collision_group_is(Some(&self.cloth_group)),
+            );
+        }
+        for vertex in self.world.soft_body(self.cloth).unwrap().vertices() {
+            let position: [Real; 3] = vertex.position.into();
+            let velocity: [f32; 3] = vertex.velocity.into();
+            for value in position {
+                record.states.extend(value.to_bits().to_le_bytes());
+            }
+            for value in velocity {
+                record.states.extend(value.to_bits().to_le_bytes());
+            }
+        }
+        let events = self.world.take_events();
+        record
+            .states
+            .extend(format!("{:?}{:?}", events.contacts, events.activations).bytes());
+        digest.push(record);
+    }
+
+    /// Runs ticks `ticks`, setting the played value of `property` before [`CHANGE_TICK`].
+    fn run(
+        &mut self,
+        property: ClothProperty,
+        ticks: std::ops::RangeInclusive<usize>,
+    ) -> Vec<Record> {
+        let mut digest = Vec::new();
+        for tick in ticks {
+            if tick == CHANGE_TICK {
+                self.set(property, Value::Played);
+            }
+            self.tick(&mut digest);
+        }
+        digest
+    }
+}
+
+/// The ticks after the save of a straight run of the cloth scene with `property` changed.
+fn cloth_straight(property: ClothProperty, threads: u32) -> Vec<Record> {
+    let mut scene = ClothScene::new(threads);
+    scene.run(property, 1..=BEFORE_SAVE);
+    scene.run(property, BEFORE_SAVE + 1..=BEFORE_SAVE + AFTER_SAVE)
+}
+
+/// The same ticks replayed after a save, a detour with the detour value and other gravity, and
+/// a restore. The played value is set back before the restore for the layer and the group, and
+/// after it for the value setters; events up to the restore are dropped.
+fn cloth_replay(property: ClothProperty, threads: u32) -> Vec<Record> {
+    let filter = matches!(property, ClothProperty::Layer | ClothProperty::Group);
+    let mut scene = ClothScene::new(threads);
+    scene.run(property, 1..=BEFORE_SAVE);
+    let saved = scene.world.save_state();
+    scene.set(property, Value::Detour);
+    scene.world.set_gravity(Vec3::new(1.0, -5.0, 0.0)).unwrap();
+    let mut ignored = Vec::new();
+    for _ in 0..DETOUR {
+        scene.tick(&mut ignored);
+    }
+    if filter {
+        scene.set(property, Value::Played);
+    }
+    scene.world.take_events();
+    scene.world.restore_state(&saved).unwrap();
+    if !filter {
+        scene.set(property, Value::Played);
+    }
+    scene.run(property, BEFORE_SAVE + 1..=BEFORE_SAVE + AFTER_SAVE)
+}
+
+#[test]
+fn soft_body_setters_replay_after_a_detour_and_a_set_back() {
+    let states = |run: Vec<Record>| {
+        run.into_iter()
+            .map(|record| record.states)
+            .collect::<Vec<_>>()
+    };
+    let nothing = states(cloth_straight(ClothProperty::Nothing, 1));
+    for property in CLOTH_PROPERTIES {
+        let reference = cloth_straight(property, 1);
+        assert_eq!(reference.len(), AFTER_SAVE);
+        assert_ne!(
+            first_difference(&nothing, &states(cloth_straight(property, 1))),
+            None,
+            "{property:?} changes the run"
+        );
+        for threads in [1, 4] {
+            assert_eq!(
+                first_difference(&reference, &cloth_straight(property, threads)),
+                None,
+                "{property:?}: straight run with {threads} workers"
+            );
+            assert_eq!(
+                first_difference(&reference, &cloth_replay(property, threads)),
+                None,
+                "{property:?}: replay with {threads} workers"
+            );
+        }
     }
 }
 

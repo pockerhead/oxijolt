@@ -286,9 +286,8 @@ impl BodyMut<'_> {
     /// which one of their bodies is awake: a pair that no longer collides ends with
     /// [`ContactEvent::Removed`]. Jolt wakes nothing for a layer change, so this wakes the body
     /// with [`Activation::Activate`] and, with either activation, every other non-static body
-    /// whose bounds overlap or touch the body's, in body-id order, as
-    /// [`set_shape`](Self::set_shape) does: nothing stays asleep resting on a body it no longer
-    /// collides with. A vehicle's wheels keep the layer of their collision tester, and a
+    /// whose bounds come within the [speculative contact distance] of the body's, in body-id
+    /// order: nothing stays asleep resting on a body it no longer collides with. A vehicle's wheels keep the layer of their collision tester, and a
     /// character collides by the new layer from its next update. The same layer changes
     /// nothing and wakes nothing.
     ///
@@ -303,6 +302,7 @@ impl BodyMut<'_> {
     /// [`CollisionLayers`](crate::CollisionLayers).
     ///
     /// [`ContactEvent::Removed`]: crate::ContactEvent::Removed
+    /// [speculative contact distance]: crate::WorldSettings::speculative_contact_distance
     /// [docs/state.md#what-is-not-saved]: https://github.com/pockerhead/oxijolt/blob/main/docs/state.md#what-is-not-saved
     pub fn set_object_layer(
         &mut self,
@@ -458,11 +458,12 @@ impl BodyMut<'_> {
     }
 
     /// Wakes the body for [`Activation::Activate`] and, either way, every other non-static body
-    /// whose bounds overlap or touch it: Jolt collides a pair only when one of its bodies is
-    /// awake, so a filter change would otherwise leave sleeping bodies floating or embedded.
+    /// whose bounds come within the speculative contact distance of it: Jolt collides a pair
+    /// only when one of its bodies is awake, so a filter change would otherwise leave sleeping
+    /// bodies floating or embedded.
     fn wake_after_filter_change(&mut self, activation: Activation) {
         let id = self.inner.id;
-        let bounds = with_read_locked_body(self.inner.body_lock_interface, id, |body| {
+        let mut bounds = with_read_locked_body(self.inner.body_lock_interface, id, |body| {
             let mut bounds = NO_BOUNDS;
             // SAFETY: `body` is locked for reading for the duration of the closure; the getter
             // only reads it and writes the live local.
@@ -473,6 +474,17 @@ impl BodyMut<'_> {
         if activation == Activation::Activate {
             self.activate();
         }
+        // Jolt pairs bodies whose bounds come within this distance (`QuadTree::FindCollidingPairs`
+        // widens them in `f32` the same way), so a body resting on a speculative contact need not
+        // touch the exact bounds.
+        let margin = self.world.speculative_contact_distance();
+        let widen = |v: JPH_Vec3, by: f32| JPH_Vec3 {
+            x: v.x + by,
+            y: v.y + by,
+            z: v.z + by,
+        };
+        bounds.min = widen(bounds.min, -margin);
+        bounds.max = widen(bounds.max, margin);
         let (min, max) = corners(&bounds);
         self.world.wake_bodies_overlapping(min, max, Some(id));
     }

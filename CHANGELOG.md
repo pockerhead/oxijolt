@@ -33,7 +33,7 @@ All notable changes to this fork. The format follows [Keep a Changelog](https://
   character's inner body keeps its layer, a ragdoll part its group, and characters, vehicles and
   ragdolls their sensor flag. The value setters wake nothing. The layer, group and sensor setters
   wake the body with `Activation::Activate` and, with either activation, the non-static bodies
-  whose bounds overlap or touch its bounds, in body-id order. Jolt saves none of these properties: a restore keeps the values set last, so a
+  whose bounds come within the speculative contact distance of its bounds, in body-id order. Jolt saves none of these properties: a restore keeps the values set last, so a
   rollback sets them back and replays, the layer and group before `restore_state`; a sensor
   toggle is a structural change that earlier `WorldState`s refuse (`StateError::WorldChanged`).
   The sensor flag and the collision group were documented as fixed at creation before. The C

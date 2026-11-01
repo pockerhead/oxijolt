@@ -185,6 +185,32 @@ fn sleeping_changed_body_stays_asleep_without_activation() {
     }
 }
 
+/// A sleeper within the speculative contact distance of the changed body is in Jolt's contact
+/// range without touching its bounds; it wakes too. Resting cubes end up there or touching,
+/// depending on the floating-point rounding of the platform.
+#[test]
+fn sleeper_within_speculative_distance_wakes() {
+    let (mut world, layers) = filter_world();
+    let floor = add_floor(&mut world);
+    let cube = add_cube(&mut world, RVec3::new(0.0, 0.5, 0.0));
+    fall_asleep(&mut world, cube);
+    let gap = 0.5 * world.speculative_contact_distance();
+    let lifted = RVec3::new(0.0, 0.5 + Real::from(gap), 0.0);
+    world
+        .body_mut(cube)
+        .unwrap()
+        .set_position(lifted, Activation::DontActivate)
+        .unwrap();
+    assert!(world.body(cube).unwrap().is_sleeping());
+    world.take_events();
+    world
+        .body_mut(floor)
+        .unwrap()
+        .set_object_layer(layers.ghost, Activation::DontActivate)
+        .unwrap();
+    assert_eq!(activated(&world.take_events()), [cube]);
+}
+
 #[test]
 fn same_filter_wakes_nothing() {
     let (mut world, layers) = filter_world();
