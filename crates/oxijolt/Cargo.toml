@@ -1,7 +1,7 @@
 [package]
 name = "oxijolt"
 description = "Safe Rust API for Jolt Physics"
-version = "1.4.0+jolt-5.6.0"
+version = "1.5.0+jolt-5.6.0"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/pockerhead/oxijolt"
 edition = "2021"
@@ -43,7 +43,7 @@ glam033 = ["dep:glam033"]
 mint = ["dep:mint"]
 
 [dependencies]
-oxijolt-sys = { version = "1.4.0", path = "../oxijolt-sys", default-features = false }
+oxijolt-sys = { version = "1.5.0", path = "../oxijolt-sys", default-features = false }
 # The glam versions Bevy uses (0.33 in Bevy 0.20); `std` is glam's math backend and adds
 # nothing to the conversions. glam 0.33 has its `f64` types (`DVec3`) behind a feature.
 glam = { version = "0.32", optional = true, default-features = false, features = ["std"] }
