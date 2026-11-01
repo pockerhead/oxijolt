@@ -19,6 +19,7 @@ mod path;
 mod pulley;
 mod rotational;
 mod slider;
+mod solver;
 mod world;
 
 use std::f32::consts::PI;
@@ -45,6 +46,7 @@ pub use world::{
 use crate::limits;
 use crate::math::is_unit;
 use crate::{RVec3, Vec3};
+use solver::SolverOverrides;
 
 /// Tolerance of the perpendicularity checks on unit axes, `|a·b|` at most this.
 const PERPENDICULAR_TOLERANCE: f32 = 1.0e-4;
@@ -390,6 +392,7 @@ pub struct SwingTwistConstraintSettings {
     max_friction_torque: f32,
     swing_motor: MotorSettings,
     twist_motor: MotorSettings,
+    solver: SolverOverrides,
 }
 
 impl Default for SwingTwistConstraintSettings {
@@ -422,6 +425,7 @@ impl SwingTwistConstraintSettings {
             max_friction_torque: 0.0,
             swing_motor: MotorSettings::default(),
             twist_motor: MotorSettings::default(),
+            solver: SolverOverrides::default(),
         }
     }
 
@@ -497,6 +501,7 @@ impl SwingTwistConstraintSettings {
     }
 
     pub(crate) fn validate(&self) -> Result<(), &'static str> {
+        self.solver.validate()?;
         validate_frame(self.position1, self.twist_axis1, self.plane_axis1)?;
         validate_frame(self.position2, self.twist_axis2, self.plane_axis2)?;
         if !(within(self.normal_half_cone_angle, 0.0, PI)
@@ -524,7 +529,7 @@ impl SwingTwistConstraintSettings {
 
     pub(crate) fn to_jph(&self) -> JPH_SwingTwistConstraintSettings {
         JPH_SwingTwistConstraintSettings {
-            base: constraint_base(),
+            base: self.solver.to_jph(),
             space: self.space.to_jph(),
             position1: self.position1.to_jph(),
             twistAxis1: self.twist_axis1.to_jph(),
@@ -564,6 +569,7 @@ pub struct HingeConstraintSettings {
     limits_spring: SpringSettings,
     max_friction_torque: f32,
     motor: MotorSettings,
+    solver: SolverOverrides,
 }
 
 impl Default for HingeConstraintSettings {
@@ -593,6 +599,7 @@ impl HingeConstraintSettings {
             limits_spring: SpringSettings::default(),
             max_friction_torque: 0.0,
             motor: MotorSettings::default(),
+            solver: SolverOverrides::default(),
         }
     }
 
@@ -652,6 +659,7 @@ impl HingeConstraintSettings {
     }
 
     pub(crate) fn validate(&self) -> Result<(), &'static str> {
+        self.solver.validate()?;
         validate_frame(self.point1, self.hinge_axis1, self.normal_axis1)?;
         validate_frame(self.point2, self.hinge_axis2, self.normal_axis2)?;
         self.limits_spring.validate()?;
@@ -669,7 +677,7 @@ impl HingeConstraintSettings {
 
     pub(crate) fn to_jph(&self) -> JPH_HingeConstraintSettings {
         JPH_HingeConstraintSettings {
-            base: constraint_base(),
+            base: self.solver.to_jph(),
             space: self.space.to_jph(),
             point1: self.point1.to_jph(),
             hingeAxis1: self.hinge_axis1.to_jph(),
@@ -806,6 +814,7 @@ pub struct SixDofConstraintSettings {
     max_friction: [f32; 6],
     limits_springs: [SpringSettings; 6],
     motors: [MotorSettings; 6],
+    solver: SolverOverrides,
 }
 
 impl Default for SixDofConstraintSettings {
@@ -835,6 +844,7 @@ impl SixDofConstraintSettings {
             max_friction: [0.0; 6],
             limits_springs: [SpringSettings::default(); 6],
             motors: [MotorSettings::default(); 6],
+            solver: SolverOverrides::default(),
         }
     }
 
@@ -902,6 +912,7 @@ impl SixDofConstraintSettings {
     }
 
     pub(crate) fn validate(&self) -> Result<(), &'static str> {
+        self.solver.validate()?;
         validate_frame(self.position1, self.axis_x1, self.axis_y1)?;
         validate_frame(self.position2, self.axis_x2, self.axis_y2)?;
         for which in SixDofConstraintAxis::ALL {
@@ -966,7 +977,7 @@ impl SixDofConstraintSettings {
     pub(crate) fn to_jph(&self) -> JPH_SixDOFConstraintSettings {
         let limits = self.axes.map(SixDofAxis::limits);
         JPH_SixDOFConstraintSettings {
-            base: constraint_base(),
+            base: self.solver.to_jph(),
             space: self.space.to_jph(),
             position1: self.position1.to_jph(),
             axisX1: self.axis_x1.to_jph(),

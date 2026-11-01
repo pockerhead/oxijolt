@@ -373,6 +373,17 @@ equal bytes and that a restored shape saves the bytes it came from.
   (`Body/MotionProperties.h:192,196`). A larger count would wrap.
 - 0 position steps is Jolt's own way to turn the position pass off.
 
+A constraint's `velocity_steps_override` and `position_steps_override` are at most
+`limits::MAX_SOLVER_STEPS_OVERRIDE`, the same 255: the `Constraint` constructor and its setters
+assert both below 256 and store them as `uint8` (`Constraints/Constraint.h:118-124,142,146`).
+0 means no override, and an override of 1 velocity step is accepted: Jolt combines the overrides
+with the world's count over an island ([constraints.md](constraints.md#solver-overrides)), and an
+island with a contact always runs at least the world's count, which is at least 2. A count of 255
+on one constraint makes its whole island run up to 255 iterations per step; that cost is the
+caller's choice. `step_overrides_above_the_bound_are_refused` checks the bound at creation and in
+the setters, for every kind, and `ragdoll_joint_kinds_bound_their_step_overrides` for ragdoll
+joints.
+
 The counts and the two [contact distances](#contact-distances) are written once, in
 `PhysicsWorld::new`, through joltc's `JPH_PhysicsSystem_SetPhysicsSettings`. joltc copies every
 field of its `JPH_PhysicsSettings` both

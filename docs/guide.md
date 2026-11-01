@@ -186,11 +186,11 @@ The rest of the world moves along:
   A soft body's vertices turn with it, which leaves its body rotation non-identity.
 - **Pulleys** are the exception: their fixed points are world points, so a rebase recreates each
   pulley in the new frame, in id order after the vehicles. A translation alone recreates pulleys
-  too. A pulley keeps its id, enabled state, ratio and lengths, and drops its warm start. It also
-  drops its cached rope directions: Jolt starts them at -Y and keeps the old one for a rope segment
-  of zero length, so only such a segment notices. Jolt removes the old pulley by moving its last
-  constraint into the freed place and appends the new pulley at the end, so the order of other
-  constraints changes too. The same calls give the same order.
+  too. A pulley keeps its id, enabled state, ratio, lengths, priority and step overrides, and drops
+  its warm start. It also drops its cached rope directions: Jolt starts them at -Y and keeps the
+  old one for a rope segment of zero length, so only such a segment notices. Jolt removes the old
+  pulley by moving its last constraint into the freed place and appends the new pulley at the end,
+  so the order of other constraints changes too. The same calls give the same order.
   A taut rope's length then rounds differently in `f32`; a step in which it comes out just under
   the maximum length leaves the rope slack, and a hanging pair drifts by a few millimetres from
   where it would be without the rebase before the drift decays; 0.0023 m was measured after a turn

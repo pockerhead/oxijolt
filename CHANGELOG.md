@@ -14,6 +14,15 @@ All notable changes to this fork. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- Per-constraint solver settings for every constraint kind (Jolt `ConstraintSettings::
+  mConstraintPriority`, `mNumVelocityStepsOverride`, `mNumPositionStepsOverride`): the builders
+  `constraint_priority`, `velocity_steps_override` and `position_steps_override` on every
+  constraint settings type, the getters of the same names on `ConstraintRef` and `ConstraintMut`,
+  and `ConstraintMut::set_constraint_priority`, `set_velocity_steps_override` and
+  `set_position_steps_override`, which wake the constraint's bodies. Jolt solves an island with
+  the largest count its constraints and contacts ask for, so raising one welded chain's count no
+  longer needs the world's count raised for every island. Step overrides are bounded by the new
+  `limits::MAX_SOLVER_STEPS_OVERRIDE` (255). Refs #7.
 - `BodyRef::inverse_inertia` reads a dynamic rigid body's inverse inertia tensor about its centre
   of mass in world coordinates (Jolt `Body::GetInverseInertia`), in rows like `Inertia::Tensor`,
   with the body's rotation applied and locked rotation axes zeroed; `None` for static, kinematic

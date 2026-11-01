@@ -15,6 +15,33 @@ pub fn create_every_kind(
     body1: BodyId,
     body2: BodyId,
 ) -> Vec<Result<AnyConstraintId, ConstraintError>> {
+    create_every_kind_solved(world, body1, body2, Solver::default())
+}
+
+/// The solver settings every constraint kind shares: priority and velocity and position step
+/// overrides.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Solver {
+    pub priority: u32,
+    pub velocity_steps: u32,
+    pub position_steps: u32,
+}
+
+/// [`create_every_kind`] with `solver` set on the settings of every kind.
+pub fn create_every_kind_solved(
+    world: &mut PhysicsWorld,
+    body1: BodyId,
+    body2: BodyId,
+    solver: Solver,
+) -> Vec<Result<AnyConstraintId, ConstraintError>> {
+    macro_rules! solved {
+        ($settings:expr) => {
+            &$settings
+                .constraint_priority(solver.priority)
+                .velocity_steps_override(solver.velocity_steps)
+                .position_steps_override(solver.position_steps)
+        };
+    }
     let p1 = world.body(body1).unwrap().position();
     let p2 = world.body(body2).unwrap().position();
     let middle = RVec3::new(
@@ -35,33 +62,13 @@ pub fn create_every_kind(
             .create_constraint(
                 body1,
                 body2,
-                &FixedConstraintSettings::default().auto_detect_point(true),
+                solved!(FixedConstraintSettings::default().auto_detect_point(true)),
             )
             .map(Into::into),
     );
     create(
         world
-            .create_constraint(body1, body2, &PointConstraintSettings::new(middle))
-            .map(Into::into),
-    );
-    create(
-        world
-            .create_constraint(body1, body2, &DistanceConstraintSettings::new(p1, p2))
-            .map(Into::into),
-    );
-    create(
-        world
-            .create_constraint(body1, body2, &HingeConstraintSettings::new(middle, Z, X))
-            .map(Into::into),
-    );
-    create(
-        world
-            .create_constraint(body1, body2, &SliderConstraintSettings::new(middle, X, Y))
-            .map(Into::into),
-    );
-    create(
-        world
-            .create_constraint(body1, body2, &ConeConstraintSettings::new(middle, X, 0.5))
+            .create_constraint(body1, body2, solved!(PointConstraintSettings::new(middle)))
             .map(Into::into),
     );
     create(
@@ -69,31 +76,7 @@ pub fn create_every_kind(
             .create_constraint(
                 body1,
                 body2,
-                &SwingTwistConstraintSettings::new(middle, X, Y).half_cone_angles(0.5, 0.5),
-            )
-            .map(Into::into),
-    );
-    create(
-        world
-            .create_constraint(body1, body2, &SixDofConstraintSettings::new(middle, X, Y))
-            .map(Into::into),
-    );
-    create(
-        world
-            .create_constraint(body1, body2, &PathConstraintSettings::new(path))
-            .map(Into::into),
-    );
-    create(
-        world
-            .create_constraint(body1, body2, &GearConstraintSettings::new(Z, Z, 2.0))
-            .map(Into::into),
-    );
-    create(
-        world
-            .create_constraint(
-                body1,
-                body2,
-                &RackAndPinionConstraintSettings::new(Z, X, 2.0),
+                solved!(DistanceConstraintSettings::new(p1, p2)),
             )
             .map(Into::into),
     );
@@ -102,7 +85,75 @@ pub fn create_every_kind(
             .create_constraint(
                 body1,
                 body2,
-                &PulleyConstraintSettings::new(p1, above(p1), p2, above(p2)),
+                solved!(HingeConstraintSettings::new(middle, Z, X)),
+            )
+            .map(Into::into),
+    );
+    create(
+        world
+            .create_constraint(
+                body1,
+                body2,
+                solved!(SliderConstraintSettings::new(middle, X, Y)),
+            )
+            .map(Into::into),
+    );
+    create(
+        world
+            .create_constraint(
+                body1,
+                body2,
+                solved!(ConeConstraintSettings::new(middle, X, 0.5)),
+            )
+            .map(Into::into),
+    );
+    create(
+        world
+            .create_constraint(
+                body1,
+                body2,
+                solved!(SwingTwistConstraintSettings::new(middle, X, Y).half_cone_angles(0.5, 0.5)),
+            )
+            .map(Into::into),
+    );
+    create(
+        world
+            .create_constraint(
+                body1,
+                body2,
+                solved!(SixDofConstraintSettings::new(middle, X, Y)),
+            )
+            .map(Into::into),
+    );
+    create(
+        world
+            .create_constraint(body1, body2, solved!(PathConstraintSettings::new(path)))
+            .map(Into::into),
+    );
+    create(
+        world
+            .create_constraint(
+                body1,
+                body2,
+                solved!(GearConstraintSettings::new(Z, Z, 2.0)),
+            )
+            .map(Into::into),
+    );
+    create(
+        world
+            .create_constraint(
+                body1,
+                body2,
+                solved!(RackAndPinionConstraintSettings::new(Z, X, 2.0)),
+            )
+            .map(Into::into),
+    );
+    create(
+        world
+            .create_constraint(
+                body1,
+                body2,
+                solved!(PulleyConstraintSettings::new(p1, above(p1), p2, above(p2))),
             )
             .map(Into::into),
     );

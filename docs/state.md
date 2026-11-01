@@ -174,6 +174,9 @@ documentation asks for body friction. These setters change such configuration:
 - cone: `set_half_cone_angle`;
 - swing-twist: `set_swing_motor_settings`, `set_twist_motor_settings`, `set_max_friction_torque`;
 - six-DOF: `set_motor_settings`;
+- every constraint kind: `set_constraint_priority`, `set_velocity_steps_override` and
+  `set_position_steps_override`, which wake the constraint's bodies, so set their old values back
+  before the restore (`tests/constraint_solver.rs` replays that order after a detour);
 - vehicle: `set_gravity`, `set_max_pitch_roll_angle`, `set_collision_tester`, `set_engine`,
   `set_transmission`, `set_differentials`, `set_tracks`, `set_tire_max_impulse_callback` and
   `clear_tire_max_impulse_callback` (a restore keeps the callback and does not rewind what it

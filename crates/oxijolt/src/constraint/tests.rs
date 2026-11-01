@@ -325,3 +325,47 @@ fn motors_and_springs_are_validated() {
         .validate()
         .is_err());
 }
+
+#[test]
+fn ragdoll_joint_kinds_bound_their_step_overrides() {
+    // Ragdoll joints are checked by these `validate`s, not by `create_constraint`.
+    let max = limits::MAX_SOLVER_STEPS_OVERRIDE;
+    for (velocity, position, accepted) in
+        [(max, max, true), (max + 1, 0, false), (0, max + 1, false)]
+    {
+        let swing_twist = SwingTwistConstraintSettings::default()
+            .velocity_steps_override(velocity)
+            .position_steps_override(position);
+        let hinge = HingeConstraintSettings::default()
+            .velocity_steps_override(velocity)
+            .position_steps_override(position);
+        let six_dof = SixDofConstraintSettings::default()
+            .velocity_steps_override(velocity)
+            .position_steps_override(position);
+        assert_eq!(swing_twist.validate().is_ok(), accepted);
+        assert_eq!(hinge.validate().is_ok(), accepted);
+        assert_eq!(six_dof.validate().is_ok(), accepted);
+    }
+}
+
+#[test]
+fn solver_overrides_reach_jolts_settings() {
+    let base = SixDofConstraintSettings::default()
+        .constraint_priority(u32::MAX)
+        .velocity_steps_override(40)
+        .position_steps_override(7)
+        .to_jph()
+        .base;
+    assert_eq!(base.constraintPriority, u32::MAX);
+    assert_eq!(base.numVelocityStepsOverride, 40);
+    assert_eq!(base.numPositionStepsOverride, 7);
+    assert_base_eq(
+        JPH_ConstraintSettings {
+            constraintPriority: 0,
+            numVelocityStepsOverride: 0,
+            numPositionStepsOverride: 0,
+            ..base
+        },
+        constraint_base(),
+    );
+}
