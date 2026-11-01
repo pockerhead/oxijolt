@@ -200,7 +200,9 @@ source build. `wasm32-unknown-emscripten` and `wasm32-wasip1` have committed bin
 refused, also under `DOCS_RS`. The safe crate `oxijolt` builds for wasm32-unknown-unknown as
 well, single-threaded; its crate documentation lists what changes on that target.
 `bash scripts/check_wasm_raw.sh` builds a raw wasm32-unknown-unknown module in both precisions
-and runs it in Node (a world kept across export calls, no WASI imports); it needs `WASI_SDK_PATH`, Ninja and Node. CI builds and tests
+and runs it in Node (a world kept across export calls, no WASI imports); it needs `WASI_SDK_PATH`, Ninja and Node.
+`bash scripts/check_wasm_safe.sh` does the same for a module of the safe crate (default world,
+refused worker threads, save and restore, a panicking listener that traps). CI builds and tests
 `x86_64-pc-windows-msvc`, `x86_64-unknown-linux-gnu` and `aarch64-apple-darwin`; the other
 targets have bindings that the generator produced byte-identical to their family's, but CI does
 not build or test them. Android cross

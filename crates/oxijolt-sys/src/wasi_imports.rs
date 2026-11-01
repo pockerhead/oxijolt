@@ -1,10 +1,11 @@
 //! Definitions of the WASI functions wasi-libc imports, so the module needs no WASI host.
 //!
-//! wasi-libc, linked for Jolt's C++ runtime, imports these seven `wasi_snapshot_preview1`
+//! wasi-libc, linked for Jolt's C++ runtime, imports these twelve `wasi_snapshot_preview1`
 //! functions under the symbols `__imported_wasi_snapshot_preview1_<name>`. Defining the symbols
 //! here replaces the imports. The behaviour of each function is listed in the crate docs. The
 //! signatures lower to the import's wasm types: `i32` everywhere except the `i64` offset and
-//! precision.
+//! precision. libc++'s stream and locale objects pull in the environment, preopen and exit
+//! functions even when nothing calls them.
 
 use core::arch::wasm32::unreachable;
 use core::mem::{align_of, offset_of, size_of};
@@ -123,5 +124,53 @@ extern "C" fn __imported_wasi_snapshot_preview1_poll_oneoff(
     _count: usize,
     _done: *mut usize,
 ) -> i32 {
+    unreachable()
+}
+
+/// Writes 0 variables and 0 bytes and succeeds: the environment is empty.
+///
+/// # Safety
+/// `count` and `buf_size` are valid for an aligned write, as wasi-libc passes them.
+#[no_mangle]
+unsafe extern "C" fn __imported_wasi_snapshot_preview1_environ_sizes_get(
+    count: *mut usize,
+    buf_size: *mut usize,
+) -> i32 {
+    // SAFETY: the caller passes both pointers valid for an aligned write.
+    unsafe {
+        count.write(0);
+        buf_size.write(0);
+    }
+    0
+}
+
+/// Succeeds without writing: the environment is empty, so there is nothing to copy.
+#[no_mangle]
+extern "C" fn __imported_wasi_snapshot_preview1_environ_get(
+    _environ: *mut *mut u8,
+    _environ_buf: *mut u8,
+) -> i32 {
+    0
+}
+
+/// Returns `ERRNO_BADF` without writing `prestat`: no directory is preopened.
+#[no_mangle]
+extern "C" fn __imported_wasi_snapshot_preview1_fd_prestat_get(_fd: i32, _prestat: *mut u8) -> i32 {
+    ERRNO_BADF
+}
+
+/// Returns `ERRNO_BADF` without writing `path`: no directory is preopened.
+#[no_mangle]
+extern "C" fn __imported_wasi_snapshot_preview1_fd_prestat_dir_name(
+    _fd: i32,
+    _path: *mut u8,
+    _path_len: usize,
+) -> i32 {
+    ERRNO_BADF
+}
+
+/// Traps: the module has no process to exit, and libc reaches it only to abort.
+#[no_mangle]
+extern "C" fn __imported_wasi_snapshot_preview1_proc_exit(_code: i32) -> ! {
     unreachable()
 }

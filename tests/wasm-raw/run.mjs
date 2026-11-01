@@ -16,6 +16,13 @@ const STAT = 64;
 const STAT_BYTES = 24;
 const SEEK = 96;
 const SEEK_BYTES = 8;
+const ENVIRON_SIZES = 112;
+const PRESTAT = 160;
+const PRESTAT_BYTES = 8;
+const DIR_NAME = 176;
+const DIR_NAME_BYTES = 16;
+const ENVIRON = 192;
+const ENVIRON_BYTES = 16;
 const CANARY = 0xaaaaaaaa;
 const PRESET = 0x55555555;
 const FILL = 0x77;
@@ -117,6 +124,31 @@ function checkWasi(module, exports) {
     expect("sched_yield", exports[`${WASI}sched_yield`](), 0);
     checkTraps(module, "clock_time_get", (e, p) => e[`${WASI}clock_time_get`](0, 0n, p));
     checkTraps(module, "poll_oneoff", (e, p) => e[`${WASI}poll_oneoff`](p, p, 1, p));
+    checkEnvironSizes(exports);
+    checkUntouched(exports, "environ_get", ENVIRON, ENVIRON_BYTES,
+        (p) => exports[`${WASI}environ_get`](p, p + 8), 0);
+    checkUntouched(exports, "fd_prestat_get(3)", PRESTAT, PRESTAT_BYTES,
+        (p) => exports[`${WASI}fd_prestat_get`](3, p), ERRNO_BADF);
+    checkUntouched(exports, "fd_prestat_dir_name(3)", DIR_NAME, DIR_NAME_BYTES,
+        (p) => exports[`${WASI}fd_prestat_dir_name`](3, p, DIR_NAME_BYTES), ERRNO_BADF);
+    checkTraps(module, "proc_exit", (e) => e[`${WASI}proc_exit`](0));
+}
+
+// Presets both counts, calls environ_sizes_get and checks it wrote an empty environment.
+function checkEnvironSizes(exports) {
+    const base = exports.scratch_buffer();
+    let memory = view(exports);
+    memory.setUint32(base + ENVIRON_SIZES, PRESET, true);
+    memory.setUint32(base + ENVIRON_SIZES + 4, PRESET, true);
+    const call = exports[`${WASI}environ_sizes_get`](base + ENVIRON_SIZES, base + ENVIRON_SIZES + 4);
+    expect("environ_sizes_get", call, 0);
+    memory = view(exports);
+    for (const [offset, name] of [[0, "count"], [4, "buffer size"]]) {
+        const value = memory.getUint32(base + ENVIRON_SIZES + offset, true);
+        if (value !== 0) {
+            fail("environ_sizes_get", `wrote ${value} as the ${name}, expected 0`);
+        }
+    }
 }
 
 function checkGrowth(exports, name) {

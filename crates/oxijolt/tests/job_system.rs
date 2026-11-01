@@ -462,11 +462,24 @@ fn a_caller_job_system_world_reads_back_the_concurrency_read_at_creation() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn default_settings_read_back_a_thread_pool_with_one_worker() {
     assert_eq!(
         WorldSettings::default().job_system_kind(),
         JobSystemKind::ThreadPool { worker_threads: 1 }
     );
+}
+
+#[test]
+#[cfg(target_arch = "wasm32")]
+fn default_settings_read_back_single_threaded_on_wasm32() {
+    assert_eq!(
+        WorldSettings::default().job_system_kind(),
+        JobSystemKind::SingleThreaded
+    );
+    let world = PhysicsWorld::new(WorldSettings::default()).unwrap();
+    assert_eq!(world.job_system_kind(), JobSystemKind::SingleThreaded);
+    assert_eq!(world.max_concurrency(), 1);
 }
 
 #[test]
