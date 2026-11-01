@@ -1,6 +1,9 @@
 //! Character contact listeners (`CharacterContactListener`): moving platforms, rejected
 //! contacts, the push settings, and the added, persisted and removed contacts of an update.
 
+// The thread and process tests are compiled out on wasm32; their helpers and imports stay.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 mod common;
 
 use std::sync::{Arc, Mutex};
@@ -960,6 +963,7 @@ fn ride(conveyor: bool) -> (RVec3, Vec3) {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn independent_worlds_with_different_character_listeners_update_concurrently() {
     let sequential = [ride(true), ride(false)];
     let concurrent = thread::scope(|scope| {

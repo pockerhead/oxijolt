@@ -30,6 +30,7 @@ fn any_full_buffer_makes_a_report_incomplete() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn single_threaded_is_chosen_last_wins_and_has_concurrency_one() {
     let settings = WorldSettings::default().worker_threads(2).single_threaded();
     assert!(
@@ -127,6 +128,7 @@ fn contact_constraint_capacity_is_bounded() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn worker_thread_bounds_are_validated() {
     for valid in [1, WorldSettings::MAX_WORKER_THREADS] {
         assert_eq!(
@@ -140,6 +142,29 @@ fn worker_thread_bounds_are_validated() {
             Err(WorldError::InvalidValue(_))
         ));
     }
+}
+
+#[test]
+fn a_target_without_threads_refuses_every_thread_pool() {
+    for workers in [0, 1, WorldSettings::MAX_WORKER_THREADS] {
+        assert!(matches!(
+            JobSystemChoice::ThreadPool(workers).validate(false),
+            Err(WorldError::InvalidValue(_))
+        ));
+    }
+    assert_eq!(JobSystemChoice::SingleThreaded.validate(false), Ok(()));
+}
+
+#[test]
+#[cfg(target_arch = "wasm32")]
+fn wasm32_defaults_to_single_threaded_and_refuses_worker_threads() {
+    let settings = WorldSettings::default();
+    assert_eq!(settings.job_system_kind(), JobSystemKind::SingleThreaded);
+    assert_eq!(settings.validate(), Ok(()));
+    assert!(matches!(
+        settings.worker_threads(1).validate(),
+        Err(WorldError::InvalidValue(_))
+    ));
 }
 
 /// Jolt's `PhysicsSettings` defaults (`PhysicsSettings.h:36-126`) with the values oxijolt sets.

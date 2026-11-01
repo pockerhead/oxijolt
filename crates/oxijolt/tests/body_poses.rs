@@ -138,6 +138,7 @@ fn body_poses_child() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn poses_are_identical_across_thread_counts() {
     let one_thread = digest_in_child("body_poses_child", "wake", 1, "forward");
     let four_threads = digest_in_child("body_poses_child", "wake", 4, "forward");
@@ -146,6 +147,7 @@ fn poses_are_identical_across_thread_counts() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn poses_are_identical_with_caller_job_systems() {
     assert_caller_job_systems_agree("body_poses_child", "wake", "forward");
 }

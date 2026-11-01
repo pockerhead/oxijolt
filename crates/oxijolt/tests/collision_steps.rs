@@ -2,6 +2,9 @@
 //! length, that the count reaches Jolt and covers the whole `delta_time`, how forces clear, and
 //! the single event batch of a call, and a vehicle's gravity override in every collision step.
 
+// The thread and process tests are compiled out on wasm32; their helpers and imports stay.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 mod common;
 
 use common::math::wide;
@@ -303,6 +306,7 @@ fn falling_vehicle(
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn a_vehicle_gravity_override_acts_like_world_gravity_in_every_collision_step() {
     // 2 m/s² sideways and 1 m/s² up on 1500 kg, so the override must keep the caller's force.
     let force = Vec3::new(3000.0, 1500.0, 0.0);

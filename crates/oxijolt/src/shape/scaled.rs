@@ -217,7 +217,12 @@ unsafe fn push_parts(
 unsafe fn placed_triangles(shape: *const JPH_Shape, placement: &Placement) -> Vec<[V3; 3]> {
     // SAFETY: `shape` is a live leaf (contract); a null buffer with capacity 0 only counts.
     let count = unsafe { JPH_Shape_GetTriangles(shape, null_mut(), 0) };
-    let mut vertices = vec![Vec3::ZERO.to_jph(); 3 * count as usize];
+    // Checked: on 32-bit targets `3 * count` can exceed `usize`, and a wrapped length would let
+    // joltc write past the buffer.
+    let vertex_count = (count as usize)
+        .checked_mul(3)
+        .expect("triangle count overflows usize");
+    let mut vertices = vec![Vec3::ZERO.to_jph(); vertex_count];
     // SAFETY: as above; `vertices` holds 3 * count vertices.
     unsafe { JPH_Shape_GetTriangles(shape, vertices.as_mut_ptr(), count) };
     let placed: Vec<V3> = vertices

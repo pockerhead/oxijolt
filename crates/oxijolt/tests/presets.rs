@@ -94,6 +94,7 @@ fn humanoid_settings_outlive_their_clones() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn humanoid_settings_cross_threads() {
     fn send_and_sync<T: Send + Sync>() {}
     send_and_sync::<CharacterSettings<'static>>();

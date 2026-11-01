@@ -47,7 +47,8 @@ use crate::{BodyId, CharacterError, PhysicsWorld, SubShapeId, Vec3};
 /// delivered. [`contact_removed`](Self::contact_removed) runs after Jolt returned and is not
 /// caught: its panic leaves the update at once, the removals sorted before it have been
 /// delivered and the rest of that update's removals are lost. An update that panicked is outside
-/// the replay guarantee.
+/// the replay guarantee. On wasm32 a panic traps instead
+/// ([wasm32](crate#wasm32-unknown-unknown)).
 pub trait CharacterContactListener: Send + Sync + 'static {
     /// The velocity of `body` as `character` sees it: what the character stands on moves it
     /// along (moving platforms, conveyors). Jolt passes the body's own velocity, zero for a static

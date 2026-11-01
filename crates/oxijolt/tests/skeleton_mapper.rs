@@ -2,6 +2,9 @@
 //! directions against Jolt's stages (direct joints, chains, unmapped joints, translation locks),
 //! validation of skeletons, poses and chains, frames, and mapped poses driving a ragdoll.
 
+// The thread and process tests are compiled out on wasm32; their helpers and imports stay.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 mod common;
 
 use std::thread;
@@ -919,6 +922,7 @@ fn mapped_poses_drive_a_ragdoll() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn mapping_is_a_pure_function() {
     let rig = Rig::humanoid();
     let mapper = mapper_for(&rig, TranslationLocks::All);

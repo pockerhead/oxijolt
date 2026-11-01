@@ -520,6 +520,7 @@ fn compound_child_beyond_radius_is_skipped_and_nested_compounds_keep_top_group()
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn worlds_sharing_a_height_field_draw_it_concurrently() {
     // The shape's debug geometry is built lazily by the first draw, so both threads race for it.
     let terrain = flat_height_field();

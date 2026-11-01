@@ -13,6 +13,9 @@
 //! Each run happens in its own child process (this test binary, running the ignored
 //! `event_determinism_child` test); see `common::determinism`.
 
+// The thread and process tests are compiled out on wasm32; their helpers and imports stay.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 mod common;
 
 use std::sync::{Arc, Mutex};
@@ -391,6 +394,7 @@ fn event_determinism_child() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn events_are_identical_with_1_and_4_workers() {
     let one = digest_in_child(CHILD, "events", 1, "events");
     let four = digest_in_child(CHILD, "events", 4, "events");
@@ -399,6 +403,7 @@ fn events_are_identical_with_1_and_4_workers() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn sub_stepped_events_are_identical_with_1_and_4_workers() {
     let one = digest_in_child(CHILD, "sub_stepped_events", 1, "events");
     let four = digest_in_child(CHILD, "sub_stepped_events", 4, "events");
@@ -407,11 +412,13 @@ fn sub_stepped_events_are_identical_with_1_and_4_workers() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn events_are_identical_with_caller_job_systems() {
     assert_caller_job_systems_agree(CHILD, "events", "events");
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn events_are_identical_with_the_single_threaded_job_system() {
     for scenario in ["events", "sub_stepped_events"] {
         assert_single_threaded_agrees(CHILD, scenario, "events");
@@ -419,6 +426,7 @@ fn events_are_identical_with_the_single_threaded_job_system() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn observing_every_event_leaves_the_simulation_unchanged() {
     let silent = digest_in_child(CHILD, "events", 2, "silent");
     let observed = digest_in_child(CHILD, "events", 2, "observed");

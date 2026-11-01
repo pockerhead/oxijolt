@@ -187,7 +187,7 @@ check it at its boundary.
 |---|---|---|
 | `WorldSettings::gravity`, `PhysicsWorld::set_gravity` | `MAX_ACCELERATION` | `world_gravity_is_bounded_by_max_acceleration` |
 | `WorldSettings::max_contact_constraints` | `1..=WorldSettings::MAX_CONTACT_CONSTRAINTS` | `contact_constraint_capacity_is_bounded` |
-| `WorldSettings::max_bodies`, `worker_threads` | Jolt's and oxijolt's counts | `invalid_settings_are_rejected`, `worker_thread_bounds_are_validated` |
+| `WorldSettings::max_bodies`, `worker_threads` | Jolt's and oxijolt's counts; no thread pool on wasm32 | `invalid_settings_are_rejected`, `worker_thread_bounds_are_validated`, `a_target_without_threads_refuses_every_thread_pool` (wasm32: `wasm32_defaults_to_single_threaded_and_refuses_worker_threads`) |
 | `WorldSettings::job_system` (`JobSystem::max_concurrency`) | `1..=WorldSettings::MAX_CONCURRENCY`, read once in `PhysicsWorld::new` | `max_concurrency_is_bounded` |
 | `WorldSettings::velocity_steps`, `position_steps` | `MIN_VELOCITY_STEPS..=MAX_SOLVER_STEPS`, `0..=MAX_SOLVER_STEPS` ([limits](limits.md#solver-step-counts)) | `step_counts_outside_jolts_range_are_refused`, `step_counts_read_back_from_jolt` |
 | `velocity_steps_override`, `position_steps_override` of every constraint settings type, `ConstraintMut::set_velocity_steps_override`, `set_position_steps_override` | `0..=MAX_SOLVER_STEPS_OVERRIDE` ([limits](limits.md#solver-step-counts)) | `step_overrides_above_the_bound_are_refused`, `solver_settings_reach_every_kind_at_creation`, `live_setters_read_back_on_every_kind`, `src/constraint/tests.rs`: `ragdoll_joint_kinds_bound_their_step_overrides` |

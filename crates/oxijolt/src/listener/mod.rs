@@ -55,7 +55,8 @@ pub use validate::{ContactCandidate, ValidateResult};
 /// A panic in a method is resumed by `step` after the update. Jolt then keeps its own settings
 /// for that contact (or accepts the hit, for a validation), and calls that start after the panic skip the listener until the panic is
 /// resumed; calls already running on other threads finish. The step that panicked has advanced
-/// the world: it is outside the replay guarantee.
+/// the world: it is outside the replay guarantee. On wasm32 a panic traps instead
+/// ([wasm32](crate#wasm32-unknown-unknown)).
 ///
 /// Settings a method leaves invalid for its contact (a value of another contact assigned over
 /// them, see [`ContactSettings`]) are not applied: Jolt keeps its own settings for that

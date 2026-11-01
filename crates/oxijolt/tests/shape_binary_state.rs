@@ -2,6 +2,9 @@
 //! and materials like the original, saves to the same bytes again, in another process too, and a
 //! world on a restored mesh steps exactly like one on the original.
 
+// The thread and process tests are compiled out on wasm32; their helpers and imports stay.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 mod common;
 
 use std::process::Command;
@@ -442,6 +445,7 @@ fn write_bytes_in_child() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn saves_in_two_processes_are_equal() {
     let path = std::env::temp_dir().join(format!("oxijolt-shape-state-{}.bin", std::process::id()));
     let status = Command::new(std::env::current_exe().unwrap())

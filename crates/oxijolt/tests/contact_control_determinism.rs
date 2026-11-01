@@ -19,6 +19,9 @@
 //! Validate and adjust calls are compared only through their outcomes: Jolt may make them any
 //! number of times, in no fixed order. See `common::determinism` for the child processes.
 
+// The thread and process tests are compiled out on wasm32; their helpers and imports stay.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 mod common;
 
 use std::sync::{Arc, Mutex};
@@ -618,6 +621,7 @@ fn contact_control_child() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn contact_control_is_identical_with_1_and_4_workers() {
     for scene in SCENES {
         let one = digest_in_child(CHILD, scene, 1, "plain");
@@ -631,6 +635,7 @@ fn contact_control_is_identical_with_1_and_4_workers() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn contact_control_is_identical_with_caller_job_systems() {
     for scene in SCENES {
         assert_caller_job_systems_agree(CHILD, scene, "plain");
@@ -647,6 +652,7 @@ fn contact_control_replays_after_a_detour_in_one_process() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn contact_control_replays_after_a_detour_across_processes() {
     for scene in SCENES {
         let plain = digest_in_child(CHILD, scene, 1, "plain");

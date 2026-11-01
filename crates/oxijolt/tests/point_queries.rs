@@ -406,6 +406,7 @@ fn world_queries_apply_every_filter_part_and_sort_by_body() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn world_queries_read_from_many_threads() {
     let mut world = world(Vec3::ZERO, 1);
     let ids: Vec<BodyId> = (0..8)

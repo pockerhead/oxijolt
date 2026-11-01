@@ -1,6 +1,9 @@
 //! Panic containment of the event callbacks: a test-only switch makes a chosen callback panic
 //! on Jolt's worker threads or on the calling thread.
 
+// The thread and process tests are compiled out on wasm32; their helpers and imports stay.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::Ordering;
 use std::sync::Mutex;
@@ -156,6 +159,7 @@ fn assert_world_still_works(world: &mut PhysicsWorld, scene: &Scene) {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn a_panic_in_any_callback_during_a_step_is_resumed_by_step() {
     for callback in [
         Callback::ContactValidate,
@@ -180,6 +184,7 @@ fn a_panic_in_any_callback_during_a_step_is_resumed_by_step() {
 /// A validation that panics on every call accepts the hit, so the cube still lands on the floor,
 /// and every step that validated resumes the panic.
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn a_validate_panic_accepts_and_is_resumed_by_step() {
     let (mut world, scene) = scene();
     world.set_contact_listener(Some(Arc::new(RejectAll)));
@@ -207,6 +212,7 @@ impl ContactListener for RejectAll {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn without_a_user_listener_validation_accepts_every_pair() {
     let (mut world, scene) = scene();
     assert!(world.listeners.context.as_ref().unwrap().listener.is_none());
@@ -230,6 +236,7 @@ fn without_a_user_listener_validation_accepts_every_pair() {
 
 /// A ball dropped on a sleeping cube wakes it inside a step, on a worker thread.
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn a_panic_in_body_activation_during_a_step_is_resumed_by_step() {
     let mut world = PhysicsWorld::new(WorldSettings::default().worker_threads(4)).unwrap();
     world.set_event_settings(EventSettings::default().body_activation(true));
@@ -275,6 +282,7 @@ fn a_panic_in_body_activation_during_a_step_is_resumed_by_step() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn a_panic_outside_a_step_is_resumed_by_take_events() {
     let (mut world, scene) = scene();
     set_panic(&world, Callback::BodyActivated as u8);
@@ -297,6 +305,7 @@ fn a_panic_outside_a_step_is_resumed_by_take_events() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn an_unresumed_panic_between_steps_is_resumed_by_the_next_step() {
     let (mut world, _) = scene();
     set_panic(&world, Callback::BodyActivated as u8);
@@ -314,6 +323,7 @@ fn an_unresumed_panic_between_steps_is_resumed_by_the_next_step() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn always_panicking_callbacks_are_resumed_every_step() {
     let (mut world, scene) = scene();
     set_panic(&world, ALWAYS);
@@ -340,6 +350,7 @@ fn always_panicking_callbacks_are_resumed_every_step() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn replacing_the_settings_keeps_events_and_panics() {
     let (mut world, _) = scene();
     set_panic(&world, Callback::BodyActivated as u8);
@@ -631,6 +642,7 @@ struct Unchanged;
 impl ContactListener for Unchanged {}
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn a_rejection_is_recorded_and_the_listener_is_still_called() {
     let mut world = PhysicsWorld::new(WorldSettings::default().worker_threads(1)).unwrap();
     let shape = Shape::new_box(Vec3::new(1.0, 1.0, 1.0)).unwrap();
@@ -726,6 +738,7 @@ fn recorded_settings(
 /// the kept 20 rad/s into 1 200 m/s. Jolt keeps its own settings, so an asserts build does not
 /// reach Jolt's sensor assertion, and the step reports the refusal.
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn settings_moved_to_a_contact_they_do_not_fit_are_rejected() {
     let cases = [
         (
@@ -809,6 +822,7 @@ fn settings_moved_to_a_contact_they_do_not_fit_are_rejected() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn a_panic_while_copying_an_estimate_frees_joltcs_impulses() {
     use super::estimate::tests::{CREATED, FREED, PANIC_WHILE_COPYING};
     // The only test in this binary that turns estimates on, so the counters are its own.

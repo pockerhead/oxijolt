@@ -4,6 +4,9 @@
 //! back onto the rig. Bodies and both mapped poses match bit for bit with 1 and 4 worker threads,
 //! in one process and in two.
 
+// The thread and process tests are compiled out on wasm32; their helpers and imports stay.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 mod common;
 
 use common::animation::Rig;
@@ -184,6 +187,7 @@ fn skeleton_mapper_match_with_1_and_4_workers() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn skeleton_mapper_match_across_processes() {
     let one = digest_in_child("skeleton_mapper_determinism_child", "mapper", 1, "");
     let four = digest_in_child("skeleton_mapper_determinism_child", "mapper", 4, "");

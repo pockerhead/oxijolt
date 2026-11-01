@@ -196,7 +196,8 @@ impl<K: WheeledControllerKind> VehicleMut<'_, K> {
     ///
     /// A panic in `callback` makes the vehicle use Jolt's default coefficients for the rest of
     /// that step, and [`step`](crate::PhysicsWorld::step) resumes the panic afterwards. A panic
-    /// that aborts the process is not caught.
+    /// that aborts the process is not caught; on wasm32 every panic does
+    /// ([wasm32](crate#wasm32-unknown-unknown)).
     ///
     /// The callback and what it captures are not part of [`WorldState`](crate::WorldState):
     /// [`restore_state`](crate::PhysicsWorld::restore_state) keeps the callback and does not

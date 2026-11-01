@@ -569,6 +569,7 @@ fn queries_find_a_cloth() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn one_shared_settings_serves_worlds_on_two_threads() {
     let cloth = Cloth::new(6, 0.2).pin(&[0]);
     let shared = cloth.settings();

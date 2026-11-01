@@ -59,6 +59,24 @@ impl JobSystemChoice {
         }
     }
 
+    /// Checks the worker count of Jolt's thread pool, which a target without threads refuses.
+    pub(super) fn validate(&self, has_threads: bool) -> Result<(), WorldError> {
+        let Self::ThreadPool(workers) = self else {
+            return Ok(());
+        };
+        if !has_threads {
+            return Err(WorldError::InvalidValue(
+                "worker_threads needs threads; use single_threaded on wasm32",
+            ));
+        }
+        if !(1..=WorldSettings::MAX_WORKER_THREADS).contains(workers) {
+            return Err(WorldError::InvalidValue(
+                "worker_threads must be between 1 and 64",
+            ));
+        }
+        Ok(())
+    }
+
     /// The most jobs Jolt will run at the same time, counting the stepping thread. Reads the
     /// caller's [`JobSystem::max_concurrency`] once and checks it.
     pub(super) fn max_concurrency(&self) -> Result<u32, WorldError> {
@@ -79,7 +97,8 @@ impl JobSystemChoice {
     }
 }
 
-/// Settings for [`PhysicsWorld::new`]. The defaults are Jolt's and joltc's.
+/// Settings for [`PhysicsWorld::new`]. The defaults are Jolt's and joltc's, except that on
+/// wasm32 a world runs its jobs with [`single_threaded`](Self::single_threaded).
 ///
 /// [`PhysicsWorld::new`]: crate::PhysicsWorld::new
 #[derive(Clone, Debug)]
@@ -97,13 +116,24 @@ pub struct WorldSettings {
     pub(super) speculative_contact_distance: f32,
 }
 
+/// Jolt's thread pool with one worker, or on wasm32, which has no threads, Jolt's single-threaded
+/// job system.
+const DEFAULT_JOBS: JobSystemChoice = if HAS_THREADS {
+    JobSystemChoice::ThreadPool(1)
+} else {
+    JobSystemChoice::SingleThreaded
+};
+
+/// Whether the target can start threads for Jolt's thread pool.
+const HAS_THREADS: bool = cfg!(not(target_arch = "wasm32"));
+
 impl Default for WorldSettings {
     fn default() -> Self {
         Self {
             max_bodies: 10240,
             max_body_pairs: 65536,
             max_contact_constraints: 10240,
-            jobs: JobSystemChoice::ThreadPool(1),
+            jobs: DEFAULT_JOBS,
             temp_allocator_size: 10 * 1024 * 1024,
             gravity: Vec3::new(0.0, -9.81, 0.0),
             layers: CollisionLayers::default(),
@@ -196,10 +226,15 @@ impl WorldSettings {
     /// results with 1 and 4 workers on one machine ([docs/determinism.md]). 0 is refused;
     /// [`single_threaded`](Self::single_threaded) runs without worker threads.
     ///
+    /// On wasm32 there are no threads: [`PhysicsWorld::new`] refuses any value with
+    /// [`WorldError::InvalidValue`], and the default there is
+    /// [`single_threaded`](Self::single_threaded).
+    ///
     /// Of this, [`single_threaded`](Self::single_threaded) and [`job_system`](Self::job_system),
     /// the call made last decides.
     ///
     /// [docs/determinism.md]: https://github.com/pockerhead/oxijolt/blob/main/docs/determinism.md
+    /// [`PhysicsWorld::new`]: crate::PhysicsWorld::new
     /// [`PhysicsWorld::step`]: crate::PhysicsWorld::step
     #[must_use]
     pub fn worker_threads(mut self, value: u32) -> Self {
@@ -241,7 +276,8 @@ impl WorldSettings {
     /// The kind of job system these settings choose: the last of
     /// [`worker_threads`](Self::worker_threads), [`single_threaded`](Self::single_threaded) and
     /// [`job_system`](Self::job_system) called, or Jolt's thread pool with one worker
-    /// (`ThreadPool { worker_threads: 1 }`) when none was. Settings do not record whether a
+    /// (`ThreadPool { worker_threads: 1 }`) when none was; on wasm32 the default is
+    /// `SingleThreaded`. Settings do not record whether a
     /// choice was made; to tell whether it differs from the default, compare with
     /// `WorldSettings::default().job_system_kind()`. A caller job system reads as
     /// [`JobSystemKind::Caller`] without a call to its [`JobSystem::max_concurrency`].
@@ -345,11 +381,7 @@ impl WorldSettings {
         if !(1..=Self::MAX_CONTACT_CONSTRAINTS).contains(&self.max_contact_constraints) {
             return invalid("max_contact_constraints must be between 1 and 2^20");
         }
-        if let JobSystemChoice::ThreadPool(workers) = self.jobs {
-            if !(1..=Self::MAX_WORKER_THREADS).contains(&workers) {
-                return invalid("worker_threads must be between 1 and 64");
-            }
-        }
+        self.jobs.validate(HAS_THREADS)?;
         if self.temp_allocator_size == 0 {
             return invalid("temp_allocator_size must be at least 1");
         }

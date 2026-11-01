@@ -3,6 +3,9 @@
 //! worker threads, in one process and in several, with caller job systems and with Jolt's
 //! single-threaded job system.
 
+// The thread and process tests are compiled out on wasm32; their helpers and imports stay.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 mod common;
 
 use common::determinism::{
@@ -218,6 +221,7 @@ fn skinning_matches_with_1_and_4_workers() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn skinning_matches_across_processes() {
     let one = digest_in_child(CHILD_TEST, SCENARIO, 1, "forward");
     let four = digest_in_child(CHILD_TEST, SCENARIO, 4, "forward");
@@ -227,11 +231,13 @@ fn skinning_matches_across_processes() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn skinning_matches_with_caller_job_systems() {
     assert_caller_job_systems_agree(CHILD_TEST, SCENARIO, "forward");
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn skinning_matches_with_the_single_threaded_job_system() {
     assert_single_threaded_agrees(CHILD_TEST, SCENARIO, "forward");
 }

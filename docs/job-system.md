@@ -9,6 +9,10 @@ setting called last decides:
 - The caller's pool, such as Rayon or a game's own task system, through the `JobSystem` trait
   (`WorldSettings::job_system`); Jolt then starts no threads for that world either.
 
+wasm32 has no threads: there the default is the single-threaded job system, and
+`PhysicsWorld::new` refuses `WorldSettings::worker_threads` with `WorldError::InvalidValue`. A
+caller job system is accepted; the thread that calls `step` runs the jobs it leaves.
+
 `PhysicsWorld::job_system_kind` tells which of the three a world got (`JobSystemKind`, with the
 worker count of Jolt's pool), and `PhysicsWorld::max_concurrency` the concurrency its job system
 was created with: workers + 1 for Jolt's pool, 1 single-threaded, the caller's `max_concurrency`

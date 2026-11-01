@@ -8,6 +8,9 @@
 //! (`PhysicsSystem.cpp:243`: listeners / 8 per batch, capped by the job system's concurrency of
 //! workers + 1).
 
+// The thread and process tests are compiled out on wasm32; their helpers and imports stay.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 mod common;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -288,6 +291,7 @@ fn tuning_matches_with_1_and_4_workers() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn tuning_matches_across_processes() {
     let one = digest_in_child("vehicle_tuning_child", "tuning", 1, "");
     let four = digest_in_child("vehicle_tuning_child", "tuning", 4, "");

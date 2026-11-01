@@ -2,6 +2,9 @@
 //! `BodyMut::set_*` at fixed ticks runs bit for bit the same with 1 and 4 worker threads, in one
 //! process and in two. The scene checks that each change does what it promises.
 
+// The thread and process tests are compiled out on wasm32; their helpers and imports stay.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 mod common;
 
 use common::controls::contact_kinds;
@@ -507,6 +510,7 @@ fn properties_match_with_1_and_4_workers() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn properties_match_across_processes() {
     let one = digest_in_child("body_properties_child", "properties", 1, "");
     let four = digest_in_child("body_properties_child", "properties", 4, "");

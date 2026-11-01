@@ -6,6 +6,9 @@
 //! speeds and the motorcycle's target lean; it does not save the motorcycle's integrated lean
 //! angle, which the default integration coefficient of 0 leaves without effect.
 
+// The thread and process tests are compiled out on wasm32; their helpers and imports stay.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 mod common;
 
 use common::determinism::{assert_same, child_request, digest_in_child, finish_child, Digest};
@@ -340,6 +343,7 @@ fn vehicle_kinds_replay_after_a_detour() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn vehicle_kinds_replay_across_processes() {
     for point in SAVE_POINTS {
         let reference = digest_in_child("vehicle_kinds_state_child", "straight", 1, point.name());

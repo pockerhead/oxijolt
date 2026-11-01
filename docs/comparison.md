@@ -842,9 +842,9 @@ Checked on 2026-10-07 against oxijolt at this commit, rapier3d 0.36.0 (tag `v0.3
 - **A C++ toolchain and CMake** outside x86_64 Windows and Linux and Apple silicon, and for any
   build no release archive fits: oxijolt then compiles Jolt and joltc with MSVC, GCC or Clang
   through CMake ([building](building.md)). Rapier and Avian are pure Rust.
-- **No WASM for the safe crate.** Only the raw layer, `oxijolt-sys`, builds for
-  `wasm32-unknown-unknown`, and CI does not build it ([building](building.md#targets)). Rapier
-  runs a WASM test in CI and has JavaScript bindings.
+- **WASM is untested and single-threaded.** `oxijolt` builds for `wasm32-unknown-unknown`
+  without threads, and CI does not build it ([building](building.md#targets)). Rapier runs a WASM
+  test in CI and has JavaScript bindings.
 - **macOS** comes prebuilt and is tested in CI on Apple silicon only; Intel Macs build from
   source. This comparison runs on Windows and Linux only: its harness reads CPU time and memory
   from those two systems.

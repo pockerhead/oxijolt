@@ -1,6 +1,9 @@
 //! Solver step counts per world: bounds, read-back, their effect on a hinge chain, and equal
 //! results with 1 and 4 worker threads.
 
+// The thread and process tests are compiled out on wasm32; their helpers and imports stay.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 mod common;
 
 use common::determinism::{assert_same, child_request, digest_in_child, finish_child, Digest};
@@ -204,6 +207,7 @@ fn run_chain(worker_threads: u32) -> Digest {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 #[ignore = "child process of the solver step determinism gate"]
 fn solver_steps_child() {
     let Some((scenario, threads, _)) = child_request() else {
@@ -214,6 +218,7 @@ fn solver_steps_child() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn chain_at_four_steps_is_identical_with_1_and_4_workers() {
     let one = digest_in_child("solver_steps_child", "chain", 1, "");
     let four = digest_in_child("solver_steps_child", "chain", 4, "");

@@ -4,6 +4,9 @@
 //! --include-ignored`. They fail when a file of a model is missing or its SHA-256 differs from
 //! `assets/models/models.tsv`. Results are in `docs/real-meshes.md`.
 
+// The thread and process tests are compiled out on wasm32; their helpers and imports stay.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 #[path = "real_meshes_checks/mod.rs"]
 mod checks;
 mod common;
@@ -63,6 +66,7 @@ const SKULL_NORMAL_BYTE: usize = 1_174_560;
 /// A changed byte of the skull's glTF buffer is refused by its SHA-256 before import, also
 /// when the importer would not see it.
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 #[ignore = "needs scripts/fetch_models.py"]
 fn a_changed_skull_buffer_is_refused() {
     let models = PathBuf::from(std::env::var_os(MODELS_ENV).unwrap());

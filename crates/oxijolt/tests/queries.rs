@@ -843,6 +843,7 @@ fn compound_query_shape_is_placed_by_its_origin() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn filtered_queries_run_in_parallel() {
     let (mut world, [terrain, chunk, ..]) = five_layer_world();
     porch_and_canopy(&mut world, terrain, chunk);

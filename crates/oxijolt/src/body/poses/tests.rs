@@ -254,6 +254,7 @@ fn poses_into_clears_and_reuses_the_buffer() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn concurrent_shared_reads_and_saves_agree() {
     let mut world = PhysicsWorld::new(WorldSettings::default().gravity(Vec3::ZERO)).unwrap();
     let shape = Shape::new_box(Vec3::new(0.25, 0.25, 0.25)).unwrap();

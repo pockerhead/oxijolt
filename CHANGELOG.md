@@ -14,6 +14,10 @@ All notable changes to this fork. The format follows [Keep a Changelog](https://
   created and without calling a caller `JobSystem`. Default settings read Jolt's thread pool with
   one worker; compare with `WorldSettings::default().job_system_kind()` to see whether a choice
   differs from the default. Refs #10.
+- `oxijolt` builds for `wasm32-unknown-unknown` (wasi-sdk, Rust 1.91 or newer there). Worlds
+  default to Jolt's single-threaded job system on wasm32 and `PhysicsWorld::new` refuses
+  `WorldSettings::worker_threads` there; a panic in a callback traps the module, since the target
+  aborts on panic. Native defaults are unchanged. Not built or tested in CI. Refs #5.
 
 ## 1.5.0 — 2026-11-01
 

@@ -1,6 +1,9 @@
 //! Contact tuning per world: bounds, read-back, the penetration slop as a tolerance, speculative
 //! contacts, and equal results with 1 and 4 workers.
 
+// The thread and process tests are compiled out on wasm32; their helpers and imports stay.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 mod common;
 
 use common::determinism::{
@@ -304,6 +307,7 @@ fn contact_tuning_child() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn tuned_stacks_are_identical_with_1_and_4_workers() {
     let one = digest_in_child("contact_tuning_child", "stacks", 1, "tuned");
     let four = digest_in_child("contact_tuning_child", "stacks", 4, "tuned");

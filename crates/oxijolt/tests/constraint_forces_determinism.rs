@@ -4,6 +4,9 @@
 //! run gives the grid welds differing solver priorities and step overrides, changed again while
 //! the island is split.
 
+// The thread and process tests are compiled out on wasm32; their helpers and imports stay.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 mod common;
 
 use common::constraint_rigs::{
@@ -222,6 +225,7 @@ fn constraint_forces_child() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn constraint_impulses_are_identical_with_1_and_4_workers() {
     let one = digest_in_child("constraint_forces_child", "weld_graph", 1, "");
     let four = digest_in_child("constraint_forces_child", "weld_graph", 4, "");
@@ -231,6 +235,7 @@ fn constraint_impulses_are_identical_with_1_and_4_workers() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn solver_overrides_are_identical_with_1_and_4_workers() {
     let one = digest_in_child("constraint_forces_child", "weld_graph", 1, SOLVER_OVERRIDES);
     let four = digest_in_child("constraint_forces_child", "weld_graph", 4, SOLVER_OVERRIDES);

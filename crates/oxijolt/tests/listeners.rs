@@ -275,6 +275,7 @@ fn added_and_persisted_pairs_were_in_contact() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn worlds_stepped_on_two_threads_see_only_their_own_events() {
     let run = |extra_bodies: usize| {
         std::thread::spawn(move || {

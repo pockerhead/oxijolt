@@ -135,9 +135,11 @@ impl JobChoice {
     }
 }
 
-/// `settings` with the job system [`JobChoice::from_env`] selects, given `worker_threads`.
+/// `settings` with the job system [`JobChoice::from_env`] selects, given `worker_threads`. On
+/// wasm32, which has no threads, Jolt's thread pool is replaced by its single-threaded job system.
 pub fn with_threads(settings: WorldSettings, worker_threads: u32) -> WorldSettings {
     match JobChoice::from_env() {
+        JobChoice::Native if cfg!(target_arch = "wasm32") => settings.single_threaded(),
         JobChoice::Native => settings.worker_threads(worker_threads),
         JobChoice::Rayon => settings.job_system(Arc::new(RayonJobs::new(worker_threads as usize))),
         JobChoice::Inline => settings.job_system(Arc::new(InlineJobs { concurrency: 3 })),
