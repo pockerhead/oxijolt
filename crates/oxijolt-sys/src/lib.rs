@@ -130,6 +130,35 @@
 //!   links both crates must not call `JPH_DebugRenderer_SetProcs` or keep its own
 //!   `JPH_DebugRenderer` alive.
 //!
+//! # wasm32-unknown-unknown
+//! The native build needs wasi-sdk (`WASI_SDK_PATH` set to its install; 34.0 is tested), Ninja on
+//! `PATH` and Rust 1.89 or newer. On this target the module carries its own C++ runtime, which
+//! adds these rules:
+//! - `JPH_Init` here is a Rust function that runs the module's C++ static constructors once and
+//!   then calls joltc's `JPH_Init`. Call it before every other joltc function except
+//!   `JPH_SetAssertFailureHandler`, `JPH_SetTraceHandler` and the `*_SetProcs` setters. Without
+//!   it, wasm-ld runs the constructors before and the destructors after every export call, which
+//!   resets joltc's registry of physics systems and Jolt's static objects each time.
+//! - No other code in the module may call `__wasm_call_ctors`: the constructors would run a second
+//!   time and reset the same state. C code that calls joltc's `JPH_Init` symbol directly bypasses
+//!   the wrapper and is unsupported.
+//! - Static destructors never run, so destroy every joltc object explicitly.
+//! - wasi-libc's imports are defined by this crate, so a linked module imports nothing. The seven
+//!   functions are exports of every module that links the crate:
+//!
+//!   | WASI function | Behaviour |
+//!   |---|---|
+//!   | `fd_write` | fd 1 and 2: bytes are discarded and reported written (`EINVAL` if the lengths overflow); other fds: `EBADF` |
+//!   | `fd_close` | `EBADF` |
+//!   | `fd_fdstat_get` | `EBADF` (standard output is not a terminal) |
+//!   | `fd_seek` | `ESPIPE` |
+//!   | `sched_yield` | succeeds and does nothing |
+//!   | `clock_time_get` | traps: the simulation must not read a clock |
+//!   | `poll_oneoff` | traps: only sleeps reach it, and nothing can wake the module |
+//! - Rust's allocator and wasi-libc's `malloc` both grow linear memory, and each owns its own
+//!   allocations: free memory with the allocator that gave it.
+//! - Panics abort on this target; they do not unwind.
+//!
 //! [Jolt Physics]: https://github.com/jrouwe/JoltPhysics
 //! [joltc]: https://github.com/amerkoleci/joltc
 
@@ -137,6 +166,14 @@ mod generated;
 mod layout;
 
 pub use generated::*;
+
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+mod static_constructors;
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+mod wasi_imports;
+
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+pub use static_constructors::JPH_Init;
 
 /// Scalar type of world positions: `f64` with the `double-precision` feature, `f32` otherwise.
 #[cfg(feature = "double-precision")]
