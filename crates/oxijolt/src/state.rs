@@ -28,14 +28,14 @@ use crate::{CharacterState, PhysicsWorld, StateError};
 ///
 /// A state restores only into the world that saved it, and only while that world's structure is
 /// unchanged: creating or removing a body, character, vehicle, ragdoll or constraint, setting a
-/// body's or a ragdoll's motion type, setting a body's shape, or a
+/// body's or a ragdoll's motion type, setting a body's shape or sensor flag, or a
 /// [`rebase`](PhysicsWorld::rebase) that moves anything makes every earlier state unrestorable
 /// ([`StateError::WorldChanged`]). Calls that fail their
 /// checks keep states restorable.
 ///
-/// Configuration Jolt does not save, such as constraint limits, motor settings, a vehicle's
-/// gravity override and soft body vertex inverse masses, stays as it is when a state is
-/// restored. So does a vehicle's world up, which a zero gravity keeps from the step before. Jolt
+/// Configuration Jolt does not save, such as a body's friction, damping, object layer and
+/// collision group, constraint limits, motor settings, a vehicle's gravity override and soft
+/// body vertex inverse masses, stays as it is when a state is restored. So does a vehicle's world up, which a zero gravity keeps from the step before. Jolt
 /// does not save a motorcycle's integrated lean angle, which is why its integration coefficient
 /// must be 0.
 /// [docs/state.md] lists every such setter.

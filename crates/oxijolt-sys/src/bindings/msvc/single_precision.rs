@@ -11429,6 +11429,11 @@ unsafe extern "C" {
     ) -> bool;
 }
 unsafe extern "C" {
+    pub fn JPH_MotionProperties_GetMotionQuality(
+        properties: *const JPH_MotionProperties,
+    ) -> JPH_MotionQuality;
+}
+unsafe extern "C" {
     pub fn JPH_PhysicsMaterial_Create2(
         name: *const ::std::os::raw::c_char,
         color: u32,

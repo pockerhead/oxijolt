@@ -194,7 +194,7 @@ impl BodyRef<'_> {
         .unwrap_or(false)
     }
 
-    /// Whether the body is a sensor, as created ([`BodySettings::sensor`]).
+    /// Whether the body is a sensor ([`BodySettings::sensor`], [`BodyMut::set_is_sensor`]).
     ///
     /// [`BodySettings::sensor`]: crate::BodySettings::sensor
     pub fn is_sensor(&self) -> bool {

@@ -23,6 +23,22 @@ All notable changes to this fork. The format follows [Keep a Changelog](https://
   `CalculateSkinnedConstraintNormals`, `GetInvBindCount`, `GetSkinnedConstraintCount` and
   `JPH_Body_GetSoftBodySkinJointCount`, `SkinSoftBodyVertices`,
   `Get`/`SetSoftBodySkinnedMaxDistanceMultiplier` ([guide](docs/soft-bodies.md#skinning)). Refs #6.
+- Body properties change on a live body through Jolt's setters, checked like the matching
+  `BodySettings` field: `BodyMut::set_friction`, `set_restitution`, `set_gravity_factor`,
+  `set_linear_damping`, `set_angular_damping`, `set_motion_quality`, `set_object_layer`,
+  `set_collision_group` and `set_is_sensor`, read back with `BodyRef::friction`, `restitution`,
+  `gravity_factor`, `linear_damping`, `angular_damping`, `motion_quality`, `object_layer`,
+  `collision_group_is` and `is_sensor`. Motion properties change only on bodies that can move
+  (`BodyError::CannotMove`), angular damping and motion quality only on rigid bodies; a
+  character's inner body keeps its layer, a ragdoll part its group, and characters, vehicles and
+  ragdolls their sensor flag. The value setters wake nothing. The layer, group and sensor setters
+  wake the body with `Activation::Activate` and, with either activation, the non-static bodies
+  whose bounds come within the speculative contact distance of its bounds, in body-id order. Jolt saves none of these properties: a restore keeps the values set last, so a
+  rollback sets them back and replays, the layer and group before `restore_state`; a sensor
+  toggle is a structural change that earlier `WorldState`s refuse (`StateError::WorldChanged`).
+  The sensor flag and the collision group were documented as fixed at creation before. The C
+  wrapper extension gains `JPH_MotionProperties_GetMotionQuality`, the stored quality also of a
+  static body that may move ([guide](docs/bodies.md#changing-body-properties)). Refs #8.
 
 ## 1.4.0 — 2026-10-28
 

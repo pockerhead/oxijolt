@@ -1,6 +1,6 @@
 //! Rollback with the body controls: every momentary input replays bit for bit after a detour,
-//! configuration fixed at creation survives restores and structural edits, and shape and motion
-//! type changes refuse earlier states.
+//! configuration set at creation (the sensor flag, user data, locked axes, movement capability)
+//! survives restores and structural edits, and shape and motion type changes refuse earlier states.
 
 mod common;
 

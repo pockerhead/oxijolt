@@ -1,13 +1,15 @@
-// Buoyancy in two parts, the submerged volume and Jolt's volume overload of ApplyBuoyancyImpulse, so a
-// caller can check the volumes Jolt will use before it applies them. Part of this fork's joltc
-// additions (see joltc_ext.cpp).
+// Body additions: buoyancy in two parts, the submerged volume and Jolt's volume overload of
+// ApplyBuoyancyImpulse, so a caller can check the volumes Jolt will use before it applies them; and
+// the stored motion quality. Part of this fork's joltc additions (see joltc_ext.cpp).
 // Licensed under the MIT License (MIT), like joltc.
 //
-// Handles: a JPH_Body is a reinterpret_cast of the JPH::Body, as in joltc.
+// Handles: a JPH_Body is a reinterpret_cast of the JPH::Body and a JPH_MotionProperties of the
+// JPH::MotionProperties, as in joltc.
 
 #include <Jolt/Jolt.h>
 
 #include <Jolt/Physics/Body/Body.h>
+#include <Jolt/Physics/Body/MotionProperties.h>
 
 #include "joltc_ext_internal.h"
 
@@ -80,4 +82,9 @@ bool JPH_Body_ApplyBuoyancyImpulse2(JPH_Body* body, float totalVolume, float sub
 		joltc_ext::ToVec3(*fluidVelocity),
 		joltc_ext::ToVec3(*gravity),
 		deltaTime);
+}
+
+JPH_MotionQuality JPH_MotionProperties_GetMotionQuality(const JPH_MotionProperties* properties)
+{
+	return static_cast<JPH_MotionQuality>(reinterpret_cast<const JPH::MotionProperties*>(properties)->GetMotionQuality());
 }

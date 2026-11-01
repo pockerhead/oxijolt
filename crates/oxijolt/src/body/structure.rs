@@ -74,7 +74,7 @@ struct ShapeChange {
 }
 
 /// An empty box for a getter to fill.
-const NO_BOUNDS: JPH_AABox = JPH_AABox {
+pub(super) const NO_BOUNDS: JPH_AABox = JPH_AABox {
     min: JPH_Vec3 {
         x: 0.0,
         y: 0.0,

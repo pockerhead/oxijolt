@@ -12,8 +12,12 @@ what is planned next.
   sensors, per-body user data, locked axes (allowed degrees of freedom), shape and motion type
   changes, contact-cache invalidation, buoyancy and drag in a fluid, and the list of every body
   of a world (`PhysicsWorld::body_ids`) ([guide](bodies.md)).
+- Body properties changed on a live body: friction, restitution, gravity factor, linear and
+  angular damping, motion quality, object layer, collision group and the sensor flag, each with
+  its getter and the checks of its creation setting
+  ([guide](bodies.md#changing-body-properties)).
 - Collision groups: tables of sub groups that say which pairs collide, given to rigid and soft
-  bodies at creation, for ragdolls, chains and vehicles that ignore their driver
+  bodies at creation or later, for ragdolls, chains and vehicles that ignore their driver
   ([guide](bodies.md#collision-groups)).
 - Scene queries: ray casts, shape casts, collide-shape and point queries (in the world and on a
   shape), filtered by layer, compound child group and body.

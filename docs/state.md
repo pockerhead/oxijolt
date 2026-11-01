@@ -148,8 +148,9 @@ A state restores only into the world that saved it (`StateError::WrongWorld`), a
 world's structure is unchanged (`StateError::WorldChanged`). The structure changes when a body,
 character, vehicle, ragdoll or constraint is created or removed, when a body's or a ragdoll's
 motion type is changed (`BodyMut::set_motion_type`, `RagdollMut::set_motion_type`), when a body's
-shape is set (`BodyMut::set_shape`, also with the body's current shape), and when a rebase moves
-anything. Calls that fail their checks change nothing and keep states
+shape is set (`BodyMut::set_shape`, also with the body's current shape), when a body's sensor
+flag changes (`BodyMut::set_is_sensor`, which discards the body's cached contacts), and when a
+rebase moves anything. Calls that fail their checks change nothing and keep states
 restorable. In both refusals the world is unchanged.
 
 Jolt saves neither which objects exist nor its body id allocator, so rolling back across a creation
@@ -178,13 +179,21 @@ documentation asks for body friction. These setters change such configuration:
   `clear_tire_max_impulse_callback` (a restore keeps the callback and does not rewind what it
   captured; the engine's rpm, the gear, the clutch and the track speeds are state and are restored);
 - soft body: `set_vertex_inverse_mass` (a restore keeps the inverse masses set last) and
-  `set_skinned_max_distance_multiplier`.
+  `set_skinned_max_distance_multiplier`;
+- body: `set_friction`, `set_restitution`, `set_gravity_factor`, `set_linear_damping`,
+  `set_angular_damping`, `set_motion_quality`, `set_object_layer` and `set_collision_group` of
+  `BodyMut`.
 
-Body properties set at creation (shape, mass, friction, layers) are not saved either; the body
-setters change only poses and velocities, which are saved, and the shape and motion type changes
-count as structural changes. The sensor flag, user data, allowed degrees of freedom and movement
-capability and collision group of `BodySettings` are fixed at creation, so no restore can find them
-changed.
+Body properties set at creation (shape, mass, friction, layers) are not saved either. The body
+property setters in the list above change such configuration, the pose and velocity setters
+change only state that is saved, and the shape, motion type and sensor flag changes count as
+structural changes. The user data, allowed degrees of freedom and movement capability of
+`BodySettings` are fixed at creation, so no restore can find them changed.
+
+`set_object_layer` and `set_collision_group` also wake the bodies around the changed one, so set
+their old values back before the restore: the restore then puts back the sleep states that the
+set-back's wake changed, and the events it queued go with those of the abandoned steps. Set back
+after the restore, the wake would stay. `tests/body_properties_state.rs` checks both orders.
 A `MutableCompound` is the caller's state, not the world's: its edits change no body until a
 publication is installed with `set_shape`, which counts as a structural change
 ([bodies.md](bodies.md#compound-edits)).

@@ -397,6 +397,12 @@ JPH_CAPI bool JPH_Body_ApplyBuoyancyImpulse2(JPH_Body* body, float totalVolume, 
 	const JPH_Vec3* relativeCenterOfBuoyancy, float buoyancy, float linearDrag, float angularDrag,
 	const JPH_Vec3* fluidVelocity, const JPH_Vec3* gravity, float deltaTime);
 
+/* MotionProperties */
+/* Jolt's MotionProperties::GetMotionQuality: the stored quality, also of a static body created with
+   mAllowDynamicOrKinematic, for which JPH_BodyInterface_GetMotionQuality reports Discrete. properties
+   must be live and its body locked by the caller. */
+JPH_CAPI JPH_MotionQuality JPH_MotionProperties_GetMotionQuality(const JPH_MotionProperties* properties);
+
 /* PhysicsMaterial */
 /* A JPH::PhysicsMaterialSimple that also carries userData. Returns one reference, released by
    JPH_PhysicsMaterial_Destroy. Not serializable. */

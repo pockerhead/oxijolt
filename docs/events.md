@@ -70,7 +70,13 @@ so materials are read only for the ids a contact reports.
 A body created with `BodySettings::sensor(true)` detects other bodies without a collision response:
 Jolt reports its contacts as ordinary `ContactEvent`s whose `ContactSettings::is_sensor()` is true,
 and a `ContactListener` cannot turn such a contact into an ordinary one
-(`ContactSettingsError::SensorBody`). A sensor stays a sensor for its life (`BodyRef::is_sensor`).
+(`ContactSettingsError::SensorBody`). `BodyMut::set_is_sensor` turns the flag on or off on a live
+body (`BodyRef::is_sensor` reads it): the next simulating step collides the body's pairs afresh, a
+contact whose shapes overlap continues as `Persisted` with the new `is_sensor()`, and a speculative
+contact (shapes apart or just touching) ends with `Removed` when the body becomes a sensor, because
+Jolt finds sensor contacts only between overlapping shapes (`PhysicsSystem.cpp:1101`). A sensor
+made solid while it overlaps a body pushes it out. A toggle counts as a structural change for
+`WorldState`.
 
 Which pairs Jolt tests (`Body::sFindCollidingPairsCanCollide`, `Body.inl:30-44`, and
 `Docs/Architecture.md`, "Sensors"):
@@ -88,8 +94,9 @@ Which pairs Jolt tests (`Body::sFindCollidingPairsCanCollide`, `Body.inl:30-44`,
 
 Other parts of Jolt treat sensors their own way:
 - Continuous collision detection: a sensor cannot use `MotionQuality::LinearCast`
-  (`create_body` refuses it), and the casts of other bodies skip sensors (`PhysicsSystem.cpp:1657`,
-  `:1996`), so a fast body may pass a thin sensor between two steps.
+  (`create_body`, `set_is_sensor` and `set_motion_quality` refuse it), and the casts of other
+  bodies skip sensors (`PhysicsSystem.cpp:1657`, `:1996`), so a fast body may pass a thin sensor
+  between two steps.
 - Characters: a `CharacterVirtual` is never blocked by a sensor but lists it among its contacts
   (`CharacterContact::is_sensor`, `CharacterVirtual.cpp:367`, `:761`). A character's inner body is an
   ordinary kinematic body and triggers sensors like one.
