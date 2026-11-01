@@ -313,6 +313,13 @@ impl<K: ConstraintKind> ConstraintRef<'_, K> {
         self.entry.bodies
     }
 
+    /// The constraint this one references at `index` (0 or 1), typed as `R`, the kind the
+    /// typed settings that created it require there.
+    pub(super) fn reference<R: ConstraintKind>(&self, index: usize) -> Option<ConstraintId<R>> {
+        let world = AnyConstraintId::from(self.id).world;
+        self.entry.references[index].map(|raw| ConstraintId::new(raw, world))
+    }
+
     /// Whether the constraint is enabled.
     pub fn is_enabled(&self) -> bool {
         // SAFETY: the world borrowed here owns the constraint; `GetEnabled` reads a member, and

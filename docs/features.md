@@ -46,6 +46,9 @@ what is planned next.
 - Per-constraint solver settings for every kind: velocity and position step overrides for the
   constraint's island and a solving priority, at creation and at run time
   ([guide](constraints.md#solver-overrides)).
+- The hinges and slider a gear or rack and pinion references, read from its settings or the
+  created constraint, so couplings can be removed before them
+  ([guide](constraints.md#references-between-constraints)).
 - Soft bodies: cloth, pressurised and volume-preserving bodies, with vertex readout and pinning
   ([guide](soft-bodies.md)).
 - Soft body skinning: cloth such as a cape skinned to an animated skeleton or a ragdoll's pose,

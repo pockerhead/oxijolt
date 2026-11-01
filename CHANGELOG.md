@@ -14,6 +14,11 @@ All notable changes to this fork. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- `GearConstraintSettings::gear1_constraint` and `gear2_constraint`, and
+  `RackAndPinionConstraintSettings::pinion_constraint` and `rack_constraint`, name the hinges and
+  slider a coupling references (`None` when none were set); `ConstraintRef` of a gear or rack and
+  pinion has the same getters for the created coupling, so a caller can remove couplings before
+  the constraints they reference without keeping its own table. Refs #9.
 - Per-constraint solver settings for every constraint kind (Jolt `ConstraintSettings::
   mConstraintPriority`, `mNumVelocityStepsOverride`, `mNumPositionStepsOverride`): the builders
   `constraint_priority`, `velocity_steps_override` and `position_steps_override` on every
