@@ -193,7 +193,7 @@ configuration. The supported targets are those with committed bindings (`build/t
 
 Other 32-bit targets and unregistered ones are refused when the build starts.
 `wasm32-unknown-unknown` builds from source with [wasi-sdk](https://github.com/WebAssembly/wasi-sdk):
-`WASI_SDK_PATH` names its install directory, Ninja is on `PATH` and Rust is 1.89 or newer; wasi-sdk
+`WASI_SDK_PATH` names its install directory, Ninja is on `PATH` and Rust is 1.91 or newer; wasi-sdk
 34.0 is tested. A `JOLTC_LIB_DIR` prefix for it records the SDK and needs the same `WASI_SDK_PATH`
 to link. No archive is published for wasm, so the default `prebuilt` feature falls back to the
 source build. `wasm32-unknown-emscripten` and `wasm32-wasip1` have committed bindings only and are

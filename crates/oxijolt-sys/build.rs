@@ -267,7 +267,10 @@ fn check_wasm_target(cfg: &NativeConfig) -> anyhow::Result<()> {
     let version = wasi_sdk::rustc_version(&output)
         .with_context(|| format!("cannot read the Rust version from `{output}`"))?;
     if version < wasi_sdk::MIN_RUSTC {
-        bail!("{WASM_TARGET} needs Rust 1.89 or newer (its standard C ABI); this is {output}");
+        let (major, minor) = wasi_sdk::MIN_RUSTC;
+        bail!(
+            "{WASM_TARGET} needs Rust {major}.{minor} or newer (older rust-lld mis-links wasi-sdk's objects); this is {output}"
+        );
     }
     Ok(())
 }

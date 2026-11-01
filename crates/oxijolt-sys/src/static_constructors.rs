@@ -9,9 +9,9 @@ extern "C" {
 
 /// joltc's `JPH_Init`, after the module's C++ static constructors have run once.
 ///
-/// wasm-ld runs constructors before and destructors after every export call unless some code
-/// references `__wasm_call_ctors`; this function is that reference, so joltc's registry of
-/// physics systems and Jolt's static objects persist between export calls. Call it before any
+/// wasm-ld runs the constructors at the start of every export call unless some code references
+/// `__wasm_call_ctors`; this function is that reference, so Jolt's dynamically initialised
+/// statics, such as its fixed-to-world body, persist between export calls. Call it before any
 /// other joltc function except `JPH_SetAssertFailureHandler`, `JPH_SetTraceHandler` and the
 /// `*_SetProcs` functions. Nothing else in the module may call `__wasm_call_ctors`.
 ///

@@ -88,6 +88,9 @@ what is planned next.
   against a sha256 packaged in the crate and builds from source when none fits (feature
   `prebuilt`, on by default;
   [building](building.md#prebuilt-native-libraries)).
+- The raw layer, `oxijolt-sys`, builds for `wasm32-unknown-unknown` from source with wasi-sdk:
+  its `JPH_Init` runs the module's C++ static constructors once, and the module imports no WASI
+  functions ([building](building.md#targets)). The safe API does not build for wasm yet.
 - One set of API rules for names, constructors, settings, errors and derives
   ([api-guidelines.md](api-guidelines.md)), and Rust 1.88 as the minimum version, checked in CI.
 

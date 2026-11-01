@@ -16,15 +16,17 @@ pub const WASI_GENERATOR: &str = "Ninja";
 /// The wasi-sdk release oxijolt-sys is tested with; others build with a warning.
 pub const TESTED_SDK_VERSION: &str = "34.0";
 
-/// Oldest Rust release that builds for `wasm32-unknown-unknown`: the first with the standard C
-/// ABI on that target, which the C++ objects use.
-pub const MIN_RUSTC: (u32, u32) = (1, 89);
+/// Oldest Rust release that builds for `wasm32-unknown-unknown`. Rust 1.89 brought the standard
+/// C ABI the C++ objects use on that target, but the rust-lld 20 of Rust 1.89 and 1.90 mis-links
+/// wasi-sdk 34's objects (wasi-libc's `malloc` then never grows memory); Rust 1.91's rust-lld 21
+/// links them.
+pub const MIN_RUSTC: (u32, u32) = (1, 91);
 
 /// The SDK libraries Jolt's C++ code needs at link time, in link order: libc++ and libc++abi of
 /// the `noeh` variant (Jolt builds without exceptions), wasi-libc and clang's builtins.
 pub const RUNTIME_LIBRARIES: [&str; 4] = ["c++", "c++abi", "c", "clang_rt.builtins"];
 
-/// `(major, minor)` of `rustc --version` output such as `rustc 1.89.0 (29483883e 2025-08-04)`.
+/// `(major, minor)` of `rustc --version` output such as `rustc 1.91.1 (ed61e7d7e 2025-11-07)`.
 pub fn rustc_version(output: &str) -> Option<(u32, u32)> {
     let mut words = output.split_whitespace();
     if words.next()? != "rustc" {
@@ -320,11 +322,16 @@ mod tests {
         assert!(rustc_version("rustc 1.88.0 (6b00bc388 2025-06-23)").unwrap() < MIN_RUSTC);
         assert_eq!(
             rustc_version("rustc 1.89.0 (29483883e 2025-08-04)"),
-            Some(MIN_RUSTC)
+            Some((1, 89))
         );
         assert_eq!(
             rustc_version("rustc 1.90.0-nightly (abc 2025-07-01)"),
             Some((1, 90))
+        );
+        assert!(rustc_version("rustc 1.90.0 (1159e78c4 2025-09-14)").unwrap() < MIN_RUSTC);
+        assert_eq!(
+            rustc_version("rustc 1.91.1 (ed61e7d7e 2025-11-07)"),
+            Some(MIN_RUSTC)
         );
         assert_eq!(
             rustc_version("rustc 1.95.0 (59807616e 2026-04-14)\n"),

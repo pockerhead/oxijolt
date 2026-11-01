@@ -132,15 +132,18 @@
 //!
 //! # wasm32-unknown-unknown
 //! The native build needs wasi-sdk (`WASI_SDK_PATH` set to its install; 34.0 is tested), Ninja on
-//! `PATH` and Rust 1.89 or newer. On this target the module carries its own C++ runtime, which
+//! `PATH` and Rust 1.91 or newer. On this target the module carries its own C++ runtime, which
 //! adds these rules:
 //! - `JPH_Init` here is a Rust function that runs the module's C++ static constructors once and
 //!   then calls joltc's `JPH_Init`. Call it before every other joltc function except
 //!   `JPH_SetAssertFailureHandler`, `JPH_SetTraceHandler` and the `*_SetProcs` setters. Without
-//!   it, wasm-ld runs the constructors before and the destructors after every export call, which
-//!   resets joltc's registry of physics systems and Jolt's static objects each time.
+//!   it, wasm-ld runs the constructors again at the start of every export call, which resets
+//!   Jolt's dynamically initialised statics, such as its fixed-to-world body, while a world uses
+//!   them. The repository's Node check (`scripts/check_wasm_raw.sh`) keeps a world across export
+//!   calls and a repeated `JPH_Init`, and checks that the fixed-to-world body is constructed and
+//!   keeps a mark written into it, and that joltc's step listener still finds the world.
 //! - No other code in the module may call `__wasm_call_ctors`: the constructors would run a second
-//!   time and reset the same state. C code that calls joltc's `JPH_Init` symbol directly bypasses
+//!   time and reset the same statics. C code that calls joltc's `JPH_Init` symbol directly bypasses
 //!   the wrapper and is unsupported.
 //! - Static destructors never run, so destroy every joltc object explicitly.
 //! - wasi-libc's imports are defined by this crate, so a linked module imports nothing. The seven
