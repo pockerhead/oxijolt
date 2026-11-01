@@ -45,7 +45,7 @@ mod rebase;
 mod settings;
 
 use settings::JobSystemChoice;
-pub use settings::WorldSettings;
+pub use settings::{JobSystemKind, WorldSettings};
 
 /// Installs the assertion handler and runs `JPH_Init` once per process, and returns whether
 /// `JPH_Init` succeeded. oxijolt never calls `JPH_Shutdown`: Jolt's global state lives as
@@ -227,6 +227,8 @@ pub struct PhysicsWorld {
     /// after the system.
     pub(crate) listeners: Listeners,
     job_system: WorldJobSystem,
+    job_system_kind: JobSystemKind,
+    max_concurrency: u32,
     pub(crate) temp_allocator: Owned<JPH_TempAllocator>,
     pub(crate) body_interface: NonNull<JPH_BodyInterface>,
     pub(crate) body_lock_interface: NonNull<JPH_BodyLockInterface>,
@@ -480,6 +482,8 @@ impl PhysicsWorld {
             system,
             listeners: Listeners::default(),
             job_system,
+            job_system_kind: settings.jobs.kind(),
+            max_concurrency,
             temp_allocator,
             body_interface,
             body_lock_interface,
@@ -528,6 +532,21 @@ impl PhysicsWorld {
         // SAFETY: the system is live and borrowed mutably; `gravity` is a live local.
         unsafe { JPH_PhysicsSystem_SetGravity(self.system.as_ptr(), &gravity) };
         Ok(())
+    }
+
+    /// The kind of job system the world steps with, as chosen in [`WorldSettings`]. Configuration,
+    /// not part of a [`WorldState`](crate::WorldState).
+    pub fn job_system_kind(&self) -> JobSystemKind {
+        self.job_system_kind
+    }
+
+    /// The most jobs Jolt runs at the same time for this world, counting the thread that calls
+    /// `step`: the value its job system was created with. Worker threads + 1 for Jolt's thread
+    /// pool, 1 for the single-threaded job system, and the caller's
+    /// [`JobSystem::max_concurrency`](crate::JobSystem::max_concurrency) as read in
+    /// [`new`](Self::new).
+    pub fn max_concurrency(&self) -> u32 {
+        self.max_concurrency
     }
 
     /// Velocity iterations per step, as Jolt holds them ([`WorldSettings::velocity_steps`]).

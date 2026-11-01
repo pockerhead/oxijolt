@@ -2,6 +2,15 @@
 
 All notable changes to this fork. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Added
+
+- `PhysicsWorld::job_system_kind` and `PhysicsWorld::max_concurrency` read back the job system a
+  world steps with: the new `JobSystemKind` (Jolt's thread pool with its worker count, Jolt's
+  single-threaded job system or the caller's `JobSystem`) and the concurrency it was created
+  with. Configuration only, not part of `WorldState`. Refs #10.
+
 ## 1.5.0 — 2026-11-01
 
 ### Fixed

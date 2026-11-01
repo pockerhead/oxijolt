@@ -27,7 +27,37 @@ impl fmt::Debug for JobSystemChoice {
     }
 }
 
+/// The kind of job system a world runs its jobs on ([`PhysicsWorld::job_system_kind`]), chosen
+/// with [`WorldSettings::worker_threads`], [`WorldSettings::single_threaded`] or
+/// [`WorldSettings::job_system`].
+///
+/// [`PhysicsWorld::job_system_kind`]: crate::PhysicsWorld::job_system_kind
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[non_exhaustive]
+pub enum JobSystemKind {
+    /// Jolt's `JobSystemThreadPool` with this many worker threads.
+    ThreadPool {
+        /// Worker threads, not counting the thread that calls `step`.
+        worker_threads: u32,
+    },
+    /// Jolt's `JobSystemSingleThreaded`: every job runs on the thread that calls `step`.
+    SingleThreaded,
+    /// The caller's [`JobSystem`].
+    Caller,
+}
+
 impl JobSystemChoice {
+    /// The kind of this choice, without the caller's job system.
+    pub(super) fn kind(&self) -> JobSystemKind {
+        match self {
+            Self::ThreadPool(workers) => JobSystemKind::ThreadPool {
+                worker_threads: *workers,
+            },
+            Self::SingleThreaded => JobSystemKind::SingleThreaded,
+            Self::Caller(_) => JobSystemKind::Caller,
+        }
+    }
+
     /// The most jobs Jolt will run at the same time, counting the stepping thread. Reads the
     /// caller's [`JobSystem::max_concurrency`] once and checks it.
     pub(super) fn max_concurrency(&self) -> Result<u32, WorldError> {

@@ -9,6 +9,11 @@ setting called last decides:
 - The caller's pool, such as Rayon or a game's own task system, through the `JobSystem` trait
   (`WorldSettings::job_system`); Jolt then starts no threads for that world either.
 
+`PhysicsWorld::job_system_kind` tells which of the three a world got (`JobSystemKind`, with the
+worker count of Jolt's pool), and `PhysicsWorld::max_concurrency` the concurrency its job system
+was created with: workers + 1 for Jolt's pool, 1 single-threaded, the caller's `max_concurrency`
+as read in `PhysicsWorld::new`.
+
 ## An adapter
 
 ```rust
