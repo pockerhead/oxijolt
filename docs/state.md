@@ -178,11 +178,14 @@ documentation asks for body friction. These setters change such configuration:
   `clear_tire_max_impulse_callback` (a restore keeps the callback and does not rewind what it
   captured; the engine's rpm, the gear, the clutch and the track speeds are state and are restored);
 - soft body: `set_vertex_inverse_mass` (a restore keeps the inverse masses set last) and
-  `set_skinned_max_distance_multiplier`.
+  `set_skinned_max_distance_multiplier`;
+- body: `set_friction`, `set_restitution`, `set_gravity_factor`, `set_linear_damping`,
+  `set_angular_damping` and `set_motion_quality` of `BodyMut`.
 
-Body properties set at creation (shape, mass, friction, layers) are not saved either; the body
-setters change only poses and velocities, which are saved, and the shape and motion type changes
-count as structural changes. The sensor flag, user data, allowed degrees of freedom and movement
+Body properties set at creation (shape, mass, friction, layers) are not saved either. The body
+property setters in the list above change such configuration, the pose and velocity setters
+change only state that is saved, and the shape and motion type changes count as structural
+changes. The sensor flag, user data, allowed degrees of freedom and movement
 capability and collision group of `BodySettings` are fixed at creation, so no restore can find them
 changed.
 A `MutableCompound` is the caller's state, not the world's: its edits change no body until a

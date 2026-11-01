@@ -3,7 +3,7 @@
 use oxijolt_sys::*;
 
 use super::SoftBodySharedSettings;
-use crate::body::{Activation, LINEAR_DAMPING_RULE, RESTITUTION_RULE};
+use crate::body::{is_restitution, Activation, LINEAR_DAMPING_RULE, RESTITUTION_RULE};
 use crate::limits::{self, is_friction, is_gravity_factor, is_in_frame, is_local_distance};
 use crate::math::{is_finite_non_negative, ROTATION_RULE};
 use crate::owned::{JoltObject, Owned};
@@ -96,7 +96,8 @@ impl SoftBodySettings {
     }
 
     /// Linear damping of every vertex, finite and at least 0: Jolt scales the vertex velocity by
-    /// `max(0, 1 - c * dt)` every sub-step. Default 0.1.
+    /// `max(0, 1 - c * dt)` every sub-step. Default 0.1. Change it later with
+    /// [`BodyMut::set_linear_damping`](crate::BodyMut::set_linear_damping).
     #[must_use]
     pub fn linear_damping(mut self, value: f32) -> Self {
         self.linear_damping = value;
@@ -111,7 +112,8 @@ impl SoftBodySettings {
         self
     }
 
-    /// Restitution (bounciness) of collisions, between 0 and 1. Default 0.
+    /// Restitution (bounciness) of collisions, between 0 and 1. Default 0. Change it later with
+    /// [`BodyMut::set_restitution`](crate::BodyMut::set_restitution).
     #[must_use]
     pub fn restitution(mut self, value: f32) -> Self {
         self.restitution = value;
@@ -119,6 +121,7 @@ impl SoftBodySettings {
     }
 
     /// Friction coefficient of collisions, between 0 and [`limits::MAX_FRICTION`]. Default 0.2.
+    /// Change it later with [`BodyMut::set_friction`](crate::BodyMut::set_friction).
     #[must_use]
     pub fn friction(mut self, value: f32) -> Self {
         self.friction = value;
@@ -146,7 +149,8 @@ impl SoftBodySettings {
     }
 
     /// Multiplier for the world's gravity on every vertex, at most
-    /// [`limits::MAX_GRAVITY_FACTOR`] in absolute value. Default 1.
+    /// [`limits::MAX_GRAVITY_FACTOR`] in absolute value. Default 1. Change it later with
+    /// [`BodyMut::set_gravity_factor`](crate::BodyMut::set_gravity_factor).
     #[must_use]
     pub fn gravity_factor(mut self, value: f32) -> Self {
         self.gravity_factor = value;
@@ -234,7 +238,7 @@ impl SoftBodySettings {
                 && self.max_linear_velocity <= limits::MAX_LINEAR_VELOCITY,
             "max linear velocity must be above 0 and at most limits::MAX_LINEAR_VELOCITY",
         )?;
-        check((0.0..=1.0).contains(&self.restitution), RESTITUTION_RULE)?;
+        check(is_restitution(self.restitution), RESTITUTION_RULE)?;
         check(is_friction(self.friction), limits::FRICTION_RULE)?;
         check(
             (0.0..=limits::MAX_SOFT_BODY_PRESSURE).contains(&self.pressure),

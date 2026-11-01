@@ -23,6 +23,7 @@ mod load;
 mod lock;
 mod mass;
 mod poses;
+mod properties;
 mod structure;
 
 pub(crate) use access::corners;
@@ -135,6 +136,16 @@ impl MotionQuality {
             Self::LinearCast => JPH_MotionQuality_LinearCast,
         }
     }
+
+    fn from_jph(value: JPH_MotionQuality) -> Self {
+        [Self::Discrete, Self::LinearCast]
+            .into_iter()
+            .find(|quality| quality.to_jph() == value)
+            // Jolt has exactly these two, asserted equal to joltc's in
+            // `native/layout_checks.cpp`. This runs in Rust after the call returned, so a panic
+            // here never unwinds into C++.
+            .unwrap_or_else(|| unreachable!("Jolt returned unknown motion quality {value}"))
+    }
 }
 
 /// Whether an operation wakes the body.
@@ -217,11 +228,23 @@ impl Default for BodySettings {
     }
 }
 
-/// What a restitution must satisfy: `0..=1`.
+/// What a restitution must satisfy ([`is_restitution`]).
 pub(crate) const RESTITUTION_RULE: &str = "restitution must be between 0 and 1";
+
+/// Whether `restitution` is within `0..=1`.
+pub(crate) fn is_restitution(restitution: f32) -> bool {
+    (0.0..=1.0).contains(&restitution)
+}
 
 /// What a linear damping must satisfy ([`is_finite_non_negative`]).
 pub(crate) const LINEAR_DAMPING_RULE: &str = "linear damping must be finite and not negative";
+
+/// What an angular damping must satisfy ([`is_finite_non_negative`]).
+pub(crate) const ANGULAR_DAMPING_RULE: &str = "angular damping must be finite and not negative";
+
+/// Why a sensor keeps [`MotionQuality::Discrete`]: Jolt runs no continuous collision detection
+/// for sensors (`PhysicsSystem.cpp:1657`).
+pub(crate) const SENSOR_QUALITY_RULE: &str = "a sensor uses MotionQuality::Discrete";
 
 /// What [`BodySettings::allowed_dofs`] must satisfy (crate policy): without a translation axis
 /// Jolt gives the body a zero inverse mass, and its unit-sphere inertia fallback (`2.5 / mass`)
@@ -312,14 +335,16 @@ impl BodySettings {
         self
     }
 
-    /// Friction coefficient, between 0 and [`limits::MAX_FRICTION`]. Default 0.2.
+    /// Friction coefficient, between 0 and [`limits::MAX_FRICTION`]. Default 0.2. Change it later
+    /// with [`BodyMut::set_friction`](crate::BodyMut::set_friction).
     #[must_use]
     pub fn friction(mut self, value: f32) -> Self {
         self.friction = value;
         self
     }
 
-    /// Restitution (bounciness), between 0 and 1. Default 0.
+    /// Restitution (bounciness), between 0 and 1. Default 0. Change it later with
+    /// [`BodyMut::set_restitution`](crate::BodyMut::set_restitution).
     #[must_use]
     pub fn restitution(mut self, value: f32) -> Self {
         self.restitution = value;
@@ -327,7 +352,8 @@ impl BodySettings {
     }
 
     /// Linear damping, finite and at least 0: Jolt scales the linear velocity by
-    /// `max(0, 1 - c * dt)` every step. Default 0.05.
+    /// `max(0, 1 - c * dt)` every step. Default 0.05. Change it later with
+    /// [`BodyMut::set_linear_damping`](crate::BodyMut::set_linear_damping).
     #[must_use]
     pub fn linear_damping(mut self, value: f32) -> Self {
         self.linear_damping = value;
@@ -335,7 +361,8 @@ impl BodySettings {
     }
 
     /// Angular damping, finite and at least 0: Jolt scales the angular velocity by
-    /// `max(0, 1 - c * dt)` every step. Default 0.05.
+    /// `max(0, 1 - c * dt)` every step. Default 0.05. Change it later with
+    /// [`BodyMut::set_angular_damping`](crate::BodyMut::set_angular_damping).
     #[must_use]
     pub fn angular_damping(mut self, value: f32) -> Self {
         self.angular_damping = value;
@@ -400,7 +427,8 @@ impl BodySettings {
         self
     }
 
-    /// How the body is integrated. Default [`MotionQuality::Discrete`].
+    /// How the body is integrated. Default [`MotionQuality::Discrete`]. Change it later with
+    /// [`BodyMut::set_motion_quality`](crate::BodyMut::set_motion_quality).
     #[must_use]
     pub fn motion_quality(mut self, value: MotionQuality) -> Self {
         self.motion_quality = value;
@@ -408,7 +436,8 @@ impl BodySettings {
     }
 
     /// Multiplier for the world's gravity on this body, at most [`limits::MAX_GRAVITY_FACTOR`] in
-    /// absolute value. Default 1.
+    /// absolute value. Default 1. Change it later with
+    /// [`BodyMut::set_gravity_factor`](crate::BodyMut::set_gravity_factor).
     #[must_use]
     pub fn gravity_factor(mut self, value: f32) -> Self {
         self.gravity_factor = value;
@@ -562,14 +591,14 @@ impl BodySettings {
         if !is_friction(self.friction) {
             return invalid(limits::FRICTION_RULE);
         }
-        if !(0.0..=1.0).contains(&self.restitution) {
+        if !is_restitution(self.restitution) {
             return invalid(RESTITUTION_RULE);
         }
         if !is_finite_non_negative(self.linear_damping) {
             return invalid(LINEAR_DAMPING_RULE);
         }
         if !is_finite_non_negative(self.angular_damping) {
-            return invalid("angular damping must be finite and not negative");
+            return invalid(ANGULAR_DAMPING_RULE);
         }
         if !is_gravity_factor(self.gravity_factor) {
             return invalid(limits::GRAVITY_FACTOR_RULE);
@@ -586,7 +615,7 @@ impl BodySettings {
             return invalid(DOFS_RULE);
         }
         if self.sensor && self.motion_quality == MotionQuality::LinearCast {
-            return invalid("a sensor uses MotionQuality::Discrete");
+            return invalid(SENSOR_QUALITY_RULE);
         }
         let still = self.linear_velocity == Vec3::ZERO && self.angular_velocity == Vec3::ZERO;
         if self.motion_type == MotionType::Static && self.allow_dynamic_or_kinematic && !still {
