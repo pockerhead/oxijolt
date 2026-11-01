@@ -10,6 +10,10 @@ All notable changes to this fork. The format follows [Keep a Changelog](https://
   world steps with: the new `JobSystemKind` (Jolt's thread pool with its worker count, Jolt's
   single-threaded job system or the caller's `JobSystem`) and the concurrency it was created
   with. Configuration only, not part of `WorldState`. Refs #10.
+- `WorldSettings::job_system_kind` reads back the job system settings choose, before a world is
+  created and without calling a caller `JobSystem`. Default settings read Jolt's thread pool with
+  one worker; compare with `WorldSettings::default().job_system_kind()` to see whether a choice
+  differs from the default. Refs #10.
 
 ## 1.5.0 — 2026-11-01
 

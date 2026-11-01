@@ -12,7 +12,10 @@ setting called last decides:
 `PhysicsWorld::job_system_kind` tells which of the three a world got (`JobSystemKind`, with the
 worker count of Jolt's pool), and `PhysicsWorld::max_concurrency` the concurrency its job system
 was created with: workers + 1 for Jolt's pool, 1 single-threaded, the caller's `max_concurrency`
-as read in `PhysicsWorld::new`.
+as read in `PhysicsWorld::new`. `WorldSettings::job_system_kind` reads the choice before the world
+exists, without calling a caller job system; there is no unset state, so a plugin that layers its own
+choice on a user's settings compares with `WorldSettings::default().job_system_kind()` to see whether
+the user changed it.
 
 ## An adapter
 
