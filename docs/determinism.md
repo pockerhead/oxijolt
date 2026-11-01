@@ -60,7 +60,7 @@ equal results across compilers, configurations, operating systems and architectu
 same source is built with the same defines: never compare a `double-precision` build with a
 single-precision one, and the FPU rounding and denormal (DAZ/FTZ) modes must match. The gates below
 run on one machine at a time and compare thread counts and job systems in each configuration; they
-do not compare machines.
+do not compare machines. The one gate across platforms is wasm against native, below.
 
 ## How it is checked
 
@@ -113,6 +113,14 @@ Other gates of the same kind:
 
 CI runs all of them in each of its configurations (default, `cross-platform-deterministic`,
 `double-precision`, `debug-renderer`, `asserts`) on Windows and on Linux.
+
+`bash scripts/check_wasm_determinism.sh` compares platforms: a pile of 24 bodies falling onto a
+floor (`tests/wasm-safe/src/scene.rs`) is stepped 300 ticks in a wasm32-unknown-unknown module, in
+Node in single and double precision and in headless Chrome in single precision, and its per-tick
+records (body id, position, rotation, velocities as exact bits, sleep flag) must equal those of a
+native run of the same scene byte for byte, both sides built with `cross-platform-deterministic`.
+The script also requires a native run without the feature and a record with one flipped bit to
+differ. CI's `wasm` job runs it on Linux (GCC) with wasi-sdk 34.
 
 ## Replays
 

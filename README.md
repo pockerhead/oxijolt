@@ -100,6 +100,7 @@ Everything planned for 1.0 is done; what works today, with links to the guides, 
 - [x] A world's job system kind and concurrency, readable from the world and the kind from its settings
 - [x] oxijolt-sys builds for wasm32-unknown-unknown from source (wasi-sdk)
 - [x] oxijolt builds for wasm32-unknown-unknown, single-threaded
+- [x] CI checks wasm32 (Node and Chrome) against native cross-platform-deterministic results
 
 ## Status
 
@@ -164,7 +165,7 @@ quality bounds (with each engine's defaults Rapier 8, oxijolt 7); oxijolt lets s
 through the ground and its plank towers collapse. oxijolt brings
 Jolt's character controller, wheeled and tracked vehicles and ragdolls; outside x86_64 Windows
 and Linux and Apple silicon it needs a C++ toolchain, and on wasm32-unknown-unknown it builds
-single-threaded and is not tested in CI.
+single-threaded, checked in CI against Linux native results.
 
 ## Documentation
 

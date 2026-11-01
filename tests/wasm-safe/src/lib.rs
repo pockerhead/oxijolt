@@ -4,12 +4,17 @@
 //! that links world creation, stepping and save/restore still imports nothing, worlds default to
 //! the single-threaded job system and refuse worker threads, a world created in one export call
 //! keeps stepping in the next ones, a saved state replays bit for bit, and a panic in a listener
-//! traps.
+//! traps. The `scene_*` exports run the cross-platform determinism scene (`scene.rs`) whose
+//! records `scripts/check_wasm_determinism.sh` compares with a native run.
 //!
-//! Every export returns 0 on success and a nonzero code naming the failed check; the codes are
-//! listed on each function. On other targets the crate is empty.
+//! Every check export returns 0 on success and a nonzero code naming the failed check; the codes
+//! are listed on each function. The `scene_*` exports return tick counts, an address and a length
+//! instead. On other targets the crate is empty.
 
 #![cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+
+mod scene;
+mod scene_exports;
 
 use std::cell::RefCell;
 use std::ops::RangeInclusive;
