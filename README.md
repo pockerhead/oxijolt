@@ -97,7 +97,7 @@ Everything planned for 1.0 is done; what works today, with links to the guides, 
 - [x] Solver step overrides and priority per constraint
 - [x] The hinges and slider a gear or rack and pinion references, readable from its settings and
   the created constraint
-- [x] A world's job system kind and concurrency, readable from the world
+- [x] A world's job system kind and concurrency, readable from the world and the kind from its settings
 - [x] oxijolt-sys builds for wasm32-unknown-unknown from source (wasi-sdk)
 
 ## Status
