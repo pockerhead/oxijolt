@@ -10,7 +10,6 @@
 
 use oxijolt_sys::*;
 
-use super::access::corners;
 use super::load::require;
 use super::structure::NO_BOUNDS;
 use super::{
@@ -463,7 +462,7 @@ impl BodyMut<'_> {
     /// bodies floating or embedded.
     fn wake_after_filter_change(&mut self, activation: Activation) {
         let id = self.inner.id;
-        let mut bounds = with_read_locked_body(self.inner.body_lock_interface, id, |body| {
+        let bounds = with_read_locked_body(self.inner.body_lock_interface, id, |body| {
             let mut bounds = NO_BOUNDS;
             // SAFETY: `body` is locked for reading for the duration of the closure; the getter
             // only reads it and writes the live local.
@@ -474,19 +473,7 @@ impl BodyMut<'_> {
         if activation == Activation::Activate {
             self.activate();
         }
-        // Jolt pairs bodies whose bounds come within this distance (`QuadTree::FindCollidingPairs`
-        // widens them in `f32` the same way), so a body resting on a speculative contact need not
-        // touch the exact bounds.
-        let margin = self.world.speculative_contact_distance();
-        let widen = |v: JPH_Vec3, by: f32| JPH_Vec3 {
-            x: v.x + by,
-            y: v.y + by,
-            z: v.z + by,
-        };
-        bounds.min = widen(bounds.min, -margin);
-        bounds.max = widen(bounds.max, margin);
-        let (min, max) = corners(&bounds);
-        self.world.wake_bodies_overlapping(min, max, Some(id));
+        self.world.wake_bodies_near(&bounds, Some(id));
     }
 
     /// Fails with [`BodyError::NotRigidBody`] for a soft body when `bodies` asks for a rigid

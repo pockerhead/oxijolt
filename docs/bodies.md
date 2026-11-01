@@ -345,9 +345,9 @@ because their checks assume an unmasked body.
 ## Shape and motion type changes
 
 `BodyMut::set_shape` gives a body a new shape and the mass properties a body created with it would
-have; it wakes the bodies inside the box that encloses the old and new bounds, which includes
-bodies between the two shapes when they lie apart. `BodyMut::set_motion_type` switches a body
-between static, kinematic and dynamic. A body created static changes only when created with
+have; it wakes the bodies within the speculative contact distance of the box that encloses the old
+and new bounds, which includes bodies between the two shapes when they lie apart.
+`BodyMut::set_motion_type` switches a body between static, kinematic and dynamic. A body created static changes only when created with
 `BodySettings::allow_dynamic_or_kinematic(true)`. Both refuse bodies that a character, vehicle,
 ragdoll or constraint holds.
 
@@ -474,7 +474,7 @@ the same children, including the centre of mass Jolt moves to the children's mas
 and the extent rule that applies after that move.
 
 A publication reaches a body only through `BodyMut::set_shape`, which applies every rule of a shape
-change above: the body rules, fresh mass properties and the wake of the bodies inside the box around
+change above: the body rules, fresh mass properties and the wake of the bodies near the box around
 the old and new bounds. On a large compound that box can hold many sleeping bodies. Each `set_shape`
 changes one body; when a publication goes to several bodies and a later one refuses it, the earlier
 ones keep it. Bodies, worlds and scaled shapes that hold an earlier publication keep it unchanged.

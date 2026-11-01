@@ -240,6 +240,32 @@ fn removal_wakes_bodies_resting_on_it() {
     assert!(world.body(top).unwrap().is_active());
 }
 
+/// A sleeper resting within the speculative contact distance of the removed body is in Jolt's
+/// contact range without touching its bounds; it wakes and falls.
+#[test]
+fn removal_wakes_a_sleeper_within_speculative_distance() {
+    let mut world = world(Vec3::new(0.0, -9.81, 0.0), 1);
+    let floor = add_floor(&mut world);
+    let cube = add_cube(&mut world, RVec3::new(0.0, 0.5, 0.0));
+    common::controls::fall_asleep(&mut world, cube);
+    let gap = 0.5 * world.speculative_contact_distance();
+    let lifted = RVec3::new(0.0, 0.5 + Real::from(gap), 0.0);
+    world
+        .body_mut(cube)
+        .unwrap()
+        .set_position(lifted, Activation::DontActivate)
+        .unwrap();
+    assert!(world.body(cube).unwrap().is_sleeping());
+
+    world.remove_body(floor).unwrap();
+    assert!(world.body(cube).unwrap().is_active());
+    step(&mut world, 30);
+    assert!(
+        world.body(cube).unwrap().position().y < 0.0,
+        "the cube falls"
+    );
+}
+
 /// Two sleeping cubes 3 m apart are moved by a rebase, which widens the broad phase's stored
 /// bounds until its next maintenance; then the left one is removed. Returns whether the right
 /// cube, 2 m outside the removed cube's bounds, was woken.

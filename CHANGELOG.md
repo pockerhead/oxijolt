@@ -4,6 +4,16 @@ All notable changes to this fork. The format follows [Keep a Changelog](https://
 
 ## Unreleased
 
+### Fixed
+
+- `PhysicsWorld::remove_body`, `remove_ragdoll` and `BodyMut::set_shape` wake the non-static
+  bodies whose bounds come within the speculative contact distance of the removed or changed
+  body, as the filter setters do. They woke only bodies whose bounds overlapped or touched, so a
+  sleeper resting on a speculative contact a few ulps above the body (seen on macOS in double
+  precision) stayed asleep in the air.
+
+### Added
+
 - `BodyRef::inverse_inertia` reads a dynamic rigid body's inverse inertia tensor about its centre
   of mass in world coordinates (Jolt `Body::GetInverseInertia`), in rows like `Inertia::Tensor`,
   with the body's rotation applied and locked rotation axes zeroed; `None` for static, kinematic

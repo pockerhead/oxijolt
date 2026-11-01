@@ -842,6 +842,51 @@ fn removing_a_ragdoll_drops_what_rests_on_it() {
     assert!(fallen[1] < resting[1] - 0.05, "{resting:?} -> {fallen:?}");
 }
 
+/// A sleeper resting within the speculative contact distance of a removed part is in Jolt's
+/// contact range without touching the part's bounds; it wakes and falls.
+#[test]
+fn removing_a_ragdoll_wakes_a_sleeper_within_speculative_distance() {
+    let (layers, ids) = ragdoll_layers();
+    let mut world = PhysicsWorld::new(jobs::with_threads(
+        WorldSettings::default()
+            .gravity(Vec3::new(0.0, -9.81, 0.0))
+            .layers(layers),
+        1,
+    ))
+    .unwrap();
+    let settings = humanoid_settings(ids.ragdoll);
+    let ragdoll = world
+        .create_ragdoll(&settings, Some(&bind_pose()), Activation::DontActivate)
+        .unwrap();
+    let head = &PARTS[HEAD];
+    assert!(!head.along_x);
+    let head_top = head.centre[1] + head.half_height + head.radius;
+    let gap = 0.5 * world.speculative_contact_distance();
+    let half = 0.1;
+    let cube_shape = Shape::new_box(Vec3::new(half, half, half)).unwrap();
+    let cube = world
+        .create_body(
+            &cube_shape,
+            &BodySettings::new_dynamic()
+                .object_layer(ids.ragdoll)
+                .position(RVec3::new(
+                    Real::from(head.centre[0]),
+                    Real::from(head_top + gap + half),
+                    Real::from(head.centre[2]),
+                ))
+                .activation(Activation::DontActivate),
+        )
+        .unwrap();
+    assert!(world.body(cube).unwrap().is_sleeping());
+    let start = world.body(cube).unwrap().position().y;
+
+    world.remove_ragdoll(ragdoll).unwrap();
+    assert!(world.body(cube).unwrap().is_active());
+    step(&mut world, 30);
+    let y = world.body(cube).unwrap().position().y;
+    assert!(y < start - 0.5, "{start} -> {y}");
+}
+
 #[test]
 fn dropping_a_world_with_ragdolls_is_clean() {
     let (mut world, layers) = ragdoll_world(1);
