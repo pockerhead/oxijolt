@@ -8,9 +8,10 @@ use std::fmt;
 /// Targets whose bindgen output is byte-identical, so one committed file per configuration
 /// serves all of them.
 ///
-/// There are two families because C compilers disagree on the type of a C enum: MSVC types
+/// The 64-bit families differ because C compilers disagree on the type of a C enum: MSVC types
 /// every enum as `int`, Clang and GCC as `unsigned int` when every value is non-negative.
-/// Everything else in the bindings is the same for all registered targets.
+/// `wasm32` types enums like `gnu` but has 32-bit pointers, which changes the layout of every
+/// struct that holds a pointer.
 ///
 /// Membership means the regenerator produced identical bindings for the target; it does not
 /// mean the native build of that target is tested.
@@ -19,6 +20,8 @@ pub struct Family {
     pub name: &'static str,
     /// Rust target triples of the family.
     pub targets: &'static [&'static str],
+    /// Cargo's `target_pointer_width` of every target of the family.
+    pub pointer_width: &'static str,
 }
 
 /// Every registered target, by family.
@@ -26,6 +29,7 @@ pub const FAMILIES: &[Family] = &[
     Family {
         name: "msvc",
         targets: &["x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"],
+        pointer_width: "64",
     },
     Family {
         name: "gnu",
@@ -38,6 +42,16 @@ pub const FAMILIES: &[Family] = &[
             "aarch64-linux-android",
             "x86_64-pc-windows-gnu",
         ],
+        pointer_width: "64",
+    },
+    Family {
+        name: "wasm32",
+        targets: &[
+            "wasm32-unknown-unknown",
+            "wasm32-unknown-emscripten",
+            "wasm32-wasip1",
+        ],
+        pointer_width: "32",
     },
 ];
 
@@ -51,7 +65,8 @@ pub fn family_of(target: &str) -> Option<&'static Family> {
 /// Why a target has no committed bindings.
 #[derive(Debug, PartialEq, Eq)]
 pub enum TargetError {
-    /// The target's pointers are not 64 bits wide.
+    /// The target's pointers are not 64 bits wide and it is not in [`FAMILIES`], or its
+    /// pointer width is not its family's.
     PointerWidth(String),
     /// The target is 64-bit but not in [`FAMILIES`].
     Unregistered(String),
@@ -61,7 +76,10 @@ impl fmt::Display for TargetError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TargetError::PointerWidth(target) => {
-                write!(f, "{target} is not supported: only 64-bit targets are")
+                write!(
+                    f,
+                    "{target} is not supported: only 64-bit and wasm32 targets are"
+                )
             }
             TargetError::Unregistered(target) => write!(
                 f,
@@ -76,10 +94,11 @@ impl std::error::Error for TargetError {}
 
 /// The family of `target`, given Cargo's `target_pointer_width` for it.
 pub fn check_target(target: &str, pointer_width: &str) -> Result<&'static Family, TargetError> {
-    if pointer_width != "64" {
-        return Err(TargetError::PointerWidth(target.to_owned()));
+    match family_of(target) {
+        Some(family) if family.pointer_width == pointer_width => Ok(family),
+        None if pointer_width == "64" => Err(TargetError::Unregistered(target.to_owned())),
+        _ => Err(TargetError::PointerWidth(target.to_owned())),
     }
-    family_of(target).ok_or_else(|| TargetError::Unregistered(target.to_owned()))
 }
 
 /// Path of a committed bindings file, relative to the crate.

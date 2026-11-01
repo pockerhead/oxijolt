@@ -17,7 +17,7 @@ from source, which needs:
 - A C++ toolchain (MSVC on Windows, GCC or Clang elsewhere)
 - CMake 3.20 or newer
 
-The bindings are committed under `src/bindings/` for the registered 64-bit targets
+The bindings are committed under `src/bindings/` for the registered targets
 (`build/targets.rs`), so no libclang is needed. Set `JOLTC_LIB_DIR` to a prebuilt install prefix
 (`lib/`, `include/joltc.h`, `include/joltc_ext.h`, `oxijolt-sys-manifest.txt`) to skip both. The
 prefix must match the target, C runtime, features and pinned commits; the build script checks

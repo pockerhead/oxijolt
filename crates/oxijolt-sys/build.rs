@@ -77,7 +77,6 @@ struct NativeConfig {
     target_env: String,
     target_arch: String,
     /// The target's family of committed bindings.
-    #[cfg_attr(feature = "bindgen", allow(dead_code))]
     family: &'static Family,
     /// MSVC runtime library in CMake's spelling, or `"none"` off MSVC.
     crt: &'static str,
@@ -208,6 +207,12 @@ fn main() -> anyhow::Result<()> {
     println!("cargo:rerun-if-changed=build.rs");
 
     let cfg = NativeConfig::from_env()?;
+    if cfg.family.name == "wasm32" {
+        bail!(
+            "{}: building for wasm32 is not supported yet; only its bindings are committed",
+            cfg.target
+        );
+    }
     let prefix = if env::var_os("DOCS_RS").is_some() {
         headers_only_prefix()?
     } else {
