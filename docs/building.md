@@ -197,7 +197,9 @@ Other 32-bit targets and unregistered ones are refused when the build starts.
 34.0 is tested. A `JOLTC_LIB_DIR` prefix for it records the SDK and needs the same `WASI_SDK_PATH`
 to link. No archive is published for wasm, so the default `prebuilt` feature falls back to the
 source build. `wasm32-unknown-emscripten` and `wasm32-wasip1` have committed bindings only and are
-refused, also under `DOCS_RS`. CI builds and tests
+refused, also under `DOCS_RS`. `bash scripts/check_wasm_raw.sh` builds a raw
+wasm32-unknown-unknown module in both precisions and runs it in Node (a world kept across export
+calls, no WASI imports); it needs `WASI_SDK_PATH`, Ninja and Node. CI builds and tests
 `x86_64-pc-windows-msvc`, `x86_64-unknown-linux-gnu` and `aarch64-apple-darwin`; the other
 targets have bindings that the generator produced byte-identical to their family's, but nothing
 builds or tests them. Android cross

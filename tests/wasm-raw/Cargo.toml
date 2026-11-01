@@ -1,0 +1,17 @@
+[package]
+name = "oxijolt-sys-wasm-raw"
+description = "Multi-call check of the raw wasm32-unknown-unknown module, run in Node"
+version = "0.0.0"
+edition = "2021"
+publish = false
+license = "MIT OR Apache-2.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+oxijolt-sys = { path = "../../crates/oxijolt-sys" }
+
+[features]
+double-precision = ["oxijolt-sys/double-precision"]
+cross-platform-deterministic = ["oxijolt-sys/cross-platform-deterministic"]
