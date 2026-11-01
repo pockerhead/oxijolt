@@ -43,6 +43,9 @@ what is planned next.
   slider, cone, swing-twist, six-DOF, gear, rack and pinion, pulley and path
   ([guide](constraints.md)), with impulse readouts for breakable constraints
   ([guide](constraints.md#breakable-constraints), [scene](playground.md#-breakable-bonds-bonds)).
+- Per-constraint solver settings for every kind: velocity and position step overrides for the
+  constraint's island and a solving priority, at creation and at run time
+  ([guide](constraints.md#solver-overrides)).
 - Soft bodies: cloth, pressurised and volume-preserving bodies, with vertex readout and pinning
   ([guide](soft-bodies.md)).
 - Soft body skinning: cloth such as a cape skinned to an animated skeleton or a ragdoll's pose,

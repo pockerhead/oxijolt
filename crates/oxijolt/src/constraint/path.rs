@@ -7,7 +7,7 @@ use oxijolt_sys::*;
 use super::rotational::{check_friction, check_motor};
 use super::world::{sealed, ConstraintSettings};
 use super::{
-    constraint_base, non_negative, within, MotorSettings, SpringSettings, FRICTION_RULE,
+    non_negative, solver::SolverOverrides, within, MotorSettings, SpringSettings, FRICTION_RULE,
     TARGET_VELOCITY_RULE,
 };
 use crate::limits;
@@ -295,6 +295,7 @@ pub struct PathConstraintSettings {
     max_friction_force: f32,
     rotation_constraint: PathRotationConstraint,
     position_motor: MotorSettings,
+    pub(super) solver: SolverOverrides,
 }
 
 impl PathConstraintSettings {
@@ -309,6 +310,7 @@ impl PathConstraintSettings {
             max_friction_force: 0.0,
             rotation_constraint: PathRotationConstraint::Free,
             position_motor: MotorSettings::default(),
+            solver: SolverOverrides::default(),
         }
     }
 
@@ -360,7 +362,7 @@ impl PathConstraintSettings {
 impl PathConstraintSettings {
     fn to_jph(&self, path: *const JPH_PathConstraintPath) -> JPH_PathConstraintSettings {
         JPH_PathConstraintSettings {
-            base: constraint_base(),
+            base: self.solver.to_jph(),
             path,
             pathPosition: self.path_position.to_jph(),
             pathRotation: self.path_rotation.to_jph(),
@@ -374,6 +376,7 @@ impl PathConstraintSettings {
 
 impl sealed::Settings for PathConstraintSettings {
     fn validate(&self) -> Result<(), &'static str> {
+        self.solver.validate()?;
         if !limits::is_local_offset(self.path_position) {
             return Err("path position must be within limits::MAX_SHAPE_EXTENT per axis");
         }

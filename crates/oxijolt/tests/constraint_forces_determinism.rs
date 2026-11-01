@@ -1,6 +1,8 @@
 //! Determinism of the constraint impulse readouts: a hanging graph of welded cubes large enough
 //! for Jolt to split its island for parallel solving, next to a loaded constraint of every kind,
-//! records the same readouts bit for bit with 1 and 4 worker threads, in two processes.
+//! records the same readouts bit for bit with 1 and 4 worker threads, in two processes. A second
+//! run gives the grid welds differing solver priorities and step overrides, changed again while
+//! the island is split.
 
 mod common;
 
@@ -31,6 +33,11 @@ const KICK_TICK: usize = 60;
 const CUT_TICK: usize = 150;
 /// The tick after whose step every readout getter must read a load.
 const LOADED_TICK: usize = 149;
+/// The tick before whose step the solver overrides of some grid welds change, in the
+/// [`SOLVER_OVERRIDES`] run.
+const RETUNE_TICK: usize = 100;
+/// The scenario variant whose grid welds carry solver priorities and step overrides.
+const SOLVER_OVERRIDES: &str = "solver_overrides";
 
 /// The weld graph, its anchor and [`all_kinds_rig`].
 struct Scene {
@@ -43,10 +50,12 @@ struct Scene {
     welds: Vec<(ConstraintId<FixedConstraint>, [usize; 2])>,
     /// Every constraint, in creation order.
     constraints: Vec<AnyConstraintId>,
+    /// Whether the grid welds carry solver priorities and step overrides.
+    overrides: bool,
 }
 
 impl Scene {
-    fn new(threads: u32) -> Self {
+    fn new(threads: u32, overrides: bool) -> Self {
         let mut world = world(GRAVITY, threads);
         let grid: Vec<BodyId> = (0..GRID * GRID)
             .map(|i| cube(&mut world, cell_centre(i), MASS))
@@ -58,7 +67,14 @@ impl Scene {
             let below = (row + 1 < GRID).then_some((i + GRID, [0.0, -PITCH / 2.0, 0.0]));
             for (j, offset) in right.into_iter().chain(below) {
                 let point = shifted(cell_centre(i), offset);
-                let weld = FixedConstraintSettings::new(point, X, Y);
+                let mut weld = FixedConstraintSettings::new(point, X, Y);
+                if overrides {
+                    let k = welds.len();
+                    weld = weld
+                        .constraint_priority((k % 3) as u32)
+                        .velocity_steps_override(if k % 7 == 0 { 16 } else { 0 })
+                        .position_steps_override(if k % 11 == 0 { 4 } else { 0 });
+                }
                 let id = world.create_constraint(grid[i], grid[j], &weld).unwrap();
                 welds.push((id, [i, j]));
             }
@@ -80,6 +96,7 @@ impl Scene {
             grid,
             welds,
             constraints,
+            overrides,
         }
     }
 
@@ -92,6 +109,14 @@ impl Scene {
                 .unwrap()
                 .add_impulse(Vec3::new(0.0, 0.0, 10.0))
                 .unwrap();
+        }
+        if self.overrides && tick == RETUNE_TICK {
+            for (k, &(id, _)) in self.welds.iter().enumerate().filter(|(k, _)| k % 5 == 0) {
+                let mut weld = self.world.constraint_mut(id).unwrap();
+                weld.set_constraint_priority(5 - (k % 2) as u32);
+                weld.set_velocity_steps_override(20).unwrap();
+                weld.set_position_steps_override(3).unwrap();
+            }
         }
         if tick == CUT_TICK {
             // The vertical welds of the right column's top four cubes.
@@ -174,9 +199,10 @@ fn cell_centre(i: usize) -> RVec3 {
     shifted(GRID_ORIGIN, [column * PITCH, -row * PITCH, 0.0])
 }
 
-/// The scene run for [`TICKS`] ticks with `threads` workers.
-fn weld_graph(threads: u32) -> Digest {
-    let mut scene = Scene::new(threads);
+/// The scene run for [`TICKS`] ticks with `threads` workers, with solver overrides on the grid
+/// welds when `overrides`.
+fn weld_graph(threads: u32, overrides: bool) -> Digest {
+    let mut scene = Scene::new(threads, overrides);
     let mut digest = Digest::new();
     for tick in 1..=TICKS {
         scene.tick(tick);
@@ -188,11 +214,11 @@ fn weld_graph(threads: u32) -> Digest {
 #[test]
 #[ignore = "child process of the constraint impulse determinism gate"]
 fn constraint_forces_child() {
-    let Some((scenario, threads, _)) = child_request() else {
+    let Some((scenario, threads, variant)) = child_request() else {
         return;
     };
     assert_eq!(scenario, "weld_graph");
-    finish_child(&weld_graph(threads));
+    finish_child(&weld_graph(threads, variant == SOLVER_OVERRIDES));
 }
 
 #[test]
@@ -202,4 +228,19 @@ fn constraint_impulses_are_identical_with_1_and_4_workers() {
     assert_eq!(one.ticks.len(), TICKS);
     assert_same("1 vs 4 workers in two processes", &one, &four);
     assert_ne!(one.ticks[KICK_TICK].state, one.ticks[TICKS - 1].state);
+}
+
+#[test]
+fn solver_overrides_are_identical_with_1_and_4_workers() {
+    let one = digest_in_child("constraint_forces_child", "weld_graph", 1, SOLVER_OVERRIDES);
+    let four = digest_in_child("constraint_forces_child", "weld_graph", 4, SOLVER_OVERRIDES);
+    assert_eq!(one.ticks.len(), TICKS);
+    assert_same("1 vs 4 workers in two processes", &one, &four);
+    let plain = digest_in_child("constraint_forces_child", "weld_graph", 1, "");
+    for tick in [RETUNE_TICK - 2, TICKS - 1] {
+        assert_ne!(
+            one.ticks[tick].state, plain.ticks[tick].state,
+            "tick {tick}"
+        );
+    }
 }

@@ -7,7 +7,7 @@ use oxijolt_sys::*;
 
 use super::world::sealed::{self, ReferencedConstraint};
 use super::world::ConstraintSettings;
-use super::{constraint_base, ConstraintSpace, SpringSettings, FRAME_AXES_RULE};
+use super::{solver::SolverOverrides, ConstraintSpace, SpringSettings, FRAME_AXES_RULE};
 use crate::limits;
 use crate::math::is_unit;
 use crate::{
@@ -115,6 +115,7 @@ pub struct GearConstraintSettings {
     hinge_axis2: Vec3,
     ratio: f32,
     hinges: Option<[ConstraintId<HingeConstraint>; 2]>,
+    pub(super) solver: SolverOverrides,
 }
 
 impl Default for GearConstraintSettings {
@@ -134,6 +135,7 @@ impl GearConstraintSettings {
             hinge_axis2,
             ratio,
             hinges: None,
+            solver: SolverOverrides::default(),
         }
     }
 
@@ -172,6 +174,7 @@ impl sealed::Settings for GearConstraintSettings {
     const NEEDS_DYNAMIC_BODIES: bool = true;
 
     fn validate(&self) -> Result<(), &'static str> {
+        self.solver.validate()?;
         if !(is_unit(self.hinge_axis1) && is_unit(self.hinge_axis2)) {
             return Err(FRAME_AXES_RULE);
         }
@@ -198,7 +201,7 @@ impl sealed::Settings for GearConstraintSettings {
         body2: NonNull<JPH_Body>,
     ) -> *mut JPH_Constraint {
         let settings = JPH_GearConstraintSettings {
-            base: constraint_base(),
+            base: self.solver.to_jph(),
             space: self.space.to_jph(),
             hingeAxis1: self.hinge_axis1.to_jph(),
             hingeAxis2: self.hinge_axis2.to_jph(),
@@ -271,6 +274,7 @@ pub struct RackAndPinionConstraintSettings {
         ConstraintId<HingeConstraint>,
         ConstraintId<SliderConstraint>,
     )>,
+    pub(super) solver: SolverOverrides,
 }
 
 impl Default for RackAndPinionConstraintSettings {
@@ -291,6 +295,7 @@ impl RackAndPinionConstraintSettings {
             slider_axis,
             ratio,
             constraints: None,
+            solver: SolverOverrides::default(),
         }
     }
 
@@ -332,7 +337,7 @@ impl RackAndPinionConstraintSettings {
 
     fn to_jph(&self) -> JPH_RackAndPinionConstraintSettings {
         JPH_RackAndPinionConstraintSettings {
-            base: constraint_base(),
+            base: self.solver.to_jph(),
             space: self.space.to_jph(),
             hingeAxis: self.hinge_axis.to_jph(),
             sliderAxis: self.slider_axis.to_jph(),
@@ -345,6 +350,7 @@ impl sealed::Settings for RackAndPinionConstraintSettings {
     const NEEDS_DYNAMIC_BODIES: bool = true;
 
     fn validate(&self) -> Result<(), &'static str> {
+        self.solver.validate()?;
         if !(is_unit(self.hinge_axis) && is_unit(self.slider_axis)) {
             return Err(FRAME_AXES_RULE);
         }

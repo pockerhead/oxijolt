@@ -7,8 +7,8 @@ use oxijolt_sys::*;
 use super::lever::check_spring;
 use super::world::{sealed, ConstraintSettings};
 use super::{
-    constraint_base, point_anchors, validate_frame, validate_point, within, ConstraintSpace,
-    SpringSettings,
+    point_anchors, solver::SolverOverrides, validate_frame, validate_point, within,
+    ConstraintSpace, SpringSettings,
 };
 use crate::limits;
 use crate::{
@@ -31,6 +31,7 @@ pub struct FixedConstraintSettings {
     point2: RVec3,
     axis_x2: Vec3,
     axis_y2: Vec3,
+    pub(super) solver: SolverOverrides,
 }
 
 impl Default for FixedConstraintSettings {
@@ -56,6 +57,7 @@ impl FixedConstraintSettings {
             point2: point,
             axis_x2: axis_x,
             axis_y2: axis_y,
+            solver: SolverOverrides::default(),
         }
     }
 
@@ -95,7 +97,7 @@ impl FixedConstraintSettings {
 
     fn to_jph(&self) -> JPH_FixedConstraintSettings {
         JPH_FixedConstraintSettings {
-            base: constraint_base(),
+            base: self.solver.to_jph(),
             space: self.space.to_jph(),
             autoDetectPoint: self.auto_detect_point,
             point1: self.point1.to_jph(),
@@ -110,6 +112,7 @@ impl FixedConstraintSettings {
 
 impl sealed::Settings for FixedConstraintSettings {
     fn validate(&self) -> Result<(), &'static str> {
+        self.solver.validate()?;
         validate_frame(self.point1, self.axis_x1, self.axis_y1)?;
         validate_frame(self.point2, self.axis_x2, self.axis_y2)?;
         // Jolt reads the bodies' world positions for the point, which only means something in
@@ -176,6 +179,7 @@ pub struct PointConstraintSettings {
     space: ConstraintSpace,
     point1: RVec3,
     point2: RVec3,
+    pub(super) solver: SolverOverrides,
 }
 
 impl PointConstraintSettings {
@@ -185,6 +189,7 @@ impl PointConstraintSettings {
             space: ConstraintSpace::WorldSpace,
             point1: point,
             point2: point,
+            solver: SolverOverrides::default(),
         }
     }
 
@@ -212,6 +217,7 @@ impl PointConstraintSettings {
 
 impl sealed::Settings for PointConstraintSettings {
     fn validate(&self) -> Result<(), &'static str> {
+        self.solver.validate()?;
         validate_point(self.point1)?;
         validate_point(self.point2)
     }
@@ -230,7 +236,7 @@ impl sealed::Settings for PointConstraintSettings {
         body2: NonNull<JPH_Body>,
     ) -> *mut JPH_Constraint {
         let settings = JPH_PointConstraintSettings {
-            base: constraint_base(),
+            base: self.solver.to_jph(),
             space: self.space.to_jph(),
             point1: self.point1.to_jph(),
             point2: self.point2.to_jph(),
@@ -305,6 +311,7 @@ pub struct DistanceConstraintSettings {
     point2: RVec3,
     range: DistanceRange,
     limits_spring: SpringSettings,
+    pub(super) solver: SolverOverrides,
 }
 
 impl DistanceConstraintSettings {
@@ -343,6 +350,7 @@ impl DistanceConstraintSettings {
 
 impl sealed::Settings for DistanceConstraintSettings {
     fn validate(&self) -> Result<(), &'static str> {
+        self.solver.validate()?;
         validate_point(self.point1)?;
         validate_point(self.point2)?;
         if let DistanceRange::Range { min, max } = self.range {
@@ -366,7 +374,7 @@ impl sealed::Settings for DistanceConstraintSettings {
     ) -> *mut JPH_Constraint {
         let (min, max) = self.range.limits();
         let settings = JPH_DistanceConstraintSettings {
-            base: constraint_base(),
+            base: self.solver.to_jph(),
             space: self.space.to_jph(),
             point1: self.point1.to_jph(),
             point2: self.point2.to_jph(),

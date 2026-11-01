@@ -8,7 +8,7 @@ use super::lever::check_spring;
 use super::rotational::{check_friction, check_motor};
 use super::world::{sealed, ConstraintSettings};
 use super::{
-    constraint_base, non_negative, point_anchors, validate_frame, within, ConstraintSpace,
+    non_negative, point_anchors, solver::SolverOverrides, validate_frame, within, ConstraintSpace,
     MotorSettings, SpringSettings, FRICTION_RULE, TARGET_VELOCITY_RULE,
 };
 use crate::limits;
@@ -59,6 +59,7 @@ pub struct SliderConstraintSettings {
     limits_spring: SpringSettings,
     max_friction_force: f32,
     motor: MotorSettings,
+    pub(super) solver: SolverOverrides,
 }
 
 impl Default for SliderConstraintSettings {
@@ -88,6 +89,7 @@ impl SliderConstraintSettings {
             limits_spring: SpringSettings::default(),
             max_friction_force: 0.0,
             motor: MotorSettings::default(),
+            solver: SolverOverrides::default(),
         }
     }
 
@@ -158,6 +160,7 @@ impl SliderConstraintSettings {
 
 impl sealed::Settings for SliderConstraintSettings {
     fn validate(&self) -> Result<(), &'static str> {
+        self.solver.validate()?;
         validate_frame(self.point1, self.slider_axis1, self.normal_axis1)?;
         validate_frame(self.point2, self.slider_axis2, self.normal_axis2)?;
         if self.auto_detect_point && self.space != ConstraintSpace::WorldSpace {
@@ -192,7 +195,7 @@ impl sealed::Settings for SliderConstraintSettings {
     ) -> *mut JPH_Constraint {
         let (min, max) = self.limits.unwrap_or(NO_SLIDER_LIMITS);
         let settings = JPH_SliderConstraintSettings {
-            base: constraint_base(),
+            base: self.solver.to_jph(),
             space: self.space.to_jph(),
             autoDetectPoint: self.auto_detect_point,
             point1: self.point1.to_jph(),

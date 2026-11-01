@@ -6,7 +6,7 @@ use oxijolt_sys::*;
 
 use super::world::{sealed, ConstraintSettings};
 use super::{
-    constraint_base, point_anchors, validate_point, within, ConstraintSpace, SpringSettings,
+    point_anchors, solver::SolverOverrides, validate_point, within, ConstraintSpace, SpringSettings,
 };
 use crate::body::with_locked_bodies;
 use crate::limits;
@@ -64,6 +64,7 @@ pub struct PulleyConstraintSettings {
     fixed_point2: RVec3,
     ratio: f32,
     length: PulleyLength,
+    pub(super) solver: SolverOverrides,
 }
 
 impl Default for PulleyConstraintSettings {
@@ -89,6 +90,7 @@ impl PulleyConstraintSettings {
             fixed_point2,
             ratio: 1.0,
             length: PulleyLength::UpToCurrent,
+            solver: SolverOverrides::default(),
         }
     }
 
@@ -121,7 +123,7 @@ impl PulleyConstraintSettings {
             PulleyLength::Range { min, max } => (min, max),
         };
         JPH_PulleyConstraintSettings {
-            base: constraint_base(),
+            base: self.solver.to_jph(),
             space: self.space.to_jph(),
             bodyPoint1: self.body_point1.to_jph(),
             fixedPoint1: self.fixed_point1.to_jph(),
@@ -138,6 +140,7 @@ impl sealed::Settings for PulleyConstraintSettings {
     const NEEDS_DYNAMIC_BODIES: bool = true;
 
     fn validate(&self) -> Result<(), &'static str> {
+        self.solver.validate()?;
         for point in [
             self.body_point1,
             self.fixed_point1,
@@ -285,8 +288,8 @@ impl PhysicsWorld {
     }
 
     /// Replaces each pulley by one created from what [`rebased_pulleys`](Self::rebased_pulleys)
-    /// computed, in id order, after the bodies have moved. The id, enabled state, ratio and
-    /// lengths stay; the warm start goes, and Jolt's constraint order changes.
+    /// computed, in id order, after the bodies have moved. The id, enabled state, ratio, lengths,
+    /// priority and step overrides stay; the warm start goes, and Jolt's constraint order changes.
     pub(crate) fn apply_pulley_rebase(&mut self, rebased: Vec<PulleyRebase>) {
         for pulley in rebased {
             let entry = self

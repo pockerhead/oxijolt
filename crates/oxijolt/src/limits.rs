@@ -26,7 +26,7 @@
 //! [docs/coverage.md]: https://github.com/pockerhead/oxijolt/blob/main/docs/coverage.md
 
 use crate::math::jolt_length;
-use crate::{PhysicsWorld, Quat, RVec3, Real, Vec3};
+use crate::{PhysicsWorld, Quat, RVec3, Real, Vec3, WorldSettings};
 
 /// Largest absolute value of each component of a caller-given world position, in metres:
 /// 5 km with `f32` positions, 10 000 km with the `double-precision` feature.
@@ -258,6 +258,16 @@ pub const MAX_TRACK_MASS_RATIO: f32 = 0.25;
 ///
 /// [docs/limits.md#lever-arm-ratio]: https://github.com/pockerhead/oxijolt/blob/main/docs/limits.md#lever-arm-ratio
 pub const MAX_LEVER_ARM_RATIO: f32 = 1000.0;
+
+/// Largest velocity or position step override of a constraint
+/// ([`HingeConstraintSettings::velocity_steps_override`](crate::HingeConstraintSettings::velocity_steps_override)
+/// and the same on every constraint kind), 255: Jolt asserts the overrides below 256 and keeps
+/// them in 8 bits, like the world's step counts ([`WorldSettings::MAX_SOLVER_STEPS`]).
+///
+/// See [docs/limits.md#solver-step-counts].
+///
+/// [docs/limits.md#solver-step-counts]: https://github.com/pockerhead/oxijolt/blob/main/docs/limits.md#solver-step-counts
+pub const MAX_SOLVER_STEPS_OVERRIDE: u32 = WorldSettings::MAX_SOLVER_STEPS;
 
 /// Shortest distance between two soft body vertices that a face edge or an explicit edge
 /// joins, in metres: 1 mm, measured as Jolt measures a rest length (an `f32` difference and an

@@ -9,8 +9,8 @@ use oxijolt_sys::*;
 use super::lever::check_spring;
 use super::world::{sealed, ConstraintSettings};
 use super::{
-    constraint_base, non_negative, point_anchors, validate_hinge_limits, validate_point, within,
-    ConstraintSpace, MotorSettings, SpringSettings, FRAME_AXES_RULE, FRICTION_RULE,
+    non_negative, point_anchors, solver::SolverOverrides, validate_hinge_limits, validate_point,
+    within, ConstraintSpace, MotorSettings, SpringSettings, FRAME_AXES_RULE, FRICTION_RULE,
 };
 use crate::limits;
 use crate::math::is_unit;
@@ -295,6 +295,7 @@ pub struct ConeConstraintSettings {
     point2: RVec3,
     twist_axis2: Vec3,
     half_cone_angle: f32,
+    pub(super) solver: SolverOverrides,
 }
 
 impl Default for ConeConstraintSettings {
@@ -314,6 +315,7 @@ impl ConeConstraintSettings {
             point2: point,
             twist_axis2: twist_axis,
             half_cone_angle,
+            solver: SolverOverrides::default(),
         }
     }
 
@@ -352,6 +354,7 @@ fn validate_half_cone_angle(angle: f32) -> Result<(), &'static str> {
 
 impl sealed::Settings for ConeConstraintSettings {
     fn validate(&self) -> Result<(), &'static str> {
+        self.solver.validate()?;
         validate_point(self.point1)?;
         validate_point(self.point2)?;
         if !(is_unit(self.twist_axis1) && is_unit(self.twist_axis2)) {
@@ -374,7 +377,7 @@ impl sealed::Settings for ConeConstraintSettings {
         body2: NonNull<JPH_Body>,
     ) -> *mut JPH_Constraint {
         let settings = JPH_ConeConstraintSettings {
-            base: constraint_base(),
+            base: self.solver.to_jph(),
             space: self.space.to_jph(),
             point1: self.point1.to_jph(),
             twistAxis1: self.twist_axis1.to_jph(),

@@ -119,6 +119,81 @@ The settings are checked before anything reaches Jolt, and a failing call change
   coupling.
 - **Pulley ratios** are positive and within `1 / limits::MAX_RATIO..=limits::MAX_RATIO`.
 
+## Solver overrides
+
+The settings of every kind take three solver settings of Jolt's `ConstraintSettings`, and a live
+constraint reads them through `ConstraintRef` and `ConstraintMut` and changes them through
+`ConstraintMut`:
+
+- `velocity_steps_override` and `position_steps_override` (`set_velocity_steps_override`,
+  `set_position_steps_override`): iterations for the island the constraint is in, at most
+  `limits::MAX_SOLVER_STEPS_OVERRIDE` (255, [limits.md](limits.md#solver-step-counts)). 0, the
+  default, asks for the world's `WorldSettings::velocity_steps` or `position_steps`.
+- `constraint_priority` (`set_constraint_priority`): the constraint's place in the order the
+  solver handles its island in. Default 0.
+
+For each island and step, Jolt takes the largest count asked for by the island's active
+constraints and by the dynamic bodies of its contacts; when any of them asks for none (0), the
+world's count joins the maximum (`CalculateSolverSteps.h`, `PhysicsSystem.cpp:1513-1531`, and
+`LargeIslandSplitter.cpp:327-353` for islands it splits). oxijolt gives bodies no override, so a
+body asks for the world's count. Every constraint and contact of the island is then solved with
+that count:
+
+- An override above the world's count on one constraint raises the count of its whole island,
+  contacts included. A welded tower standing on the ground also makes its ground contacts, and
+  everything else touching it, pay for the extra iterations.
+- An override below the world's count lowers the count only for an island without contacts whose
+  active constraints all ask for fewer.
+- A disabled constraint, or one whose bodies sleep, is not active and asks for nothing.
+- In an island of fewer than 128 constraints and contacts Jolt stops iterating after an iteration
+  that applies no impulse, so the count is a maximum. A larger island, which Jolt splits for
+  parallel solving, always runs the full count (`LargeIslandSplitter.cpp:127-170`).
+
+Jolt sorts the constraints of an island by priority, lowest first, and equal priorities by its
+index in its constraint list (`ConstraintManager.cpp:103-115`). Within each iteration a constraint
+solved later ends closer to satisfied, so the constraint that must hold best gets the highest
+priority. In an island of 128 or more constraints and contacts the order holds only within each
+group of constraints that share no body: Jolt solves those groups one after another in the order
+it formed them, so a higher priority can run before a lower one on the same body
+(`LargeIslandSplitter.cpp:236-260,343-418`). The index follows creation order until a removal, or the recreation of a pulley by a
+rebase, moves the last constraint into the freed place.
+
+In `tests/constraint_solver.rs`, a cantilever of eight 1 kg cubes welded in a row to a static
+anchor, with a 20 kg cube at the end, sags 3.6 m below the anchor on average over its second
+second at the default 10 velocity steps, and 0.49 m with a velocity step override of 100 on every
+weld. `the_island_uses_the_largest_override` checks the rules above on the same chain.
+
+The setters wake the constraint's bodies. A `WorldState` does not hold these settings
+([state.md](state.md#what-is-not-saved)).
+
+```rust
+use oxijolt::*;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut world = PhysicsWorld::new(WorldSettings::default())?;
+    let x = Vec3::new(1.0, 0.0, 0.0);
+    let y = Vec3::new(0.0, 1.0, 0.0);
+    let cube = Shape::new_box(Vec3::new(0.25, 0.25, 0.25))?;
+    let wall = world.create_body(&cube, &BodySettings::new_static())?;
+    let beam = world.create_body(
+        &cube,
+        &BodySettings::new_dynamic().position(RVec3::new(0.6, 0.0, 0.0)),
+    )?;
+
+    // While the weld is active its island gets a velocity step count of at least 40.
+    let settings = FixedConstraintSettings::new(RVec3::new(0.3, 0.0, 0.0), x, y)
+        .velocity_steps_override(40)
+        .constraint_priority(1);
+    let weld = world.create_constraint(wall, beam, &settings)?;
+    assert_eq!(world.constraint(weld)?.velocity_steps_override(), 40);
+
+    // Back to the world's count.
+    world.constraint_mut(weld)?.set_velocity_steps_override(0)?;
+    assert!(world.step(1.0 / 60.0)?.is_complete());
+    Ok(())
+}
+```
+
 ## References between constraints
 
 A gear can name the hinges that hold its two bodies (`GearConstraintSettings::hinges`), and a rack
@@ -250,7 +325,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 - A `WorldState` holds each constraint's enabled flag, warm start (the impulses the
   `total_lambda*` readouts return), motor states and targets (for a path also its motor settings
   and friction), but not the rest of its configuration: limits, motor settings, friction,
-  distances, pulley lengths and the cone angle ([state.md](state.md)).
+  distances, pulley lengths, the cone angle, the priority and the step overrides
+  ([state.md](state.md)).
 - Each world numbers its constraints from 1 in creation order and never reuses an id. Dropping a
   world removes its constraints first.
 
