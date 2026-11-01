@@ -498,3 +498,66 @@ jobs:
         run: echo "JOLTC_LIB_DIR=$RUNNER_TEMP/joltc-prefix" >> "$GITHUB_ENV"
 
       - run: cargo check --workspace --exclude playground --exclude comparison --all-targets
+
+  # wasm32-unknown-unknown with a pinned wasi-sdk and Rust: the raw and safe fixtures in Node, then
+  # the cross-platform determinism gate (scripts/check_wasm_determinism.sh), which compares the
+  # determinism scene's per-tick records from Node and headless Chrome with a native
+  # cross-platform-deterministic run on this runner, single and double precision, and checks that a
+  # native run without the feature and a record with one flipped bit turn it red.
+  wasm:
+    name: wasm32 (Node, Chrome, cross-platform determinism)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      CARGO_TERM_COLOR: always
+      WASI_SDK_VERSION: "34.0"
+      # GitHub's digest of the release asset wasi-sdk-34.0-x86_64-linux.tar.gz.
+      WASI_SDK_SHA256: b761e3a0721dbae9c09a0059e5fdb2bf917d1b4a8a7b430fb3b5aafb0984b2c4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      # The build refuses wasm with an older Rust (rust-lld before LLVM 21).
+      - uses: dtolnay/rust-toolchain@1.91
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: wasm
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Install wasi-sdk
+        run: |
+          archive="wasi-sdk-$WASI_SDK_VERSION-x86_64-linux.tar.gz"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION%%.*}/$archive"
+          echo "$WASI_SDK_SHA256  $RUNNER_TEMP/$archive" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP"
+          echo "WASI_SDK_PATH=$RUNNER_TEMP/wasi-sdk-$WASI_SDK_VERSION-x86_64-linux" >> "$GITHUB_ENV"
+
+      - name: Chrome
+        run: |
+          echo "CHROME=$(command -v google-chrome)" >> "$GITHUB_ENV"
+          google-chrome --version
+
+      - run: bash scripts/check_wasm_raw.sh
+      - run: bash scripts/check_wasm_safe.sh
+      - run: bash scripts/check_wasm_determinism.sh
+
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-determinism-records
+          path: target/wasm-determinism
+          if-no-files-found: ignore

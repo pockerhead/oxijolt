@@ -202,7 +202,10 @@ well, single-threaded; its crate documentation lists what changes on that target
 `bash scripts/check_wasm_raw.sh` builds a raw wasm32-unknown-unknown module in both precisions
 and runs it in Node (a world kept across export calls, no WASI imports); it needs `WASI_SDK_PATH`, Ninja and Node.
 `bash scripts/check_wasm_safe.sh` does the same for a module of the safe crate (default world,
-refused worker threads, save and restore, a panicking listener that traps). CI builds and tests
+refused worker threads, save and restore, a panicking listener that traps).
+`bash scripts/check_wasm_determinism.sh` compares the module's results with a native run
+([determinism](determinism.md#how-it-is-checked)); it also needs Chrome. CI runs the three scripts
+on Linux with wasi-sdk 34 and Rust 1.91. CI builds and tests
 `x86_64-pc-windows-msvc`, `x86_64-unknown-linux-gnu` and `aarch64-apple-darwin`; the other
 targets have bindings that the generator produced byte-identical to their family's, but CI does
 not build or test them. Android cross

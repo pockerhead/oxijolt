@@ -5,8 +5,8 @@ members = [
     "xtask",
     "examples/playground",
     "benches/comparison",
-    # Built for wasm32-unknown-unknown by scripts/check_wasm_raw.sh and check_wasm_safe.sh; empty
-    # on other targets.
+    # Built for wasm32-unknown-unknown by scripts/check_wasm_raw.sh, check_wasm_safe.sh and
+    # check_wasm_determinism.sh; empty on other targets except the native example scene_records.
     "tests/wasm-raw",
     "tests/wasm-safe",
 ]
