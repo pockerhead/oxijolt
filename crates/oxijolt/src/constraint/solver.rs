@@ -63,7 +63,9 @@ macro_rules! solver_override_builders {
             impl $settings {
                 /// The order in which the solver handles this constraint among the others of its
                 /// island: Jolt sorts them by priority, lowest first, so a higher priority is
-                /// solved later in each iteration and is more likely to end satisfied. Default 0.
+                /// solved later in each iteration and is more likely to end satisfied. Islands of
+                /// 128 or more constraints and contacts keep this order only among constraints
+                /// solved in the same parallel group. Default 0.
                 /// See [docs/constraints.md#solver-overrides].
                 ///
                 /// [docs/constraints.md#solver-overrides]: https://github.com/pockerhead/oxijolt/blob/main/docs/constraints.md#solver-overrides

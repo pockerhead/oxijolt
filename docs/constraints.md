@@ -145,12 +145,17 @@ that count:
 - An override below the world's count lowers the count only for an island without contacts whose
   active constraints all ask for fewer.
 - A disabled constraint, or one whose bodies sleep, is not active and asks for nothing.
-- Jolt stops iterating after an iteration that applies no impulse, so the count is a maximum.
+- In an island of fewer than 128 constraints and contacts Jolt stops iterating after an iteration
+  that applies no impulse, so the count is a maximum. A larger island, which Jolt splits for
+  parallel solving, always runs the full count (`LargeIslandSplitter.cpp:127-170`).
 
 Jolt sorts the constraints of an island by priority, lowest first, and equal priorities by its
 index in its constraint list (`ConstraintManager.cpp:103-115`). Within each iteration a constraint
 solved later ends closer to satisfied, so the constraint that must hold best gets the highest
-priority. The index follows creation order until a removal, or the recreation of a pulley by a
+priority. In an island of 128 or more constraints and contacts the order holds only within each
+group of constraints that share no body: Jolt solves those groups one after another in the order
+it formed them, so a higher priority can run before a lower one on the same body
+(`LargeIslandSplitter.cpp:236-260,343-418`). The index follows creation order until a removal, or the recreation of a pulley by a
 rebase, moves the last constraint into the freed place.
 
 In `tests/constraint_solver.rs`, a cantilever of eight 1 kg cubes welded in a row to a static
@@ -175,7 +180,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &BodySettings::new_dynamic().position(RVec3::new(0.6, 0.0, 0.0)),
     )?;
 
-    // This weld's island runs at least 40 velocity iterations while the weld is active.
+    // While the weld is active its island gets a velocity step count of at least 40.
     let settings = FixedConstraintSettings::new(RVec3::new(0.3, 0.0, 0.0), x, y)
         .velocity_steps_override(40)
         .constraint_priority(1);

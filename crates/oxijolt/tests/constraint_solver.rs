@@ -265,7 +265,7 @@ impl Cantilever {
     /// How far the load hangs below the anchor's height now, metres.
     fn sag(&self) -> f64 {
         let load = self.world.body(*self.links.last().unwrap()).unwrap();
-        f64::from(HEIGHT - load.position().y)
+        common::math::wide(HEIGHT - load.position().y)
     }
 
     /// Steps once and appends every link's state to `digest`.
