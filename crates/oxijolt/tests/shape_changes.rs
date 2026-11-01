@@ -252,6 +252,38 @@ fn a_shrinking_static_floor_wakes_the_cube_on_it() {
     assert!((y - 0.2).abs() < 0.03, "{y}");
 }
 
+/// A sleeper resting within the speculative contact distance of the reshaped body is in Jolt's
+/// contact range without touching its bounds; it wakes and falls onto the thinner slab.
+#[test]
+fn set_shape_wakes_a_sleeper_within_speculative_distance() {
+    let mut world = world(GRAVITY, 1);
+    world.set_event_settings(EventSettings::default().body_activation(true));
+    let (floor, cube) = resting_cube(&mut world);
+    let gap = 0.5 * world.speculative_contact_distance();
+    let lifted = RVec3::new(0.0, 0.5 + Real::from(gap), 0.0);
+    world
+        .body_mut(cube)
+        .unwrap()
+        .set_position(lifted, Activation::DontActivate)
+        .unwrap();
+    assert!(world.body(cube).unwrap().is_sleeping());
+    world.take_events();
+    let thin = Shape::new_box(Vec3::new(5.0, 0.2, 5.0)).unwrap();
+    world
+        .body_mut(floor)
+        .unwrap()
+        .set_shape(&thin, None, Activation::DontActivate)
+        .unwrap();
+    assert_eq!(
+        world.take_events().activations,
+        [ActivationEvent::Activated(cube)]
+    );
+    step(&mut world, 30);
+    // The thin slab's top is at y = -0.3, where the cube lands.
+    let y = world.body(cube).unwrap().position().y;
+    assert!((y - 0.2).abs() < 0.03, "{y}");
+}
+
 #[test]
 fn set_shape_wakes_bodies_between_old_and_new_bounds() {
     let mut world = world(GRAVITY, 1);

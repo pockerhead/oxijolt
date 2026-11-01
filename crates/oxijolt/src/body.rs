@@ -26,7 +26,6 @@ mod poses;
 mod properties;
 mod structure;
 
-pub(crate) use access::corners;
 pub use buoyancy::BuoyancySettings;
 pub use dofs::AllowedDofs;
 pub use handle::{BodyMut, BodyRef};

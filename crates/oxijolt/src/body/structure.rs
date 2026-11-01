@@ -3,7 +3,6 @@
 
 use oxijolt_sys::*;
 
-use super::access::corners;
 use super::load::require;
 use super::{
     has_finite_inverse, mass_properties, with_locked_body, with_read_locked_body, Activation,
@@ -12,7 +11,7 @@ use super::{
 };
 use crate::limits::{is_mass, is_vertex_inverse_mass, MASS_RULE};
 use crate::shape::static_only_leaves_are_meshes_of;
-use crate::{BodyError, RVec3, Shape, Vec3};
+use crate::{BodyError, Shape, Vec3};
 
 /// How a body uses a shape: what decides which shapes and masses it may take.
 #[derive(Clone, Copy, Debug)]
@@ -178,8 +177,9 @@ impl BodyMut<'_> {
     /// are kept. With [`Activation::Activate`] the body wakes.
     ///
     /// Jolt does not wake the bodies around a body whose shape changes, so this wakes every
-    /// other non-static body whose current bounds overlap the box enclosing the body's old and
-    /// new bounds, in body-id order, as [`PhysicsWorld::remove_body`] does: nothing stays asleep
+    /// other non-static body whose current bounds come within the speculative contact distance
+    /// of the box enclosing the body's old and new bounds, in body-id order, as
+    /// [`PhysicsWorld::remove_body`] does: nothing stays asleep
     /// floating above a shrunk floor or embedded in a grown one. When the old and new bounds lie
     /// apart, bodies between them that touch neither shape wake too.
     ///
@@ -276,15 +276,20 @@ impl BodyMut<'_> {
         if activation == Activation::Activate {
             self.activate();
         }
-        let (old_min, old_max) = corners(&before.bounds);
-        let (new_min, new_max) = corners(&after);
-        let lower = |a: RVec3, b: RVec3| RVec3::new(a.x.min(b.x), a.y.min(b.y), a.z.min(b.z));
-        let upper = |a: RVec3, b: RVec3| RVec3::new(a.x.max(b.x), a.y.max(b.y), a.z.max(b.z));
-        self.world.wake_bodies_overlapping(
-            lower(old_min, new_min),
-            upper(old_max, new_max),
-            Some(id),
-        );
+        let (old, new) = (before.bounds, after);
+        let enclosing = JPH_AABox {
+            min: JPH_Vec3 {
+                x: old.min.x.min(new.min.x),
+                y: old.min.y.min(new.min.y),
+                z: old.min.z.min(new.min.z),
+            },
+            max: JPH_Vec3 {
+                x: old.max.x.max(new.max.x),
+                y: old.max.y.max(new.max.y),
+                z: old.max.z.max(new.max.z),
+            },
+        };
+        self.world.wake_bodies_near(&enclosing, Some(id));
         Ok(())
     }
 

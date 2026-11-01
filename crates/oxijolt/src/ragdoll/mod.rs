@@ -23,7 +23,7 @@ use std::ptr::NonNull;
 
 use oxijolt_sys::*;
 
-use crate::body::{corners, kinematic_velocities, with_locked_body};
+use crate::body::{kinematic_velocities, with_locked_body};
 use crate::constraint::SixDofConstraintAxis;
 use crate::limits::{self, ANGULAR_VELOCITY_RULE, LINEAR_VELOCITY_RULE};
 use crate::owned::{JoltObject, Owned};
@@ -726,8 +726,9 @@ impl PhysicsWorld {
 
     /// Removes a ragdoll with its parts and joints.
     ///
-    /// Like [`remove_body`](Self::remove_body), wakes every non-static body whose bounds overlap
-    /// a removed part's, part by part in part order and within a part in body-id order.
+    /// Like [`remove_body`](Self::remove_body), wakes every non-static body whose bounds come
+    /// within the speculative contact distance of a removed part's, part by part in part order
+    /// and within a part in body-id order.
     pub fn remove_ragdoll(&mut self, id: RagdollId) -> Result<(), RagdollError> {
         self.ragdoll_entry(id)?;
         self.note_structure_change();
@@ -758,8 +759,7 @@ impl PhysicsWorld {
         }
         self.unregister_ragdoll(entry);
         for bounds in &bounds {
-            let (min, max) = corners(bounds);
-            self.wake_bodies_overlapping(min, max, None);
+            self.wake_bodies_near(bounds, None);
         }
         Ok(())
     }

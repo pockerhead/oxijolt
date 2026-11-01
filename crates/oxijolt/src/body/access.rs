@@ -165,8 +165,8 @@ impl PhysicsWorld {
     /// Removes a body from the world and destroys it; soft bodies are removed the same way.
     ///
     /// Jolt does not wake the bodies around a removed one by itself, so oxijolt wakes every
-    /// non-static body whose current bounds overlap (or touch) the removed body's bounds, in
-    /// body-id order. The woken set depends only on body poses, not on broad-phase maintenance or
+    /// non-static body whose current bounds come within the [speculative contact distance] of
+    /// the removed body's bounds, in body-id order. The woken set depends only on body poses, not on broad-phase maintenance or
     /// worker threads; a stack whose bottom is removed falls.
     ///
     /// The inner body of a character cannot be removed this way
@@ -178,6 +178,8 @@ impl PhysicsWorld {
     /// constraint uses cannot be removed while the constraint exists
     /// ([`BodyError::UsedByConstraint`]); remove the constraint first with
     /// [`remove_constraint`](Self::remove_constraint).
+    ///
+    /// [speculative contact distance]: crate::WorldSettings::speculative_contact_distance
     pub fn remove_body(&mut self, id: BodyId) -> Result<(), BodyError> {
         self.check(id)?;
         self.check_not_owned(id)?;
@@ -197,8 +199,7 @@ impl PhysicsWorld {
         // (Jolt does not validate ids in `DestroyBody`). This thread holds no body lock.
         unsafe { JPH_BodyInterface_RemoveAndDestroyBody(self.body_interface.as_ptr(), id.raw) };
         self.pending_cache_invalidations.remove(&id.raw);
-        let (min, max) = corners(&bounds);
-        self.wake_bodies_overlapping(min, max, None);
+        self.wake_bodies_near(&bounds, None);
         Ok(())
     }
 
@@ -270,6 +271,28 @@ impl PhysicsWorld {
         // SAFETY: the system is live and no step runs (`step` needs `&mut self`); Jolt looks the
         // pair up in its contact cache and never dereferences a body, so any id is safe.
         Ok(unsafe { JPH_PhysicsSystem_WereBodiesInContact(self.system.as_ptr(), a.raw, b.raw) })
+    }
+
+    /// Wakes every non-static body other than `except` whose world bounds come within the
+    /// speculative contact distance of `bounds`, in body-id order: the neighbour wake after a
+    /// body is removed or changed.
+    ///
+    /// Jolt pairs two bodies when their bounds come within that distance
+    /// (`QuadTree::FindCollidingPairs` widens them in `f32` the same way), so a body resting on a
+    /// speculative contact need not touch the exact bounds.
+    pub(crate) fn wake_bodies_near(&mut self, bounds: &JPH_AABox, except: Option<BodyId>) {
+        let margin = self.speculative_contact_distance();
+        let widen = |v: JPH_Vec3, by: f32| JPH_Vec3 {
+            x: v.x + by,
+            y: v.y + by,
+            z: v.z + by,
+        };
+        let widened = JPH_AABox {
+            min: widen(bounds.min, -margin),
+            max: widen(bounds.max, margin),
+        };
+        let (min, max) = corners(&widened);
+        self.wake_bodies_overlapping(min, max, except);
     }
 
     /// Wakes every non-static body other than `except` whose world bounds overlap or touch the
