@@ -2,7 +2,7 @@
 //! results equal to Jolt's thread pool, jobs run inside `queue_job`, re-entrant steps, jobs that
 //! outlive their world, panics in the caller's `queue_job`, the concurrency bound, Jolt's job
 //! pool at the largest collision step count, the choice between the job systems and reading it
-//! back from the world.
+//! back from the settings and the world.
 
 mod common;
 
@@ -448,6 +448,78 @@ fn a_caller_job_system_world_reads_back_the_concurrency_read_at_creation() {
     assert_eq!(world.job_system_kind(), JobSystemKind::Caller);
     assert_eq!(world.max_concurrency(), 7);
     assert_eq!(jobs.reads.load(Ordering::Relaxed), 1);
+}
+
+#[test]
+fn default_settings_read_back_a_thread_pool_with_one_worker() {
+    assert_eq!(
+        WorldSettings::default().job_system_kind(),
+        JobSystemKind::ThreadPool { worker_threads: 1 }
+    );
+}
+
+#[test]
+fn settings_read_back_the_thread_pool_and_single_threaded_choices() {
+    for workers in [1, 2, WorldSettings::MAX_WORKER_THREADS] {
+        assert_eq!(
+            WorldSettings::default()
+                .worker_threads(workers)
+                .job_system_kind(),
+            JobSystemKind::ThreadPool {
+                worker_threads: workers
+            }
+        );
+    }
+    assert_eq!(
+        single_threaded().job_system_kind(),
+        JobSystemKind::SingleThreaded
+    );
+}
+
+#[test]
+fn settings_read_back_a_caller_job_system_without_calling_it() {
+    let jobs = Arc::new(FixedConcurrency {
+        value: 7,
+        reads: AtomicUsize::new(0),
+    });
+    let settings = WorldSettings::default().job_system(jobs.clone());
+    assert_eq!(settings.job_system_kind(), JobSystemKind::Caller);
+    assert_eq!(jobs.reads.load(Ordering::Relaxed), 0);
+}
+
+#[test]
+fn settings_read_back_the_last_job_system_choice() {
+    let jobs: Arc<dyn JobSystem> = Arc::new(InlineJobs { concurrency: 3 });
+    let pool = JobSystemKind::ThreadPool { worker_threads: 2 };
+    let cases = [
+        (single_threaded().worker_threads(2), pool),
+        (
+            WorldSettings::default()
+                .job_system(jobs.clone())
+                .worker_threads(2),
+            pool,
+        ),
+        (
+            WorldSettings::default().worker_threads(2).single_threaded(),
+            JobSystemKind::SingleThreaded,
+        ),
+        (
+            WorldSettings::default()
+                .job_system(jobs.clone())
+                .single_threaded(),
+            JobSystemKind::SingleThreaded,
+        ),
+        (
+            WorldSettings::default()
+                .worker_threads(2)
+                .job_system(jobs.clone()),
+            JobSystemKind::Caller,
+        ),
+        (single_threaded().job_system(jobs), JobSystemKind::Caller),
+    ];
+    for (settings, kind) in cases {
+        assert_eq!(settings.job_system_kind(), kind, "{settings:?}");
+    }
 }
 
 #[test]

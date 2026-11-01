@@ -27,7 +27,8 @@ impl fmt::Debug for JobSystemChoice {
     }
 }
 
-/// The kind of job system a world runs its jobs on ([`PhysicsWorld::job_system_kind`]), chosen
+/// The kind of job system a world runs its jobs on ([`PhysicsWorld::job_system_kind`],
+/// [`WorldSettings::job_system_kind`]), chosen
 /// with [`WorldSettings::worker_threads`], [`WorldSettings::single_threaded`] or
 /// [`WorldSettings::job_system`].
 ///
@@ -235,6 +236,17 @@ impl WorldSettings {
     pub fn job_system(mut self, value: Arc<dyn JobSystem>) -> Self {
         self.jobs = JobSystemChoice::Caller(value);
         self
+    }
+
+    /// The kind of job system these settings choose: the last of
+    /// [`worker_threads`](Self::worker_threads), [`single_threaded`](Self::single_threaded) and
+    /// [`job_system`](Self::job_system) called, or Jolt's thread pool with one worker
+    /// (`ThreadPool { worker_threads: 1 }`) when none was. Settings do not record whether a
+    /// choice was made; to tell whether it differs from the default, compare with
+    /// `WorldSettings::default().job_system_kind()`. A caller job system reads as
+    /// [`JobSystemKind::Caller`] without a call to its [`JobSystem::max_concurrency`].
+    pub fn job_system_kind(&self) -> JobSystemKind {
+        self.jobs.kind()
     }
 
     /// Size in bytes of the scratch memory the world's steps allocate from. Default 10 MiB.
