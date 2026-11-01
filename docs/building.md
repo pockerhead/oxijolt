@@ -201,8 +201,8 @@ refused, also under `DOCS_RS`. `bash scripts/check_wasm_raw.sh` builds a raw
 wasm32-unknown-unknown module in both precisions and runs it in Node (a world kept across export
 calls, no WASI imports); it needs `WASI_SDK_PATH`, Ninja and Node. CI builds and tests
 `x86_64-pc-windows-msvc`, `x86_64-unknown-linux-gnu` and `aarch64-apple-darwin`; the other
-targets have bindings that the generator produced byte-identical to their family's, but nothing
-builds or tests them. Android cross
+targets have bindings that the generator produced byte-identical to their family's, but CI does
+not build or test them. Android cross
 builds go through the NDK's CMake toolchain (`ANDROID_NDK_HOME`).
 
 On Windows the native libraries use the same C runtime as the Rust target: the dynamic one (`/MD`)

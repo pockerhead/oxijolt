@@ -88,13 +88,15 @@ pub extern "C" fn grow_rust_heap() -> i32 {
 }
 
 /// Creates 4 MiB joltc temp allocators (wasi-libc's `malloc`) until linear memory grew: 0, 2 if
-/// 16 allocators did not grow it, 3 if joltc returned null.
+/// 16 allocators did not grow it, 3 if joltc returned null. Call it after `create_world`, whose
+/// `JPH_Init` installs Jolt's allocator hooks.
 #[no_mangle]
 pub extern "C" fn grow_native_heap() -> i32 {
     let pages_before = memory_size(0);
     NATIVE_ALLOCATORS.with_borrow_mut(|allocators| {
         for _ in 0..MAX_NATIVE_ALLOCATORS {
-            // SAFETY: creating a temp allocator needs no other joltc state.
+            // SAFETY: Jolt allocates the temp allocator through the hooks `JPH_Init` installed;
+            // the runner calls `create_world` (which runs `JPH_Init`) before this export.
             let allocator = unsafe { JPH_TempAllocator_Create(NATIVE_ALLOCATOR_BYTES) };
             if allocator.is_null() {
                 return 3;
