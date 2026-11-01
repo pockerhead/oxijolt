@@ -1,9 +1,10 @@
-//! Body properties Jolt can change on a live body: materials, gravity, damping, motion quality
-//! and the collision filters (object layer and collision group).
+//! Body properties Jolt can change on a live body: materials, gravity, damping, motion quality,
+//! the collision filters (object layer and collision group) and the sensor flag.
 //!
 //! Jolt saves none of them in a [`WorldState`](crate::WorldState), and rereads them in every
 //! step: a restore keeps the values set last, so a caller that rolls back sets the old values
-//! back and replays ([docs/state.md#what-is-not-saved]).
+//! back and replays ([docs/state.md#what-is-not-saved]). The sensor toggle is the exception: it
+//! counts as a structural change.
 //!
 //! [docs/state.md#what-is-not-saved]: https://github.com/pockerhead/oxijolt/blob/main/docs/state.md#what-is-not-saved
 
@@ -15,7 +16,7 @@ use super::structure::NO_BOUNDS;
 use super::{
     check_object_layer, is_restitution, with_locked_body, with_read_locked_body, Activation,
     BodyMut, BodyRef, MotionQuality, ANGULAR_DAMPING_RULE, LINEAR_DAMPING_RULE, RESTITUTION_RULE,
-    SENSOR_QUALITY_RULE,
+    SENSOR_QUALITY_RULE, SENSOR_SHAPE_RULE,
 };
 use crate::collision_group::{same_group, NO_COLLISION_GROUP};
 use crate::limits::{self, is_friction, is_gravity_factor};
@@ -363,6 +364,97 @@ impl BodyMut<'_> {
         unsafe { JPH_BodyInterface_SetCollisionGroup(self.interface(), id.raw, &value) };
         self.wake_after_filter_change(activation);
         Ok(())
+    }
+
+    /// Makes the body a sensor or a solid body again (Jolt `Body::SetIsSensor`). A sensor
+    /// detects other bodies without a collision response ([docs/events.md#sensors]).
+    ///
+    /// The next step that simulates collides the body's pairs afresh. A contact whose shapes
+    /// overlap continues as [`ContactEvent::Persisted`] with the new
+    /// [`ContactSettings::is_sensor`]. Jolt finds sensor contacts only between overlapping
+    /// shapes, so a speculative contact, between shapes that are apart or just touch, ends with
+    /// [`ContactEvent::Removed`] when the body becomes a sensor. A sensor made solid while it
+    /// overlaps a body pushes that body out over the following steps. A sensor never
+    /// falls asleep on its own; a body that stops being one can sleep again. A
+    /// [`ContactListener`] still cannot make a contact of a sensor solid
+    /// ([`ContactSettingsError::SensorBody`]). The change wakes the body and the bodies around
+    /// it as [`set_object_layer`](Self::set_object_layer) does. The same flag changes nothing.
+    ///
+    /// A change counts as a structural change: every earlier [`WorldState`] is refused with
+    /// [`StateError::WorldChanged`], because the toggle discards the body's cached contacts,
+    /// which a restore cannot put back ([docs/state.md]).
+    ///
+    /// Fails, changing nothing, with [`BodyError::OwnedByCharacter`] for a character's inner
+    /// body, [`BodyError::UsedByVehicle`] for a vehicle chassis, [`BodyError::OwnedByRagdoll`]
+    /// for a ragdoll part, [`BodyError::NotRigidBody`] for a soft body, and, when making a
+    /// sensor, with [`BodyError::InvalidValue`] for a body with [`MotionQuality::LinearCast`]
+    /// (also one stored by a static body that may move) or a shape only static bodies may use,
+    /// the rules of [`BodySettings::sensor`](crate::BodySettings::sensor).
+    ///
+    /// [`ContactEvent::Persisted`]: crate::ContactEvent::Persisted
+    /// [`ContactEvent::Removed`]: crate::ContactEvent::Removed
+    /// [`ContactSettings::is_sensor`]: crate::ContactSettings::is_sensor
+    /// [`ContactListener`]: crate::ContactListener
+    /// [`ContactSettingsError::SensorBody`]: crate::ContactSettingsError::SensorBody
+    /// [`WorldState`]: crate::WorldState
+    /// [`StateError::WorldChanged`]: crate::StateError::WorldChanged
+    /// [docs/events.md#sensors]: https://github.com/pockerhead/oxijolt/blob/main/docs/events.md#sensors
+    /// [docs/state.md]: https://github.com/pockerhead/oxijolt/blob/main/docs/state.md#which-world-it-restores-into
+    pub fn set_is_sensor(&mut self, sensor: bool, activation: Activation) -> Result<(), BodyError> {
+        let id = self.inner.id;
+        // A character moves its inner body as a solid kinematic body, a vehicle's checks assume
+        // a solid chassis, and a ragdoll's parts collide with their surroundings. A constraint
+        // body may change: the flag changes no mass, inertia or attachment.
+        if self.world.is_inner_body(id) {
+            return Err(BodyError::OwnedByCharacter(id));
+        }
+        if self.world.is_vehicle_body(id) {
+            return Err(BodyError::UsedByVehicle(id));
+        }
+        if self.world.is_ragdoll_body(id) {
+            return Err(BodyError::OwnedByRagdoll(id));
+        }
+        // Jolt asserts a rigid body.
+        self.reject_soft_body()?;
+        if self.is_sensor() == sensor {
+            return Ok(());
+        }
+        if sensor {
+            self.check_sensor_rules()?;
+        }
+
+        self.world.note_structure_change();
+        // SAFETY: as in `set_friction`; the body is rigid (checked above), as Jolt asserts.
+        unsafe { JPH_BodyInterface_SetIsSensor(self.interface(), id.raw, sensor) };
+        // Jolt keeps a cached contact made with the other flag's separation distance and would
+        // replay it. The pending request makes the next simulating step discard the cache.
+        self.world.pending_cache_invalidations.insert(id.raw);
+        self.wake_after_filter_change(activation);
+        Ok(())
+    }
+
+    /// Checks what a body must satisfy to become a sensor: no [`MotionQuality::LinearCast`]
+    /// stored in its motion properties and no shape that only static bodies may use.
+    fn check_sensor_rules(&self) -> Result<(), BodyError> {
+        let (linear_cast, static_only) =
+            with_read_locked_body(self.inner.body_lock_interface, self.inner.id, |body| {
+                let body = body.as_ptr();
+                // SAFETY: `body` is locked for reading for the duration of the closure, which
+                // keeps its shape alive; no shape pointer leaves it. A body that can be
+                // kinematic or dynamic has motion properties, which the unchecked getter reads
+                // without the assertion of the checked getter on a static body that may move.
+                // The getters only read.
+                unsafe {
+                    let linear_cast = JPH_Body_CanBeKinematicOrDynamic(body)
+                        && MotionQuality::from_jph(JPH_MotionProperties_GetMotionQuality(
+                            JPH_Body_GetMotionPropertiesUnchecked(body),
+                        )) == MotionQuality::LinearCast;
+                    (linear_cast, JPH_Shape_MustBeStatic(JPH_Body_GetShape(body)))
+                }
+            })
+            .unwrap_or_else(|| unreachable!("`&mut` keeps the body in the world"));
+        require(!linear_cast, SENSOR_QUALITY_RULE)?;
+        require(!static_only, SENSOR_SHAPE_RULE)
     }
 
     /// Wakes the body for [`Activation::Activate`] and, either way, every other non-static body

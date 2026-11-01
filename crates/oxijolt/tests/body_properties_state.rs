@@ -2,7 +2,7 @@
 //! the value set last, earlier states stay restorable, and a caller that sets the saved value
 //! back replays bit for bit after a detour, with 1 and 4 workers. The filter setters (object
 //! layer, collision group) wake the bodies around the changed one, so their value is set back
-//! before the restore.
+//! before the restore. The sensor toggle is the exception: it refuses earlier states.
 
 mod common;
 
@@ -685,5 +685,118 @@ fn filter_setters_change_the_run() {
     let nothing = states(Filter::Nothing);
     for filter in FILTERS {
         assert_ne!(states(filter), nothing, "{filter:?}");
+    }
+}
+
+/// A floor with a cube resting on it and a static sensor zone beside it, after 0.5 s.
+fn sensor_scene(threads: u32) -> (PhysicsWorld, BodyId, BodyId, BodyId) {
+    let mut world = world(GRAVITY, threads);
+    world.set_event_settings(
+        EventSettings::default()
+            .contacts(true)
+            .persisted_contacts(true),
+    );
+    let floor = add_floor(&mut world);
+    let zone = world
+        .create_body(
+            &Shape::new_box(Vec3::new(1.0, 1.0, 1.0)).unwrap(),
+            &BodySettings::new_static()
+                .position(RVec3::new(3.0, 1.0, 0.0))
+                .sensor(true),
+        )
+        .unwrap();
+    let cube = add_cube(&mut world, RVec3::new(0.0, 0.5, 0.0));
+    step(&mut world, 30);
+    (world, floor, zone, cube)
+}
+
+/// `ticks` ticks of the bodies' states and contact events.
+fn sensor_run(world: &mut PhysicsWorld, ids: &[BodyId], ticks: usize) -> Vec<Vec<u8>> {
+    (0..ticks)
+        .map(|_| {
+            step(world, 1);
+            let mut record = Vec::new();
+            for &id in ids {
+                record_body(world, id, &mut record);
+            }
+            record.extend(format!("{:?}", world.take_events().contacts).bytes());
+            record
+        })
+        .collect()
+}
+
+#[test]
+fn a_sensor_toggle_refuses_earlier_states_both_ways() {
+    for sensor in [true, false] {
+        let (mut world, floor, zone, cube) = sensor_scene(1);
+        world
+            .body_mut(cube)
+            .unwrap()
+            .set_motion_quality(MotionQuality::LinearCast)
+            .unwrap();
+        let id = if sensor { floor } else { zone };
+        let saved = world.save_state();
+        // The same flag and a refused toggle keep the state restorable.
+        world
+            .body_mut(id)
+            .unwrap()
+            .set_is_sensor(!sensor, Activation::Activate)
+            .unwrap();
+        world.restore_state(&saved).unwrap();
+        world
+            .body_mut(cube)
+            .unwrap()
+            .set_is_sensor(true, Activation::Activate)
+            .unwrap_err();
+        world.restore_state(&saved).unwrap();
+
+        world
+            .body_mut(id)
+            .unwrap()
+            .set_is_sensor(sensor, Activation::Activate)
+            .unwrap();
+        assert_eq!(world.restore_state(&saved), Err(StateError::WorldChanged));
+        world
+            .body_mut(id)
+            .unwrap()
+            .set_is_sensor(!sensor, Activation::Activate)
+            .unwrap();
+        assert_eq!(world.restore_state(&saved), Err(StateError::WorldChanged));
+        assert_eq!(world.body(id).unwrap().is_sensor(), !sensor);
+    }
+}
+
+#[test]
+fn a_state_saved_after_a_sensor_toggle_replays_after_a_detour() {
+    for threads in [1, 4] {
+        let (mut world, floor, zone, cube) = sensor_scene(threads);
+        // Saved between the toggle and the step that discards the zone's cached contacts.
+        world
+            .body_mut(zone)
+            .unwrap()
+            .set_is_sensor(false, Activation::Activate)
+            .unwrap();
+        world
+            .body_mut(cube)
+            .unwrap()
+            .set_linear_velocity(Vec3::new(6.0, 2.0, 0.0))
+            .unwrap();
+        world.take_events();
+        let saved = world.save_state();
+        let ids = [floor, zone, cube];
+        let first = sensor_run(&mut world, &ids, 90);
+        world.restore_state(&saved).unwrap();
+        world
+            .body_mut(cube)
+            .unwrap()
+            .set_linear_velocity(Vec3::new(-3.0, 5.0, 1.0))
+            .unwrap();
+        world.set_gravity(Vec3::new(0.0, -3.0, 0.0)).unwrap();
+        sensor_run(&mut world, &ids, 20);
+        world.set_gravity(GRAVITY).unwrap();
+        world.take_events();
+        world.restore_state(&saved).unwrap();
+        let replay = sensor_run(&mut world, &ids, 90);
+        assert_eq!(first_difference(&first, &replay), None, "{threads} workers");
     }
 }

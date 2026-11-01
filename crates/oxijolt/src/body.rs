@@ -496,8 +496,9 @@ impl BodySettings {
         self
     }
 
-    /// Whether the body is a sensor, fixed for its life: it detects other bodies without a
-    /// collision response. Default false. [docs/events.md#sensors] has the details.
+    /// Whether the body starts as a sensor: it detects other bodies without a collision
+    /// response. Default false. [`BodyMut::set_is_sensor`] changes it later.
+    /// [docs/events.md#sensors] has the details.
     ///
     /// A sensor's contacts arrive as [`ContactEvent`]s whose
     /// [`ContactSettings::is_sensor`] is true. A static sensor detects only awake bodies and
@@ -514,6 +515,7 @@ impl BodySettings {
     /// [`PhysicsWorld::create_body`] refuses a sensor with [`MotionQuality::LinearCast`] (Jolt
     /// supports only discrete sensors) and a sensor whose shape only static bodies may use.
     ///
+    /// [`BodyMut::set_is_sensor`]: crate::BodyMut::set_is_sensor
     /// [docs/events.md#sensors]: https://github.com/pockerhead/oxijolt/blob/main/docs/events.md#sensors
     /// [`ContactEvent`]: crate::ContactEvent
     /// [`ContactSettings::is_sensor`]: crate::ContactSettings::is_sensor

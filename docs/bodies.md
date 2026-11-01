@@ -407,20 +407,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Fixed at creation
 
-The sensor flag, user data, locked axes and movement capability have no setters, so
+User data, locked axes and movement capability have no setters, so
 a rollback never has to restore them. Each of these programs fails to compile only because the setter does not
 exist:
-
-```rust,compile_fail,E0599
-use oxijolt::*;
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut world = PhysicsWorld::new(WorldSettings::default())?;
-    let id = world.create_body(&Shape::new_sphere(0.5)?, &BodySettings::new_dynamic())?;
-    world.body_mut(id)?.set_is_sensor(true);
-    Ok(())
-}
-```
 
 ```rust,compile_fail,E0599
 use oxijolt::*;

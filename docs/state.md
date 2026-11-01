@@ -148,8 +148,9 @@ A state restores only into the world that saved it (`StateError::WrongWorld`), a
 world's structure is unchanged (`StateError::WorldChanged`). The structure changes when a body,
 character, vehicle, ragdoll or constraint is created or removed, when a body's or a ragdoll's
 motion type is changed (`BodyMut::set_motion_type`, `RagdollMut::set_motion_type`), when a body's
-shape is set (`BodyMut::set_shape`, also with the body's current shape), and when a rebase moves
-anything. Calls that fail their checks change nothing and keep states
+shape is set (`BodyMut::set_shape`, also with the body's current shape), when a body's sensor
+flag changes (`BodyMut::set_is_sensor`, which discards the body's cached contacts), and when a
+rebase moves anything. Calls that fail their checks change nothing and keep states
 restorable. In both refusals the world is unchanged.
 
 Jolt saves neither which objects exist nor its body id allocator, so rolling back across a creation
@@ -185,9 +186,9 @@ documentation asks for body friction. These setters change such configuration:
 
 Body properties set at creation (shape, mass, friction, layers) are not saved either. The body
 property setters in the list above change such configuration, the pose and velocity setters
-change only state that is saved, and the shape and motion type changes count as structural
-changes. The sensor flag, user data, allowed degrees of freedom and movement
-capability of `BodySettings` are fixed at creation, so no restore can find them changed.
+change only state that is saved, and the shape, motion type and sensor flag changes count as
+structural changes. The user data, allowed degrees of freedom and movement capability of
+`BodySettings` are fixed at creation, so no restore can find them changed.
 
 `set_object_layer` and `set_collision_group` also wake the bodies around the changed one, so set
 their old values back before the restore: the restore then puts back the sleep states that the

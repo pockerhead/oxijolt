@@ -251,8 +251,8 @@ pub struct PhysicsWorld {
     /// The id the next constraint gets; ids start at 1 and are never reused.
     pub(crate) next_constraint_id: u32,
     /// Counts the changes Jolt's saved state cannot express (the body, character, vehicle,
-    /// ragdoll and constraint sets, the BodyID allocator, motion types, body shapes, rebases); a
-    /// [`WorldState`](crate::WorldState) restores only at the epoch it was saved at.
+    /// ragdoll and constraint sets, the BodyID allocator, motion types, body shapes, sensor flags,
+    /// rebases); a [`WorldState`](crate::WorldState) restores only at the epoch it was saved at.
     pub(crate) structure_epoch: u64,
     /// Raw ids of the bodies whose contact cache the next simulating step invalidates
     /// ([`BodyMut::invalidate_contact_cache`](crate::BodyMut::invalidate_contact_cache),
@@ -503,8 +503,8 @@ impl PhysicsWorld {
 
     /// Records a change that a [`WorldState`](crate::WorldState) cannot undo, so states saved
     /// before it are refused. Every API that adds or removes a Jolt object (body, character,
-    /// vehicle, ragdoll, constraint) or changes a motion type or a body's shape must call it,
-    /// after its checks and before its first Jolt call that makes the change.
+    /// vehicle, ragdoll, constraint) or changes a motion type, a body's shape or its sensor flag
+    /// must call it, after its checks and before its first Jolt call that makes the change.
     pub(crate) fn note_structure_change(&mut self) {
         advance_structure_epoch(&mut self.structure_epoch);
     }
