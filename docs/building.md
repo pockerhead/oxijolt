@@ -192,7 +192,7 @@ configuration. The supported targets are those with committed bindings (`build/t
 | `wasm32` | `wasm32-unknown-unknown`, `wasm32-unknown-emscripten`, `wasm32-wasip1` |
 
 Other 32-bit targets and unregistered ones are refused when the build starts. The `wasm32` family
-has committed bindings only: the build script refuses its native build. CI builds and tests
+has committed bindings only: the build script refuses to build for it, also under `DOCS_RS`. CI builds and tests
 `x86_64-pc-windows-msvc`, `x86_64-unknown-linux-gnu` and `aarch64-apple-darwin`; the other
 targets have bindings that the generator produced byte-identical to their family's, but nothing
 builds or tests them. Android cross
