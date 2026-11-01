@@ -77,7 +77,6 @@ struct NativeConfig {
     target_env: String,
     target_arch: String,
     /// The target's family of committed bindings.
-    #[cfg_attr(feature = "bindgen", allow(dead_code))]
     family: &'static Family,
     /// MSVC runtime library in CMake's spelling, or `"none"` off MSVC.
     crt: &'static str,
@@ -211,6 +210,12 @@ fn main() -> anyhow::Result<()> {
     let prefix = if env::var_os("DOCS_RS").is_some() {
         headers_only_prefix()?
     } else {
+        if cfg.family.name == "wasm32" {
+            bail!(
+                "{}: the native build for wasm32 is not supported yet; only its bindings are committed",
+                cfg.target
+            );
+        }
         let prefix = match env::var_os("JOLTC_LIB_DIR") {
             Some(dir) => use_prebuilt(PathBuf::from(dir), &cfg)?,
             None => native_prefix(&cfg)?,

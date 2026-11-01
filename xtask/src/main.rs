@@ -178,7 +178,7 @@ fn ambient_clang_vars() -> Vec<String> {
     found
 }
 
-/// The eight bindings files and the fingerprint record, generated in memory.
+/// The bindings files (four per family) and the fingerprint record, generated in memory.
 ///
 /// Every target of a family must give the same bindings; the first difference fails.
 fn generate_all(crate_dir: &Path) -> anyhow::Result<Vec<Output>> {
@@ -362,17 +362,43 @@ mod tests {
     fn every_registered_target_is_accepted() {
         for family in FAMILIES {
             for target in family.targets {
-                let found = check_target(target, "64").expect("registered");
+                let found = check_target(target, family.pointer_width).expect("registered");
                 assert_eq!(found.name, family.name);
             }
         }
+        let wasm = check_target("wasm32-unknown-unknown", "32").expect("registered");
+        assert_eq!(wasm.name, "wasm32");
     }
 
     #[test]
     fn narrow_and_unregistered_targets_are_refused() {
+        for target in [
+            "i686-pc-windows-msvc",
+            "i686-unknown-linux-gnu",
+            "armv7-linux-androideabi",
+        ] {
+            assert_eq!(
+                check_target(target, "32").err(),
+                Some(TargetError::PointerWidth(target.to_owned()))
+            );
+        }
         assert_eq!(
-            check_target("i686-pc-windows-msvc", "32").err(),
-            Some(TargetError::PointerWidth("i686-pc-windows-msvc".to_owned()))
+            check_target("x86_64-unknown-linux-gnu", "32").err(),
+            Some(TargetError::PointerWidth(
+                "x86_64-unknown-linux-gnu".to_owned()
+            ))
+        );
+        assert_eq!(
+            check_target("wasm32-unknown-unknown", "64").err(),
+            Some(TargetError::PointerWidth(
+                "wasm32-unknown-unknown".to_owned()
+            ))
+        );
+        assert_eq!(
+            check_target("wasm64-unknown-unknown", "64").err(),
+            Some(TargetError::Unregistered(
+                "wasm64-unknown-unknown".to_owned()
+            ))
         );
         assert_eq!(
             check_target("x86_64-unknown-freebsd", "64").err(),
@@ -438,7 +464,7 @@ mod tests {
         );
         paths.sort();
         paths.dedup();
-        assert_eq!(paths.len(), 8);
+        assert_eq!(paths.len(), 4 * FAMILIES.len());
     }
 
     #[test]

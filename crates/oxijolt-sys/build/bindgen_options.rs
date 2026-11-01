@@ -39,7 +39,9 @@ pub const DEBUG_RENDERER_FUNCTIONS: &[&str] = &[
 /// - Prettyplease formats it, so the installed rustfmt does not;
 /// - header comments are dropped, because their text varies between libclang versions;
 /// - `-ffreestanding` with an explicit `--target=` parses against Clang's own headers, so one
-///   host generates the bindings of every target.
+///   host generates the bindings of every target;
+/// - `-fvisibility=default` keeps the declarations visible on wasm32, whose Clang driver hides
+///   them by default and bindgen then emits no functions; other targets already default to it.
 pub fn builder(
     header: &Path,
     include_dir: &Path,
@@ -52,6 +54,7 @@ pub fn builder(
         .clang_arg(format!("-I{}", include_dir.display()))
         .clang_arg("-ffreestanding")
         .clang_arg(format!("--target={target}"))
+        .clang_arg("-fvisibility=default")
         .allowlist_item("JPH_.*")
         .allowlist_item("JobSystemThreadPoolConfig")
         .default_enum_style(EnumVariation::Consts)
