@@ -254,7 +254,7 @@ pub use vehicle::{
     VehicleRef, VehicleTrackSettings, VehicleTransmissionSettings, VehicleType, WheelContact,
     WheelSettings, WheelState, WheeledControllerKind, WheeledVehicle, WheeledVehicleSettings,
 };
-pub use world::{PhysicsWorld, StepReport, WorldSettings};
+pub use world::{JobSystemKind, PhysicsWorld, StepReport, WorldSettings};
 
 /// The repository's guide, `docs/guide.md`, whose examples run as doctests.
 #[cfg(all(doctest, repository_docs))]

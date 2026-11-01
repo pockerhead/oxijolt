@@ -1,7 +1,8 @@
 //! Worlds that run Jolt's jobs on a caller job system or Jolt's single-threaded job system:
 //! results equal to Jolt's thread pool, jobs run inside `queue_job`, re-entrant steps, jobs that
 //! outlive their world, panics in the caller's `queue_job`, the concurrency bound, Jolt's job
-//! pool at the largest collision step count and the choice between the job systems.
+//! pool at the largest collision step count, the choice between the job systems and reading it
+//! back from the world.
 
 mod common;
 
@@ -400,6 +401,53 @@ fn max_concurrency_is_bounded() {
         step(&mut world, 10);
         assert_eq!(jobs.reads.load(Ordering::Relaxed), 1, "{value}");
     }
+}
+
+#[test]
+fn a_thread_pool_world_reads_back_its_worker_threads_and_concurrency() {
+    for workers in [1, 2, 4, WorldSettings::MAX_WORKER_THREADS] {
+        let world = PhysicsWorld::new(WorldSettings::default().worker_threads(workers)).unwrap();
+        assert_eq!(
+            world.job_system_kind(),
+            JobSystemKind::ThreadPool {
+                worker_threads: workers
+            }
+        );
+        assert_eq!(world.max_concurrency(), workers + 1);
+    }
+    let world = PhysicsWorld::new(WorldSettings::default()).unwrap();
+    assert_eq!(
+        world.job_system_kind(),
+        JobSystemKind::ThreadPool { worker_threads: 1 }
+    );
+    assert_eq!(world.max_concurrency(), 2);
+}
+
+#[test]
+fn a_single_threaded_world_reads_back_its_kind_and_concurrency_one() {
+    let world = PhysicsWorld::new(single_threaded()).unwrap();
+    assert_eq!(world.job_system_kind(), JobSystemKind::SingleThreaded);
+    assert_eq!(world.max_concurrency(), 1);
+
+    let world = PhysicsWorld::new(single_threaded().worker_threads(4)).unwrap();
+    assert_eq!(
+        world.job_system_kind(),
+        JobSystemKind::ThreadPool { worker_threads: 4 }
+    );
+    assert_eq!(world.max_concurrency(), 5);
+}
+
+#[test]
+fn a_caller_job_system_world_reads_back_the_concurrency_read_at_creation() {
+    let jobs = Arc::new(FixedConcurrency {
+        value: 7,
+        reads: AtomicUsize::new(0),
+    });
+    let mut world = cubes_world(jobs.clone());
+    step(&mut world, 10);
+    assert_eq!(world.job_system_kind(), JobSystemKind::Caller);
+    assert_eq!(world.max_concurrency(), 7);
+    assert_eq!(jobs.reads.load(Ordering::Relaxed), 1);
 }
 
 #[test]

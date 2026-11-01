@@ -65,7 +65,8 @@ what is planned next.
   on real models from open sources ([report](real-meshes.md)).
 - A floating origin (`PhysicsWorld::rebase`) and optional `f64` world positions.
 - Jolt's jobs on Jolt's thread pool, on Jolt's single-threaded job system
-  (`WorldSettings::single_threaded`) or on your own, such as Rayon ([guide](job-system.md)).
+  (`WorldSettings::single_threaded`) or on your own, such as Rayon ([guide](job-system.md));
+  `PhysicsWorld::job_system_kind` and `max_concurrency` read back which one a world got.
 - A [comparison with Rapier and Avian](comparison.md) on Rapier's stress scenes: speed at 1 to 16
   threads, quality, determinism and features, with the scripts and raw results.
 - Solver velocity and position steps chosen per world (`WorldSettings::velocity_steps`,
