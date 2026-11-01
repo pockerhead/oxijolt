@@ -228,6 +228,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+`BodyMut::set_is_sensor` turns the flag on or off on a live rigid body. The next step that
+simulates collides the body's pairs afresh: a contact whose shapes overlap continues as
+`ContactEvent::Persisted` with the new `is_sensor()`, and a speculative contact, between shapes
+that are apart or just touch, ends with `ContactEvent::Removed` when the body becomes a sensor. A
+sensor made solid while it overlaps a body pushes that body out over the following steps. The
+toggle wakes bodies like the filter setters ([Changing body properties](#changing-body-properties))
+and is a structural change: earlier `WorldState`s no longer restore. Making a body a sensor
+applies the creation rules (no `MotionQuality::LinearCast`, no shape only static bodies may use);
+the inner body of a character, a vehicle chassis and a ragdoll part refuse the toggle.
+
 ## User data
 
 `BodySettings::user_data` stores a `u64` of the caller's in the body, for example the key of its
@@ -284,14 +294,46 @@ vehicle wheel casts do not look at groups (a wheel's own filter skips only its c
 body is still found by a ray cast and still blocks a character. A character's inner body has no
 group at creation.
 
+Ragdolls give their parts the group id `2^31 + RagdollId::to_raw()`, above every caller group id,
+with a table in which no two parts of one ragdoll collide; a ragdoll part cannot take a caller
+group. Two ragdolls of one settings object share the table and still collide with each other,
+because their group ids differ.
+
 `BodyMut::set_collision_group` changes the group of a live body, or removes it with `None`, and
-`BodyRef::collision_group_is` compares it. The body keeps its own reference to the table. Jolt saves
-no group in its state (`Body::SaveState`, `Body.cpp:296-324`), so a restore keeps the group set
-last; a rollback sets the old group back before the restore ([state.md](state.md#what-is-not-saved)).
-Ragdolls give their parts the group id
-`2^31 + RagdollId::to_raw()`, above every caller group id, with a table in which no two parts of one
-ragdoll collide; a ragdoll part cannot take a caller group. Two ragdolls of one settings object
-share the table and still collide with each other, because their group ids differ.
+`BodyRef::collision_group_is` compares it: the same table, group id and sub group, so a clone of a
+group is the same group and a group with equal ids in another table is not. The body keeps its own
+reference to the table, so the caller may drop its `CollisionGroup` and `GroupFilterTable`. The
+change wakes bodies like the other filter setters
+([Changing body properties](#changing-body-properties)). Jolt saves no group in its state
+(`Body::SaveState`, `Body.cpp:296-324`), so a restore keeps the group set last; a rollback sets
+the old group back before the restore ([state.md](state.md#what-is-not-saved)).
+
+```rust
+use oxijolt::*;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut world = PhysicsWorld::new(WorldSettings::default())?;
+    let floor = Shape::new_box(Vec3::new(10.0, 0.5, 10.0))?;
+    world.create_body(&floor, &BodySettings::new_static().position(RVec3::new(0.0, -0.5, 0.0)))?;
+
+    let table = GroupFilterTableBuilder::new(1)?.build();
+    let crew = CollisionGroup::new(&table, 1, 0)?;
+    let cube = Shape::new_box(Vec3::new(0.5, 0.5, 0.5))?;
+    let at = |y| BodySettings::new_dynamic().position(RVec3::new(0.0, y, 0.0));
+    world.create_body(&cube, &at(0.5).collision_group(crew.clone()))?;
+    let upper = world.create_body(&cube, &at(1.6).collision_group(crew.clone()))?;
+    assert!(world.body(upper)?.collision_group_is(Some(&crew)));
+
+    // Without a group the upper cube collides with the lower one and lands on it.
+    world.body_mut(upper)?.set_collision_group(None, Activation::Activate)?;
+    assert!(world.body(upper)?.collision_group_is(None));
+    for _ in 0..90 {
+        assert!(world.step(1.0 / 60.0)?.is_complete());
+    }
+    assert!(world.body(upper)?.position().y > 1.4);
+    Ok(())
+}
+```
 
 ## Locked axes
 
@@ -337,6 +379,87 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         assert!(world.step(1.0 / 60.0)?.is_complete());
     }
     assert!(world.body(hanging)?.position().y < 1.0);
+    Ok(())
+}
+```
+
+## Changing body properties
+
+Most values of `BodySettings` can change on a live body through Jolt's own setters. Each setter
+checks its value with the rule of the matching creation setting and returns `Result<(), BodyError>`;
+a refused call changes nothing.
+
+| Property | Read (`BodyRef`) | Change (`BodyMut`) | Bodies | Refused with |
+|---|---|---|---|---|
+| Friction | `friction()` | `set_friction(f32)` | every body, soft and static too | `InvalidValue` outside `0..=MAX_FRICTION` |
+| Restitution | `restitution()` | `set_restitution(f32)` | every body | `InvalidValue` outside `0..=1` |
+| Gravity factor | `gravity_factor() -> Option<f32>` | `set_gravity_factor(f32)` | bodies that can move, soft too | `CannotMove`, `InvalidValue` beyond `MAX_GRAVITY_FACTOR` |
+| Linear damping | `linear_damping() -> Option<f32>` | `set_linear_damping(f32)` | bodies that can move, soft too | `CannotMove`, `InvalidValue` (finite, at least 0) |
+| Angular damping | `angular_damping() -> Option<f32>` | `set_angular_damping(f32)` | rigid bodies that can move | `NotRigidBody`, `CannotMove`, `InvalidValue` |
+| Motion quality | `motion_quality() -> Option<MotionQuality>` | `set_motion_quality(MotionQuality)` | rigid bodies that can move | `NotRigidBody`, `CannotMove`, `InvalidValue` for `LinearCast` on a sensor |
+| Object layer | `object_layer()` | `set_object_layer(ObjectLayer, Activation)` | every body but a character's inner body | `OwnedByCharacter`, `UnknownObjectLayer` |
+| Collision group | `collision_group_is(Option<&CollisionGroup>)` | `set_collision_group(Option<&CollisionGroup>, Activation)` | every body but a ragdoll part | `OwnedByRagdoll` |
+| Sensor flag | `is_sensor()` | `set_is_sensor(bool, Activation)` | rigid bodies that no character, vehicle or ragdoll owns | `OwnedByCharacter`, `UsedByVehicle`, `OwnedByRagdoll`, `NotRigidBody`, `InvalidValue` ([Sensors](#sensors)) |
+
+"Bodies that can move" are kinematic, dynamic and soft bodies, and static bodies created with
+`BodySettings::allow_dynamic_or_kinematic(true)` (`BodyRef::can_be_kinematic_or_dynamic`); for
+other bodies the getters return `None`. Soft bodies return `None` for angular damping and motion
+quality, which Jolt's soft body solver does not use. A static body that may move reports the
+motion quality it will move with.
+
+Waking:
+- Friction, restitution, gravity factor, damping and motion quality wake nothing, as in Jolt. The
+  new value acts from the next step on; a sleeping body uses it once something wakes it
+  (`BodyMut::activate`).
+- The object layer, the collision group and the sensor flag change which pairs collide. Jolt
+  collides a pair only when one of its bodies is awake, so these setters wake the changed body
+  with `Activation::Activate` and, with either activation, every other non-static body whose
+  bounds overlap or touch it, in body-id order, as `set_shape` does. A body resting on a floor
+  that stops colliding with it falls. The same layer, group or flag changes nothing and wakes
+  nothing.
+- Queries see a new layer at once. A pair that the new layer or group excludes ends with
+  `ContactEvent::Removed` in the next step in which one of its bodies is awake. Scene queries
+  ignore collision groups.
+
+Rollback ([state.md](state.md#what-is-not-saved)): Jolt saves none of these properties.
+- The value setters (friction, restitution, gravity factor, damping, motion quality) change
+  configuration that a restore keeps. To roll back across a change, set the old value back and
+  replay.
+- The layer and group are configuration too, but their set-back wakes bodies: set the old value
+  back before `restore_state`, which then puts back the sleep states, and drop the events queued
+  before the restore.
+- The sensor toggle is a structural change: every earlier `WorldState` is refused with
+  `StateError::WorldChanged`, so save again after the toggle.
+
+```rust
+use oxijolt::*;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut world = PhysicsWorld::new(WorldSettings::default())?;
+    let floor = Shape::new_box(Vec3::new(100.0, 1.0, 100.0))?;
+    world.create_body(&floor, &BodySettings::new_static().position(RVec3::new(0.0, -1.0, 0.0)))?;
+    let block = Shape::new_box(Vec3::new(0.5, 0.5, 0.5))?;
+    let sliding = world.create_body(
+        &block,
+        &BodySettings::new_dynamic()
+            .position(RVec3::new(0.0, 0.5, 0.0))
+            .linear_velocity(Vec3::new(5.0, 0.0, 0.0))
+            .friction(0.0)
+            .linear_damping(0.0)
+            .angular_damping(0.0),
+    )?;
+    for _ in 0..10 {
+        assert!(world.step(1.0 / 60.0)?.is_complete());
+    }
+    assert!(world.body(sliding)?.linear_velocity().x > 4.9);
+
+    // Jolt combines it with the floor's friction of 0.2 as sqrt(1.0 * 0.2).
+    world.body_mut(sliding)?.set_friction(1.0)?;
+    assert_eq!(world.body(sliding)?.friction(), 1.0);
+    for _ in 0..120 {
+        assert!(world.step(1.0 / 60.0)?.is_complete());
+    }
+    assert!(world.body(sliding)?.linear_velocity().x.abs() < 0.05);
     Ok(())
 }
 ```
@@ -407,9 +530,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Fixed at creation
 
-User data, locked axes and movement capability have no setters, so
-a rollback never has to restore them. Each of these programs fails to compile only because the setter does not
-exist:
+User data, locked axes and movement capability have no setters, so a rollback never has to restore
+them. Each of these programs fails to compile only because the setter does not exist:
 
 ```rust,compile_fail,E0599
 use oxijolt::*;
