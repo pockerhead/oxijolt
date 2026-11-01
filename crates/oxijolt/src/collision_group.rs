@@ -5,7 +5,8 @@
 //! with a [`GroupFilterTableBuilder`] and never changes afterwards, so bodies and Jolt's worker
 //! threads can share it. A [`CollisionGroup`] puts a body into a group of a table, given to the
 //! body at creation with [`BodySettings::collision_group`](crate::BodySettings::collision_group)
-//! or [`SoftBodySettings::collision_group`](crate::SoftBodySettings::collision_group).
+//! or [`SoftBodySettings::collision_group`](crate::SoftBodySettings::collision_group), or later
+//! with [`BodyMut::set_collision_group`](crate::BodyMut::set_collision_group).
 
 use std::fmt;
 use std::sync::Arc;
@@ -274,4 +275,20 @@ impl CollisionGroup {
             subGroupID: self.sub_group_id,
         }
     }
+}
+
+/// Jolt's default `CollisionGroup`, which a body created without a group has: no table, and
+/// `cInvalidGroup` and `cInvalidSubGroup` as ids (`CollisionGroup.h:27-28`).
+pub(crate) const NO_COLLISION_GROUP: JPH_CollisionGroup = JPH_CollisionGroup {
+    groupFilter: std::ptr::null(),
+    groupID: u32::MAX,
+    subGroupID: u32::MAX,
+};
+
+/// Whether `a` and `b` are the same group: the same table pointer and the same ids. Neither
+/// table is dereferenced.
+pub(crate) fn same_group(a: &JPH_CollisionGroup, b: &JPH_CollisionGroup) -> bool {
+    std::ptr::eq(a.groupFilter, b.groupFilter)
+        && a.groupID == b.groupID
+        && a.subGroupID == b.subGroupID
 }

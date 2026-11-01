@@ -1,6 +1,8 @@
 //! Rollback with the body property setters: Jolt saves none of the values, so a restore keeps
 //! the value set last, earlier states stay restorable, and a caller that sets the saved value
-//! back replays bit for bit after a detour, with 1 and 4 workers.
+//! back replays bit for bit after a detour, with 1 and 4 workers. The filter setters (object
+//! layer, collision group) wake the bodies around the changed one, so their value is set back
+//! before the restore.
 
 mod common;
 
@@ -360,4 +362,328 @@ fn value_setters_keep_earlier_states_restorable() {
     assert_eq!(slider.friction(), 1.0);
     let bullet = scene.world.body(scene.bullet).unwrap();
     assert_eq!(bullet.motion_quality(), Some(MotionQuality::LinearCast));
+}
+
+/// One filter setter of the filter scene, with the activation it passes.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Filter {
+    /// The platform's object layer.
+    PlatformLayer,
+    /// The platform's collision group.
+    PlatformGroup,
+    /// The object layer of the cube lying on the base cube.
+    CubeLayer,
+    /// The collision group of the cube lying on the base cube.
+    CubeGroup,
+    Nothing,
+}
+
+const FILTERS: [Filter; 4] = [
+    Filter::PlatformLayer,
+    Filter::PlatformGroup,
+    Filter::CubeLayer,
+    Filter::CubeGroup,
+];
+
+/// The tick before which the filter is changed in every run of the filter scene.
+const FILTER_CHANGE_TICK: usize = 5;
+/// Ticks before the save point of the filter scene: long enough for every body the change woke
+/// to fall asleep again.
+const FILTER_BEFORE_SAVE: usize = 120;
+/// Ticks of each filter scene run after the save point.
+const FILTER_AFTER_SAVE: usize = 90;
+/// The tick before which the base cube is woken, so that the cubes on it collide by their
+/// filters again.
+const WAKE_TICK: usize = FILTER_BEFORE_SAVE + 30;
+
+/// A floor, a thin static platform above it with a cube created asleep on it and another
+/// created asleep under it (overlapping it, on the floor), a ball dropped onto the platform that
+/// arrives after the save, and a cube created asleep on a base cube, which is woken after the
+/// save. The played filter values
+/// let the cubes and the ball pass the platform and the upper cube pass the base cube; the
+/// detour values make them collide again.
+struct FilterScene {
+    world: PhysicsWorld,
+    bodies: Vec<BodyId>,
+    platform: BodyId,
+    rider: BodyId,
+    embedded: BodyId,
+    base: BodyId,
+    top: BodyId,
+    moving: ObjectLayer,
+    ghost: ObjectLayer,
+    /// The platform's played group: it does not collide with `cubes`.
+    platform_group: CollisionGroup,
+    /// The group of the cubes and the ball.
+    cubes: CollisionGroup,
+}
+
+impl FilterScene {
+    fn new(threads: u32) -> Self {
+        let mut layers = CollisionLayers::new(2);
+        let fixed = layers.add_object_layer(BroadPhaseLayer::new(0));
+        let moving = layers.add_object_layer(BroadPhaseLayer::new(1));
+        let ghost = layers.add_object_layer(BroadPhaseLayer::new(1));
+        layers.enable_collision(moving, fixed);
+        layers.enable_collision(moving, moving);
+        layers.enable_collision(ghost, fixed);
+        let mut world = PhysicsWorld::new(jobs::with_threads(
+            WorldSettings::default().gravity(GRAVITY).layers(layers),
+            threads,
+        ))
+        .unwrap();
+        world.set_event_settings(
+            EventSettings::default()
+                .contacts(true)
+                .persisted_contacts(true)
+                .body_activation(true),
+        );
+        let mut builder = GroupFilterTableBuilder::new(2).unwrap();
+        builder.disable_collision(0, 1).unwrap();
+        let table = builder.build();
+        let platform_group = CollisionGroup::new(&table, 1, 0).unwrap();
+        let cubes = CollisionGroup::new(&table, 1, 1).unwrap();
+
+        let floor = add_floor(&mut world);
+        let cube = Shape::new_box(Vec3::new(0.5, 0.5, 0.5)).unwrap();
+        let platform = world
+            .create_body(
+                &Shape::new_box(Vec3::new(1.5, 0.1, 1.5)).unwrap(),
+                &BodySettings::new_static().position(RVec3::new(0.0, 0.95, 0.0)),
+            )
+            .unwrap();
+        let mut create = |shape: &Shape, settings: BodySettings| {
+            world
+                .create_body(shape, &settings.object_layer(moving))
+                .unwrap()
+        };
+        let asleep = |x: Real, y: Real| {
+            BodySettings::new_dynamic()
+                .position(RVec3::new(x, y, 0.0))
+                .activation(Activation::DontActivate)
+                .collision_group(cubes.clone())
+        };
+        let rider = create(&cube, asleep(-0.7, 1.55));
+        let embedded = create(&cube, asleep(0.7, 0.5));
+        let ball = create(
+            &Shape::new_sphere(0.3).unwrap(),
+            BodySettings::new_dynamic()
+                .position(RVec3::new(0.0, 30.0, 1.0))
+                .collision_group(cubes.clone()),
+        );
+        let base = create(&cube, asleep(10.0, 0.5));
+        let top = create(
+            &cube,
+            BodySettings::new_dynamic()
+                .position(RVec3::new(10.0, 1.5, 0.0))
+                .activation(Activation::DontActivate),
+        );
+        Self {
+            world,
+            bodies: vec![floor, platform, rider, embedded, ball, base, top],
+            platform,
+            rider,
+            embedded,
+            base,
+            top,
+            moving,
+            ghost,
+            platform_group,
+            cubes,
+        }
+    }
+
+    /// Sets `filter` to `value`.
+    fn set(&mut self, filter: Filter, value: Value) {
+        let played = value == Value::Played;
+        let fixed = ObjectLayer::new(0);
+        let world = &mut self.world;
+        let result = match filter {
+            Filter::PlatformLayer => world.body_mut(self.platform).unwrap().set_object_layer(
+                if played { self.ghost } else { fixed },
+                Activation::DontActivate,
+            ),
+            Filter::PlatformGroup => world
+                .body_mut(self.platform)
+                .unwrap()
+                .set_collision_group(played.then_some(&self.platform_group), Activation::Activate),
+            Filter::CubeLayer => world.body_mut(self.top).unwrap().set_object_layer(
+                if played { self.ghost } else { self.moving },
+                Activation::Activate,
+            ),
+            Filter::CubeGroup => world
+                .body_mut(self.top)
+                .unwrap()
+                .set_collision_group(played.then_some(&self.cubes), Activation::DontActivate),
+            Filter::Nothing => Ok(()),
+        };
+        result.unwrap();
+    }
+
+    /// The bodies the played value of `filter` woke, which sleep again at the save point.
+    fn sleepers(&self, filter: Filter) -> Vec<BodyId> {
+        match filter {
+            Filter::PlatformLayer | Filter::PlatformGroup => vec![self.rider, self.embedded],
+            Filter::CubeLayer => vec![self.base, self.top],
+            Filter::CubeGroup => vec![self.base],
+            Filter::Nothing => Vec::new(),
+        }
+    }
+
+    /// Steps once and appends every body's state, its filters and the step's events to
+    /// `digest`.
+    fn tick(&mut self, digest: &mut Vec<Record>) {
+        step(&mut self.world, 1);
+        let mut record = Record::default();
+        for &id in &self.bodies {
+            record_body(&self.world, id, &mut record.states);
+            let body = self.world.body(id).unwrap();
+            record.values += &format!(
+                "{:?}{}{}{}",
+                body.object_layer(),
+                body.collision_group_is(None),
+                body.collision_group_is(Some(&self.platform_group)),
+                body.collision_group_is(Some(&self.cubes)),
+            );
+        }
+        let events = self.world.take_events();
+        record
+            .states
+            .extend(format!("{:?}{:?}", events.contacts, events.activations).bytes());
+        digest.push(record);
+    }
+
+    /// Runs ticks `ticks`, setting the played value of `filter` before [`FILTER_CHANGE_TICK`]
+    /// and waking the base cube before [`WAKE_TICK`].
+    fn run(&mut self, filter: Filter, ticks: std::ops::RangeInclusive<usize>) -> Vec<Record> {
+        let mut digest = Vec::new();
+        for tick in ticks {
+            if tick == FILTER_CHANGE_TICK {
+                self.set(filter, Value::Played);
+            }
+            if tick == WAKE_TICK {
+                self.world.body_mut(self.base).unwrap().activate();
+            }
+            self.tick(&mut digest);
+        }
+        digest
+    }
+
+    /// A run that differs from the straight one: the detour value of `filter` and other
+    /// gravity.
+    fn detour(&mut self, filter: Filter) {
+        self.set(filter, Value::Detour);
+        self.world.set_gravity(Vec3::new(1.0, -5.0, 0.0)).unwrap();
+        let mut ignored = Vec::new();
+        for _ in 0..DETOUR {
+            self.tick(&mut ignored);
+        }
+    }
+}
+
+/// Where a rollback sets the played filter value back.
+#[derive(Clone, Copy, PartialEq)]
+enum SetBack {
+    BeforeRestore,
+    AfterRestore,
+    Never,
+}
+
+/// The ticks after the save of a straight run of the filter scene with `filter` changed.
+fn filter_straight(filter: Filter, threads: u32) -> Vec<Record> {
+    let mut scene = FilterScene::new(threads);
+    scene.run(filter, 1..=FILTER_BEFORE_SAVE);
+    for id in scene.sleepers(filter) {
+        assert!(
+            scene.world.body(id).unwrap().is_sleeping(),
+            "{filter:?}: {id:?} sleeps at the save point"
+        );
+    }
+    scene.run(
+        filter,
+        FILTER_BEFORE_SAVE + 1..=FILTER_BEFORE_SAVE + FILTER_AFTER_SAVE,
+    )
+}
+
+/// The same ticks replayed after a save, a detour and a restore, with the played value of
+/// `filter` set back as `set_back` says. Events up to the restore are dropped.
+fn filter_replay(filter: Filter, threads: u32, set_back: SetBack) -> Vec<Record> {
+    let mut scene = FilterScene::new(threads);
+    scene.run(filter, 1..=FILTER_BEFORE_SAVE);
+    let saved = scene.world.save_state();
+    scene.detour(filter);
+    if set_back == SetBack::BeforeRestore {
+        scene.set(filter, Value::Played);
+    }
+    scene.world.take_events();
+    scene.world.restore_state(&saved).unwrap();
+    if set_back == SetBack::AfterRestore {
+        scene.set(filter, Value::Played);
+    }
+    scene.run(
+        filter,
+        FILTER_BEFORE_SAVE + 1..=FILTER_BEFORE_SAVE + FILTER_AFTER_SAVE,
+    )
+}
+
+#[test]
+fn filter_setters_replay_when_set_back_before_the_restore() {
+    for filter in FILTERS {
+        let reference = filter_straight(filter, 1);
+        assert_eq!(reference.len(), FILTER_AFTER_SAVE);
+        for threads in [1, 4] {
+            assert_eq!(
+                first_difference(&reference, &filter_straight(filter, threads)),
+                None,
+                "{filter:?}: straight run with {threads} workers"
+            );
+            assert_eq!(
+                first_difference(
+                    &reference,
+                    &filter_replay(filter, threads, SetBack::BeforeRestore)
+                ),
+                None,
+                "{filter:?}: replay with {threads} workers"
+            );
+        }
+    }
+}
+
+#[test]
+fn filter_set_back_after_the_restore_or_never_diverges() {
+    // Set back after the restore, the set-back's wake stays: the sleepers the saved state put
+    // back to sleep are awake in the replay. Without a set-back the replay collides by the
+    // detour's filter.
+    let states = |run: Vec<Record>| {
+        run.into_iter()
+            .map(|record| record.states)
+            .collect::<Vec<_>>()
+    };
+    for filter in FILTERS {
+        let reference = states(filter_straight(filter, 1));
+        let after_restore = states(filter_replay(filter, 1, SetBack::AfterRestore));
+        assert_eq!(
+            first_difference(&reference, &after_restore),
+            Some(0),
+            "{filter:?}: the woken sleepers move from the first tick"
+        );
+        let never = states(filter_replay(filter, 1, SetBack::Never));
+        assert_ne!(first_difference(&reference, &never), None, "{filter:?}");
+    }
+}
+
+#[test]
+fn filter_setters_change_the_run() {
+    let states = |filter: Filter| {
+        let mut scene = FilterScene::new(1);
+        let mut digest = Vec::new();
+        for record in scene.run(filter, 1..=FILTER_BEFORE_SAVE + FILTER_AFTER_SAVE) {
+            digest.extend(record.states);
+        }
+        digest
+    };
+    let nothing = states(Filter::Nothing);
+    for filter in FILTERS {
+        assert_ne!(states(filter), nothing, "{filter:?}");
+    }
 }

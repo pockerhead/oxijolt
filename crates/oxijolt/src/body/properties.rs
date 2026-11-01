@@ -1,5 +1,5 @@
-//! Body properties Jolt can change on a live body: materials, gravity, damping and motion
-//! quality.
+//! Body properties Jolt can change on a live body: materials, gravity, damping, motion quality
+//! and the collision filters (object layer and collision group).
 //!
 //! Jolt saves none of them in a [`WorldState`](crate::WorldState), and rereads them in every
 //! step: a restore keeps the values set last, so a caller that rolls back sets the old values
@@ -9,14 +9,18 @@
 
 use oxijolt_sys::*;
 
+use super::access::corners;
 use super::load::require;
+use super::structure::NO_BOUNDS;
 use super::{
-    is_restitution, with_locked_body, with_read_locked_body, BodyMut, BodyRef, MotionQuality,
-    ANGULAR_DAMPING_RULE, LINEAR_DAMPING_RULE, RESTITUTION_RULE, SENSOR_QUALITY_RULE,
+    check_object_layer, is_restitution, with_locked_body, with_read_locked_body, Activation,
+    BodyMut, BodyRef, MotionQuality, ANGULAR_DAMPING_RULE, LINEAR_DAMPING_RULE, RESTITUTION_RULE,
+    SENSOR_QUALITY_RULE,
 };
+use crate::collision_group::{same_group, NO_COLLISION_GROUP};
 use crate::limits::{self, is_friction, is_gravity_factor};
 use crate::math::is_finite_non_negative;
-use crate::BodyError;
+use crate::{BodyError, CollisionGroup, ObjectLayer};
 
 /// Which bodies a motion property applies to.
 #[derive(Clone, Copy, PartialEq)]
@@ -87,6 +91,28 @@ impl BodyRef<'_> {
             // SAFETY: as in `linear_damping`.
             MotionQuality::from_jph(unsafe { JPH_MotionProperties_GetMotionQuality(properties) })
         })
+    }
+
+    /// The object layer ([`BodySettings::object_layer`](crate::BodySettings::object_layer),
+    /// [`SoftBodySettings::object_layer`](crate::SoftBodySettings::object_layer)).
+    pub fn object_layer(&self) -> ObjectLayer {
+        // SAFETY: as in `friction`.
+        ObjectLayer::new(unsafe { JPH_BodyInterface_GetObjectLayer(self.interface(), self.id.raw) })
+    }
+
+    /// Whether the body's collision group is `group`, or with `None` whether it has none
+    /// ([`BodySettings::collision_group`](crate::BodySettings::collision_group)).
+    ///
+    /// Groups compare as Jolt compares them: the same table, the same group id and the same sub
+    /// group. A clone of `group` is the same group; a group with equal ids in another table is
+    /// not. A ragdoll part's group, which the ragdoll gives it, equals no group a caller builds.
+    pub fn collision_group_is(&self, group: Option<&CollisionGroup>) -> bool {
+        let wanted = group.map_or(NO_COLLISION_GROUP, CollisionGroup::to_jph);
+        let mut current = NO_COLLISION_GROUP;
+        // SAFETY: as in `friction`; `current` is a live local that joltc overwrites with a copy of
+        // the body's group, whose table pointer is only compared, never dereferenced.
+        unsafe { JPH_BodyInterface_GetCollisionGroup(self.interface(), self.id.raw, &mut current) };
+        same_group(&current, &wanted)
     }
 
     /// Runs `read` on the motion properties of the body, locked for reading, when it is one of
@@ -250,6 +276,113 @@ impl BodyMut<'_> {
             JPH_BodyInterface_SetMotionQuality(self.interface(), self.id.raw, quality.to_jph())
         };
         Ok(())
+    }
+
+    /// Moves the body to the object layer `layer` (Jolt `BodyInterface::SetObjectLayer`), and so
+    /// to the broad-phase layer that `layer` maps to.
+    ///
+    /// Queries see the new layer at once. Pairs collide by the new layers from the next step in
+    /// which one of their bodies is awake: a pair that no longer collides ends with
+    /// [`ContactEvent::Removed`]. Jolt wakes nothing for a layer change, so this wakes the body
+    /// with [`Activation::Activate`] and, with either activation, every other non-static body
+    /// whose bounds overlap or touch the body's, in body-id order, as
+    /// [`set_shape`](Self::set_shape) does: nothing stays asleep resting on a body it no longer
+    /// collides with. A vehicle's wheels keep the layer of their collision tester, and a
+    /// character collides by the new layer from its next update. The same layer changes
+    /// nothing and wakes nothing.
+    ///
+    /// Jolt does not save layers, so a restore keeps the layer set last. To roll back across a
+    /// change, set the old layer back before the restore, which then also puts back the sleep
+    /// states that the set-back's wake changed, and drop the events queued before the restore
+    /// ([docs/state.md#what-is-not-saved]).
+    ///
+    /// Fails, changing nothing, with [`BodyError::OwnedByCharacter`] for a character's inner
+    /// body, whose layer the character's settings give it, and with
+    /// [`BodyError::UnknownObjectLayer`] for a layer not in the world's
+    /// [`CollisionLayers`](crate::CollisionLayers).
+    ///
+    /// [`ContactEvent::Removed`]: crate::ContactEvent::Removed
+    /// [docs/state.md#what-is-not-saved]: https://github.com/pockerhead/oxijolt/blob/main/docs/state.md#what-is-not-saved
+    pub fn set_object_layer(
+        &mut self,
+        layer: ObjectLayer,
+        activation: Activation,
+    ) -> Result<(), BodyError> {
+        let id = self.inner.id;
+        if self.world.is_inner_body(id) {
+            return Err(BodyError::OwnedByCharacter(id));
+        }
+        check_object_layer(layer, self.world.object_layer_count)?;
+        if self.object_layer() == layer {
+            return Ok(());
+        }
+        // SAFETY: as in `set_friction`; the layer exists in the world's layer tables (checked
+        // above), which Jolt indexes with it.
+        unsafe { JPH_BodyInterface_SetObjectLayer(self.interface(), id.raw, layer.get()) };
+        self.wake_after_filter_change(activation);
+        Ok(())
+    }
+
+    /// Gives the body the collision group `group`, or no group for `None` (Jolt
+    /// `Body::SetCollisionGroup`). The body takes its own reference to the group's table, so the
+    /// caller may drop `group` and its [`GroupFilterTable`](crate::GroupFilterTable), and Jolt
+    /// releases its reference to the old table.
+    ///
+    /// The solver checks the groups of every pair it collides, from the next step in which one
+    /// of the bodies is awake: a pair the new group excludes ends with
+    /// [`ContactEvent::Removed`]. Scene queries ignore groups. It wakes the body and the bodies
+    /// around it as [`set_object_layer`](Self::set_object_layer) does. The same group
+    /// ([`collision_group_is`](BodyRef::collision_group_is)) changes nothing and wakes nothing.
+    ///
+    /// Jolt does not save groups; roll back across a change as for
+    /// [`set_object_layer`](Self::set_object_layer), setting the old group back before the
+    /// restore ([docs/state.md#what-is-not-saved]).
+    ///
+    /// Fails, changing nothing, with [`BodyError::OwnedByRagdoll`] for a ragdoll part, whose
+    /// group the ragdoll gives it to filter collisions between its parts.
+    ///
+    /// [`ContactEvent::Removed`]: crate::ContactEvent::Removed
+    /// [docs/state.md#what-is-not-saved]: https://github.com/pockerhead/oxijolt/blob/main/docs/state.md#what-is-not-saved
+    pub fn set_collision_group(
+        &mut self,
+        group: Option<&CollisionGroup>,
+        activation: Activation,
+    ) -> Result<(), BodyError> {
+        let id = self.inner.id;
+        if self.world.is_ragdoll_body(id) {
+            return Err(BodyError::OwnedByRagdoll(id));
+        }
+        if self.collision_group_is(group) {
+            return Ok(());
+        }
+        let value = group.map_or(NO_COLLISION_GROUP, CollisionGroup::to_jph);
+        // SAFETY: as in `set_friction`. `value` is a live local; its table, if any, is kept alive
+        // by `group` for the call, and joltc's `CollisionGroup` adds the reference the body keeps.
+        // Releasing the old table's reference may delete it, which no worker reads: no step runs
+        // while the world is borrowed mutably.
+        unsafe { JPH_BodyInterface_SetCollisionGroup(self.interface(), id.raw, &value) };
+        self.wake_after_filter_change(activation);
+        Ok(())
+    }
+
+    /// Wakes the body for [`Activation::Activate`] and, either way, every other non-static body
+    /// whose bounds overlap or touch it: Jolt collides a pair only when one of its bodies is
+    /// awake, so a filter change would otherwise leave sleeping bodies floating or embedded.
+    fn wake_after_filter_change(&mut self, activation: Activation) {
+        let id = self.inner.id;
+        let bounds = with_read_locked_body(self.inner.body_lock_interface, id, |body| {
+            let mut bounds = NO_BOUNDS;
+            // SAFETY: `body` is locked for reading for the duration of the closure; the getter
+            // only reads it and writes the live local.
+            unsafe { JPH_Body_GetWorldSpaceBounds(body.as_ptr(), &mut bounds) };
+            bounds
+        })
+        .unwrap_or_else(|| unreachable!("`&mut` keeps the body in the world"));
+        if activation == Activation::Activate {
+            self.activate();
+        }
+        let (min, max) = corners(&bounds);
+        self.world.wake_bodies_overlapping(min, max, Some(id));
     }
 
     /// Fails with [`BodyError::NotRigidBody`] for a soft body when `bodies` asks for a rigid

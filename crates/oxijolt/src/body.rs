@@ -236,6 +236,18 @@ pub(crate) fn is_restitution(restitution: f32) -> bool {
     (0.0..=1.0).contains(&restitution)
 }
 
+/// Fails with [`BodyError::UnknownObjectLayer`] for a layer not among a world's
+/// `object_layer_count` object layers.
+pub(crate) fn check_object_layer(
+    layer: ObjectLayer,
+    object_layer_count: u32,
+) -> Result<(), BodyError> {
+    if layer.get() >= object_layer_count {
+        return Err(BodyError::UnknownObjectLayer(layer));
+    }
+    Ok(())
+}
+
 /// What a linear damping must satisfy ([`is_finite_non_negative`]).
 pub(crate) const LINEAR_DAMPING_RULE: &str = "linear damping must be finite and not negative";
 
@@ -328,7 +340,8 @@ impl BodySettings {
     }
 
     /// The object layer, which must exist in the world's
-    /// [`CollisionLayers`](crate::CollisionLayers).
+    /// [`CollisionLayers`](crate::CollisionLayers). Change it later with
+    /// [`BodyMut::set_object_layer`](crate::BodyMut::set_object_layer).
     #[must_use]
     pub fn object_layer(mut self, value: ObjectLayer) -> Self {
         self.object_layer = value;
@@ -545,9 +558,10 @@ impl BodySettings {
         self
     }
 
-    /// The body's collision group, fixed for its life: Jolt saves no group in its state, so a
-    /// group change could not be rolled back. Default none: the body collides by its object
-    /// layer alone. See [`CollisionGroup`] for Jolt's rules.
+    /// The body's collision group. Default none: the body collides by its object layer alone.
+    /// See [`CollisionGroup`] for Jolt's rules. Change it later with
+    /// [`BodyMut::set_collision_group`](crate::BodyMut::set_collision_group); Jolt saves no group
+    /// in a [`WorldState`](crate::WorldState).
     ///
     /// The group filters what the solver collides, in the discrete and the continuous stage and
     /// for soft bodies. A sensor does not detect a body its group excludes. Scene queries,
@@ -567,9 +581,7 @@ impl BodySettings {
     }
 
     fn validate(&self, object_layer_count: u32) -> Result<(), BodyError> {
-        if self.object_layer.get() >= object_layer_count {
-            return Err(BodyError::UnknownObjectLayer(self.object_layer));
-        }
+        check_object_layer(self.object_layer, object_layer_count)?;
         self.validate_values()
     }
 

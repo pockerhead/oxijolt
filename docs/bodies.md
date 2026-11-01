@@ -282,10 +282,13 @@ Where groups apply: the discrete and continuous collision of rigid bodies (`Body
 sensors, which do not detect a body their group excludes. Scene queries, character movement and
 vehicle wheel casts do not look at groups (a wheel's own filter skips only its chassis): a grouped
 body is still found by a ray cast and still blocks a character. A character's inner body has no
-group.
+group at creation.
 
-The group is fixed at creation: Jolt saves no group in its state (`Body::SaveState`,
-`Body.cpp:296-324`), so a change could not be rolled back. Ragdolls give their parts the group id
+`BodyMut::set_collision_group` changes the group of a live body, or removes it with `None`, and
+`BodyRef::collision_group_is` compares it. The body keeps its own reference to the table. Jolt saves
+no group in its state (`Body::SaveState`, `Body.cpp:296-324`), so a restore keeps the group set
+last; a rollback sets the old group back before the restore ([state.md](state.md#what-is-not-saved)).
+Ragdolls give their parts the group id
 `2^31 + RagdollId::to_raw()`, above every caller group id, with a table in which no two parts of one
 ragdoll collide; a ragdoll part cannot take a caller group. Two ragdolls of one settings object
 share the table and still collide with each other, because their group ids differ.
@@ -404,7 +407,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Fixed at creation
 
-The sensor flag, user data, locked axes, movement capability and collision group have no setters, so
+The sensor flag, user data, locked axes and movement capability have no setters, so
 a rollback never has to restore them. Each of these programs fails to compile only because the setter does not
 exist:
 

@@ -3,7 +3,9 @@
 use oxijolt_sys::*;
 
 use super::SoftBodySharedSettings;
-use crate::body::{is_restitution, Activation, LINEAR_DAMPING_RULE, RESTITUTION_RULE};
+use crate::body::{
+    check_object_layer, is_restitution, Activation, LINEAR_DAMPING_RULE, RESTITUTION_RULE,
+};
 use crate::limits::{self, is_friction, is_gravity_factor, is_in_frame, is_local_distance};
 use crate::math::{is_finite_non_negative, ROTATION_RULE};
 use crate::owned::{JoltObject, Owned};
@@ -81,7 +83,8 @@ impl SoftBodySettings {
     }
 
     /// The object layer, which must exist in the world's
-    /// [`CollisionLayers`](crate::CollisionLayers). Default [`ObjectLayer::MOVING`].
+    /// [`CollisionLayers`](crate::CollisionLayers). Default [`ObjectLayer::MOVING`]. Change it
+    /// later with [`BodyMut::set_object_layer`](crate::BodyMut::set_object_layer).
     #[must_use]
     pub fn object_layer(mut self, value: ObjectLayer) -> Self {
         self.object_layer = value;
@@ -203,9 +206,10 @@ impl SoftBodySettings {
         self
     }
 
-    /// The soft body's collision group, fixed for its life, as for a rigid body
+    /// The soft body's collision group, as for a rigid body
     /// ([`BodySettings::collision_group`](crate::BodySettings::collision_group)): Jolt checks
-    /// it against each rigid body the soft body touches. Default none.
+    /// it against each rigid body the soft body touches. Default none. Change it later with
+    /// [`BodyMut::set_collision_group`](crate::BodyMut::set_collision_group).
     #[must_use]
     pub fn collision_group(mut self, value: CollisionGroup) -> Self {
         self.collision_group = Some(value);
@@ -213,9 +217,7 @@ impl SoftBodySettings {
     }
 
     pub(super) fn validate(&self, object_layer_count: u32) -> Result<(), BodyError> {
-        if self.object_layer.get() >= object_layer_count {
-            return Err(BodyError::UnknownObjectLayer(self.object_layer));
-        }
+        check_object_layer(self.object_layer, object_layer_count)?;
         let check = |valid: bool, what| {
             if valid {
                 Ok(())
