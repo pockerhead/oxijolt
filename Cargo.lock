@@ -2865,6 +2865,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxijolt-sys-wasm-raw"
+version = "0.0.0"
+dependencies = [
+ "oxijolt-sys",
+]
+
+[[package]]
 name = "parking"
 version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

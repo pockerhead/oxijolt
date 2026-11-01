@@ -4,8 +4,8 @@
 //! fork's `native/joltc_ext/joltc_ext.h`, and keeps their `JPH_*` names. The output is
 //! committed under `src/bindings/`, one file per ABI family and configuration, so building
 //! needs no libclang; the `bindgen` feature generates it at build time instead. The
-//! supported targets are the registry in `build/targets.rs`; 32-bit targets are not
-//! supported. The
+//! supported targets are the registry in `build/targets.rs`. Of the 32-bit targets only
+//! `wasm32-unknown-unknown` builds. The
 //! extension adds functions in joltc's naming that are compiled into the joltc
 //! archive: a `JPH_StateRecorder`, `JPH_CharacterVirtual_SaveState` and
 //! `RestoreState`, `JPH_CharacterVirtual_ExtendedUpdate2` and
@@ -130,6 +130,38 @@
 //!   links both crates must not call `JPH_DebugRenderer_SetProcs` or keep its own
 //!   `JPH_DebugRenderer` alive.
 //!
+//! # wasm32-unknown-unknown
+//! The native build needs wasi-sdk (`WASI_SDK_PATH` set to its install; 34.0 is tested), Ninja on
+//! `PATH` and Rust 1.91 or newer. On this target the module carries its own C++ runtime, which
+//! adds these rules:
+//! - `JPH_Init` here is a Rust function that runs the module's C++ static constructors once and
+//!   then calls joltc's `JPH_Init`. Call it before every other joltc function except
+//!   `JPH_SetAssertFailureHandler`, `JPH_SetTraceHandler` and the `*_SetProcs` setters. Without
+//!   it, wasm-ld runs the constructors again at the start of every export call, which resets
+//!   Jolt's dynamically initialised statics, such as its fixed-to-world body, while a world uses
+//!   them. The repository's Node check (`scripts/check_wasm_raw.sh`) keeps a world across export
+//!   calls and a repeated `JPH_Init`, and checks that the fixed-to-world body is constructed and
+//!   keeps a mark written into it, and that joltc's step listener still finds the world.
+//! - No other code in the module may call `__wasm_call_ctors`: the constructors would run a second
+//!   time and reset the same statics. C code that calls joltc's `JPH_Init` symbol directly bypasses
+//!   the wrapper and is unsupported.
+//! - Static destructors never run, so destroy every joltc object explicitly.
+//! - wasi-libc's imports are defined by this crate, so a linked module imports nothing. The seven
+//!   functions are exports of every module that links the crate:
+//!
+//!   | WASI function | Behaviour |
+//!   |---|---|
+//!   | `fd_write` | fd 1 and 2: bytes are discarded and reported written (`EINVAL` if the lengths overflow); other fds: `EBADF` |
+//!   | `fd_close` | `EBADF` |
+//!   | `fd_fdstat_get` | `EBADF` (standard output is not a terminal) |
+//!   | `fd_seek` | `ESPIPE` |
+//!   | `sched_yield` | succeeds and does nothing |
+//!   | `clock_time_get` | traps: the simulation must not read a clock |
+//!   | `poll_oneoff` | traps: only sleeps reach it, and nothing can wake the module |
+//! - Rust's allocator and wasi-libc's `malloc` both grow linear memory, and each owns its own
+//!   allocations: free memory with the allocator that gave it.
+//! - Panics abort on this target; they do not unwind.
+//!
 //! [Jolt Physics]: https://github.com/jrouwe/JoltPhysics
 //! [joltc]: https://github.com/amerkoleci/joltc
 
@@ -137,6 +169,14 @@ mod generated;
 mod layout;
 
 pub use generated::*;
+
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+mod static_constructors;
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+mod wasi_imports;
+
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+pub use static_constructors::JPH_Init;
 
 /// Scalar type of world positions: `f64` with the `double-precision` feature, `f32` otherwise.
 #[cfg(feature = "double-precision")]

@@ -3,7 +3,8 @@
 // joltc declares C mirrors of Jolt values and enums and converts or casts them
 // to the C++ types. These checks pin the C ABI view (the same numbers are
 // asserted on the Rust side in src/layout.rs; change both together) and the
-// agreement between the C mirrors and Jolt's C++ types.
+// agreement between the C mirrors and Jolt's C++ types. The pointer-dependent
+// structs have 64-bit numbers here and 32-bit numbers in layout_checks_ptr32.h.
 //
 // More types are added here when the safe layer starts to use them.
 
@@ -678,6 +679,10 @@ OXIJOLT_SYS_ASSERT_OFFSET(JPH_CharacterContact, wasDiscarded, 113);
 OXIJOLT_SYS_ASSERT_OFFSET(JPH_CharacterContact, canPushCharacter, 114);
 OXIJOLT_SYS_ASSERT_OFFSET(JPH_CharacterContact, isBackFacingContact, 115);
 #endif
+#elif UINTPTR_MAX == UINT32_MAX
+#include "layout_checks_ptr32.h"
+#else
+#error "oxijolt-sys asserts the layout of 64-bit and 32-bit targets only"
 #endif
 
 // joltc copies JPH_Mat4 to and from JPH::Mat44 with memcpy, so the sizes must

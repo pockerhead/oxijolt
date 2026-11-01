@@ -1,7 +1,8 @@
 //! Compile-time layout checks for the joltc types the raw tests and the safe layer use.
 //!
 //! These numbers mirror `native/layout_checks.cpp`, which checks the same C types
-//! against Jolt's C++ types; change both together.
+//! against Jolt's C++ types; change both together. The 32-bit numbers of the
+//! pointer-dependent structs are in `layout/ptr32.rs`.
 
 use core::mem::{align_of, offset_of, size_of};
 
@@ -751,7 +752,7 @@ const _: () = {
     assert!(offset_of!(JPH_CharacterContact, isBackFacingContact) == 115);
 };
 
-#[cfg(feature = "debug-renderer")]
+#[cfg(all(feature = "debug-renderer", target_pointer_width = "64"))]
 const _: () = {
     assert!(size_of::<JPH_DebugRenderer_Procs>() == 24);
     assert!(align_of::<JPH_DebugRenderer_Procs>() == 8);
@@ -759,3 +760,6 @@ const _: () = {
     assert!(offset_of!(JPH_DebugRenderer_Procs, DrawTriangle) == 8);
     assert!(offset_of!(JPH_DebugRenderer_Procs, DrawText3D) == 16);
 };
+
+#[cfg(target_pointer_width = "32")]
+mod ptr32;

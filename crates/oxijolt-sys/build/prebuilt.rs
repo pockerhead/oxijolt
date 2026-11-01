@@ -21,6 +21,7 @@ pub const SOURCE_INPUTS: &[&str] = &[
     "native",
     "build.rs",
     "build/cmake_options.rs",
+    "build/wasi_sdk.rs",
     "vendor/joltc/CMakeLists.txt",
     "vendor/joltc/include",
     "vendor/joltc/src",
