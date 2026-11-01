@@ -172,6 +172,7 @@ fn two_worlds_side_by_side_do_not_interfere() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn worlds_step_in_parallel_threads() {
     const TICKS: usize = 200;
     let sequential = {

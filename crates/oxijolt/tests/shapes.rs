@@ -827,6 +827,7 @@ fn convex_radius_rounds_box_edges_for_contacts() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn shapes_are_shared_across_bodies_and_worlds() {
     let unit_box = Shape::new_box(Vec3::new(0.5, 0.5, 0.5)).unwrap();
     let pillar = Shape::new_cylinder(1.0, 0.3).unwrap();

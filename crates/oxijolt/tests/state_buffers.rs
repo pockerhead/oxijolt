@@ -4,6 +4,9 @@
 //! movable states leave static bodies out, and `restore_state_of` restores the selected bodies
 //! only, the same way with 1 and 4 workers in two processes.
 
+// The thread and process tests are compiled out on wasm32; their helpers and imports stay.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 mod common;
 
 use common::determinism::{assert_same, child_request, digest_in_child, finish_child, Digest};
@@ -590,6 +593,7 @@ fn state_buffers_child() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn a_filtered_restore_replays_identically_across_processes() {
     for variant in ["movable", "only"] {
         let one = digest_in_child("state_buffers_child", "filtered", 1, variant);

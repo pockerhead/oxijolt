@@ -91,7 +91,9 @@ what is planned next.
   [building](building.md#prebuilt-native-libraries)).
 - The raw layer, `oxijolt-sys`, builds for `wasm32-unknown-unknown` from source with wasi-sdk:
   its `JPH_Init` runs the module's C++ static constructors once, and the module imports no WASI
-  functions ([building](building.md#targets)). The safe API does not build for wasm yet.
+  functions ([building](building.md#targets)). The safe API builds for it too, single-threaded:
+  worlds default to Jolt's single-threaded job system there, `WorldSettings::worker_threads` is
+  refused, and a panic in a callback traps the module ([job systems](job-system.md)).
 - One set of API rules for names, constructors, settings, errors and derives
   ([api-guidelines.md](api-guidelines.md)), and Rust 1.88 as the minimum version, checked in CI.
 

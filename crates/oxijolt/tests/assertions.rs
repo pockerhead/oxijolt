@@ -2,6 +2,9 @@
 //! abort the process. A child process makes a raw call that fails an assertion; without asserts
 //! the same call is well defined and the child succeeds.
 
+// The thread and process tests are compiled out on wasm32; their helpers and imports stay.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 use std::process::Command;
 
 use oxijolt::Shape;
@@ -40,6 +43,7 @@ fn assertion_child() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn a_failed_jolt_assertion_aborts_with_its_message() {
     let output = Command::new(std::env::current_exe().unwrap())
         .args([

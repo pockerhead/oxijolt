@@ -1589,3 +1589,19 @@ together with the current value of the other.
 The bound is checked by `surface_velocities_are_bounded_alone_and_together` (a lever of 2000 m:
 `|ω|` of 0.25 rad/s fills the bound alone, and the next `f32` above is refused) and exercised by
 `a_conveyor_moves_a_resting_cube` (2 m/s moves a resting cube along the floor).
+
+## Sizes on 32-bit targets
+
+On wasm32 `usize` has 32 bits. Jolt's counts reach the crate as `u32`, which converts to `usize`
+without loss on 32- and 64-bit targets; clippy's `cast_possible_truncation` and `cast_sign_loss`
+report no integer cast to `usize` in the crate on wasm32, and the one float cast, a path point's
+index, is bounded by the point count. What a 32-bit `usize` can overflow is a product of
+counts that sizes a buffer:
+
+- heightfield samples (`sample_count²`) and material indices (`(sample_count - 1)²`) are compared
+  with the given slices through `checked_mul`, so an overflowing product is refused as a length
+  mismatch;
+- the triangle copy that checks scaled meshes and heightfields allocates `3 * triangles` vertices
+  through `checked_mul` and panics on overflow instead of handing joltc a short buffer.
+
+Every other buffer the crate allocates for Jolt has one element per counted item.

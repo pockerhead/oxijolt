@@ -187,6 +187,7 @@ fn full_body_pair_cache_is_reported_and_the_world_advances() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn worlds_are_created_and_dropped_from_many_threads() {
     std::thread::scope(|scope| {
         for _ in 0..4 {
@@ -203,6 +204,7 @@ fn worlds_are_created_and_dropped_from_many_threads() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn world_is_readable_from_many_threads() {
     let mut world = world(Vec3::new(0.0, -9.81, 0.0), 2);
     let ids = build_stacks(&mut world);
@@ -230,6 +232,7 @@ fn world_is_readable_from_many_threads() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn rays_are_cast_from_many_threads() {
     let mut world = world(Vec3::new(0.0, -9.81, 0.0), 1);
     add_floor(&mut world);

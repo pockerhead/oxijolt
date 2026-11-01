@@ -2,6 +2,9 @@
 //! process and two), saved and unsaved configuration, structural changes refuse old states and
 //! change nothing, and states of other worlds are refused.
 
+// The thread and process tests are compiled out on wasm32; their helpers and imports stay.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 mod common;
 
 use common::determinism::{assert_same, child_request, digest_in_child, finish_child, Digest};
@@ -260,6 +263,7 @@ fn state_child() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn rollback_replay_is_identical_across_processes() {
     let one = digest_in_child("state_child", "rollback", 1, "");
     let four = digest_in_child("state_child", "rollback", 4, "");

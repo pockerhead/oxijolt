@@ -5,8 +5,10 @@ members = [
     "xtask",
     "examples/playground",
     "benches/comparison",
-    # Built for wasm32-unknown-unknown by scripts/check_wasm_raw.sh; empty on other targets.
+    # Built for wasm32-unknown-unknown by scripts/check_wasm_raw.sh and check_wasm_safe.sh; empty
+    # on other targets.
     "tests/wasm-raw",
+    "tests/wasm-safe",
 ]
 # The playground (a window and a second native build with the debug renderer) and the engine
 # comparison (Rapier, Avian and Bevy as dependencies) are built only when asked for: `-p playground`,

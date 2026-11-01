@@ -3,6 +3,9 @@
 //! kinematic and motor drive, masses, lifecycle guards, removal, rebase and settings shared by
 //! two worlds.
 
+// The thread and process tests are compiled out on wasm32; their helpers and imports stay.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 mod common;
 
 use std::thread;
@@ -237,6 +240,7 @@ const PROBES: [[f64; 2]; 5] = [
 ];
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn humanoid_settles_on_a_heightfield_in_a_second_world() {
     let total: f32 = PARTS.iter().map(|part| part.mass_fraction).sum();
     assert!((total - 1.0).abs() < 1e-6, "{total}");
@@ -292,6 +296,7 @@ fn humanoid_settles_on_a_heightfield_in_a_second_world() {
 // friction coefficients all still overshoot by more than 0.08 rad. The bound catches a
 // regression of the overshoot, not a hard per-tick limit.
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn humanoid_joints_overshoot_their_limits_only_boundedly_during_the_drop() {
     let (_, _, settled) = settled_scene();
     assert!(
@@ -394,6 +399,7 @@ fn two_ragdolls_collide_with_each_other_but_not_with_themselves() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn an_environment_ray_passes_through_a_resting_part() {
     let (scene, ragdoll, _) = settled_scene();
     let pelvis = scene.world.ragdoll(ragdoll).unwrap().body_ids()[PELVIS];
@@ -802,6 +808,7 @@ fn ragdoll_parts_and_ids_are_guarded() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn removing_a_ragdoll_drops_what_rests_on_it() {
     let (mut scene, ragdoll, _) = settled_scene();
     let chest = scene.world.ragdoll(ragdoll).unwrap().body_ids()[CHEST];
@@ -929,6 +936,7 @@ fn readings_agree(a: JointReading, b: JointReading, tolerance: f32) -> bool {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn rebase_moves_a_settled_ragdoll_rigidly() {
     let (mut scene, ragdoll, _) = settled_scene();
     let reading = |world: &PhysicsWorld, part: usize| {
@@ -969,6 +977,7 @@ fn rebase_moves_a_settled_ragdoll_rigidly() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn one_settings_value_serves_two_worlds() {
     let (mut a, layers) = ragdoll_world(1);
     let (mut b, _) = ragdoll_world(3);

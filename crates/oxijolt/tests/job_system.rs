@@ -4,6 +4,9 @@
 //! pool at the largest collision step count, the choice between the job systems and reading it
 //! back from the settings and the world.
 
+// The thread and process tests are compiled out on wasm32; their helpers and imports stay.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 mod common;
 
 use std::any::Any;
@@ -191,6 +194,7 @@ fn native() -> WorldSettings {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn rayon_job_system_matches_the_native_pool() {
     let jobs = Arc::new(Counting::new(RayonJobs::new(3)));
     let caller = stacks_digest(WorldSettings::default().job_system(jobs.clone()));
@@ -229,6 +233,7 @@ fn ragdoll_pile_digest(settings: WorldSettings) -> Vec<u8> {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn inline_job_system_matches_the_native_pool() {
     let jobs = Arc::new(Counting::new(InlineJobs { concurrency: 3 }));
     let caller = stacks_digest(WorldSettings::default().job_system(jobs.clone()));
@@ -245,6 +250,7 @@ fn inline_job_system_matches_the_native_pool() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn step_from_the_only_thread_of_a_rayon_pool_completes() {
     let caller = with_timeout(TIMEOUT_SECS, || {
         let jobs = Arc::new(RayonJobs::new(1));
@@ -283,6 +289,7 @@ fn jobs_may_outlive_their_world() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn a_deferred_job_may_finish_on_another_thread_while_the_world_drops() {
     let jobs = Arc::new(DeferredJobs::default());
     let mut world = cubes_world(jobs.clone());
@@ -306,6 +313,7 @@ fn a_deferred_job_may_finish_on_another_thread_while_the_world_drops() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn a_job_system_that_keeps_every_job_does_not_run_out_of_jolt_jobs() {
     // Jolt has 2048 job slots per world; jobs the pool keeps past their step must not hold them.
     let queued = with_timeout(TIMEOUT_SECS, || {
@@ -368,6 +376,7 @@ fn panicking_job_system_case(mode: PanicMode) {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn a_panicking_job_system_panics_out_of_step_and_the_world_stays_usable() {
     for mode in [
         PanicMode::BeforeStoring(3),
@@ -404,6 +413,7 @@ fn max_concurrency_is_bounded() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn a_thread_pool_world_reads_back_its_worker_threads_and_concurrency() {
     for workers in [1, 2, 4, WorldSettings::MAX_WORKER_THREADS] {
         let world = PhysicsWorld::new(WorldSettings::default().worker_threads(workers)).unwrap();
@@ -424,6 +434,7 @@ fn a_thread_pool_world_reads_back_its_worker_threads_and_concurrency() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn a_single_threaded_world_reads_back_its_kind_and_concurrency_one() {
     let world = PhysicsWorld::new(single_threaded()).unwrap();
     assert_eq!(world.job_system_kind(), JobSystemKind::SingleThreaded);
@@ -451,6 +462,7 @@ fn a_caller_job_system_world_reads_back_the_concurrency_read_at_creation() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn default_settings_read_back_a_thread_pool_with_one_worker() {
     assert_eq!(
         WorldSettings::default().job_system_kind(),
@@ -459,6 +471,19 @@ fn default_settings_read_back_a_thread_pool_with_one_worker() {
 }
 
 #[test]
+#[cfg(target_arch = "wasm32")]
+fn default_settings_read_back_single_threaded_on_wasm32() {
+    assert_eq!(
+        WorldSettings::default().job_system_kind(),
+        JobSystemKind::SingleThreaded
+    );
+    let world = PhysicsWorld::new(WorldSettings::default()).unwrap();
+    assert_eq!(world.job_system_kind(), JobSystemKind::SingleThreaded);
+    assert_eq!(world.max_concurrency(), 1);
+}
+
+#[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn settings_read_back_the_thread_pool_and_single_threaded_choices() {
     for workers in [1, 2, WorldSettings::MAX_WORKER_THREADS] {
         assert_eq!(
@@ -488,6 +513,7 @@ fn settings_read_back_a_caller_job_system_without_calling_it() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn settings_read_back_the_last_job_system_choice() {
     let jobs: Arc<dyn JobSystem> = Arc::new(InlineJobs { concurrency: 3 });
     let pool = JobSystemKind::ThreadPool { worker_threads: 2 };
@@ -523,6 +549,7 @@ fn settings_read_back_the_last_job_system_choice() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn worlds_sharing_one_job_system_step_in_parallel() {
     let digests = with_timeout(TIMEOUT_SECS, || {
         let jobs: Arc<dyn JobSystem> = Arc::new(RayonJobs::new(2));
@@ -545,6 +572,7 @@ fn worlds_sharing_one_job_system_step_in_parallel() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn the_last_of_job_system_and_worker_threads_wins() {
     let jobs = Arc::new(Counting::new(InlineJobs { concurrency: 3 }));
     let settings = WorldSettings::default()
@@ -573,6 +601,7 @@ fn single_threaded() -> WorldSettings {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn single_threaded_matches_the_native_pool() {
     assert_eq!(stacks_digest(single_threaded()), stacks_digest(native()));
     assert_eq!(
@@ -604,6 +633,7 @@ fn the_last_of_three_job_system_choices_wins() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn a_single_threaded_world_steps_on_another_thread() {
     const MOVED_TICKS: usize = 60;
     let mut world = PhysicsWorld::new(single_threaded()).unwrap();
@@ -618,6 +648,7 @@ fn a_single_threaded_world_steps_on_another_thread() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn worlds_with_different_native_job_systems_step_in_parallel() {
     let (pool, single) = with_timeout(TIMEOUT_SECS, || {
         thread::scope(|scope| {
@@ -671,6 +702,7 @@ fn largest_respawn_count(jobs: Arc<Counting<impl JobSystem + 'static>>) -> usize
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn a_saturated_update_at_max_collision_steps_fits_jolts_job_pool() {
     // Jolt's job pool and barrier ring hold 2048 jobs. An update of `n` collision steps creates at
     // most `360 * n - 1` jobs besides FindCollisions respawns, and the respawns may take twice

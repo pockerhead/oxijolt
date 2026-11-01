@@ -25,6 +25,9 @@
 //! Each run happens in its own child process (this test binary, running the ignored
 //! `determinism_child` test), so no state leaks between runs; see `common::determinism`.
 
+// The thread and process tests are compiled out on wasm32; their helpers and imports stay.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 mod common;
 
 use common::determinism::*;
@@ -941,54 +944,64 @@ fn determinism_child() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn stacks_digest_is_identical_with_caller_job_systems() {
     assert_caller_job_systems_agree("determinism_child", "stacks", "forward");
     assert_caller_job_systems_agree("determinism_child", "stacks", "rebased");
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn pile_digest_is_identical_with_caller_job_systems() {
     // The Rayon child also asserts that its pool executed Jolt jobs.
     assert_caller_job_systems_agree("determinism_child", "pile", "forward");
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn chunk_digest_is_identical_with_caller_job_systems() {
     assert_caller_job_systems_agree("determinism_child", "chunk", "forward");
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn walker_digest_is_identical_with_caller_job_systems() {
     assert_caller_job_systems_agree("determinism_child", "walker", "forward");
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn vehicle_digest_is_identical_with_caller_job_systems() {
     assert_caller_job_systems_agree("determinism_child", "vehicle", "forward");
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn fleet_digest_is_identical_with_caller_job_systems() {
     // The 40 vehicle listeners run in 2, 5 and 3 jobs (`PhysicsSystem.cpp:243`).
     assert_caller_job_systems_agree("determinism_child", "fleet", "forward");
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn ragdoll_pile_digest_is_identical_with_caller_job_systems() {
     assert_caller_job_systems_agree("determinism_child", "ragdoll_pile", "forward");
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn constraint_digest_is_identical_with_caller_job_systems() {
     assert_caller_job_systems_agree("determinism_child", "constraints", "forward");
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn soft_body_digest_is_identical_with_caller_job_systems() {
     assert_caller_job_systems_agree("determinism_child", "soft_bodies", "forward");
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn stacks_digest_is_identical_with_the_single_threaded_job_system() {
     for variant in ["forward", "rebased", "sub_stepped"] {
         assert_single_threaded_agrees("determinism_child", "stacks", variant);
@@ -996,26 +1009,31 @@ fn stacks_digest_is_identical_with_the_single_threaded_job_system() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn pile_digest_is_identical_with_the_single_threaded_job_system() {
     assert_single_threaded_agrees("determinism_child", "pile", "forward");
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn chunk_digest_is_identical_with_the_single_threaded_job_system() {
     assert_single_threaded_agrees("determinism_child", "chunk", "forward");
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn walker_digest_is_identical_with_the_single_threaded_job_system() {
     assert_single_threaded_agrees("determinism_child", "walker", "forward");
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn vehicle_digest_is_identical_with_the_single_threaded_job_system() {
     assert_single_threaded_agrees("determinism_child", "vehicle", "forward");
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn fleet_digest_is_identical_with_the_single_threaded_job_system() {
     for variant in ["forward", "sub_stepped"] {
         assert_single_threaded_agrees("determinism_child", "fleet", variant);
@@ -1023,16 +1041,19 @@ fn fleet_digest_is_identical_with_the_single_threaded_job_system() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn ragdoll_pile_digest_is_identical_with_the_single_threaded_job_system() {
     assert_single_threaded_agrees("determinism_child", "ragdoll_pile", "forward");
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn constraint_digest_is_identical_with_the_single_threaded_job_system() {
     assert_single_threaded_agrees("determinism_child", "constraints", "forward");
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn soft_body_digest_is_identical_with_the_single_threaded_job_system() {
     assert_single_threaded_agrees("determinism_child", "soft_bodies", "forward");
 }
@@ -1042,6 +1063,7 @@ fn stacks_in_child(threads: u32, variant: &str) -> Digest {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn stacks_digest_is_identical_across_thread_counts_with_collision_steps() {
     let one_thread = stacks_in_child(1, "sub_stepped");
     let four_threads = stacks_in_child(4, "sub_stepped");
@@ -1056,6 +1078,7 @@ fn stacks_digest_is_identical_across_thread_counts_with_collision_steps() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn stacks_digest_is_identical_across_thread_counts() {
     let one_thread = stacks_in_child(1, "forward");
     let four_threads = stacks_in_child(4, "forward");
@@ -1091,6 +1114,7 @@ fn chunk_in_child(threads: u32, variant: &str) -> Digest {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn chunk_digest_is_identical_across_thread_counts() {
     let one_thread = chunk_in_child(1, "forward");
     let four_threads = chunk_in_child(4, "forward");
@@ -1107,6 +1131,7 @@ fn walker_in_child(threads: u32) -> Digest {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn walker_digest_is_identical_across_thread_counts() {
     let one_thread = walker_in_child(1);
     let four_threads = walker_in_child(4);
@@ -1140,6 +1165,7 @@ fn tick_zero_ids(digest: &Digest) -> ([u32; 4], u32) {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn permuted_insertion_order_fails_the_gate() {
     let forward = chunk_in_child(1, "forward");
     let permuted = chunk_in_child(4, "permuted");
@@ -1686,6 +1712,7 @@ fn vehicle_in_child(threads: u32) -> Digest {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn vehicle_digest_is_identical_across_thread_counts() {
     let one_thread = vehicle_in_child(1);
     let four_threads = vehicle_in_child(4);
@@ -1698,6 +1725,7 @@ fn vehicle_digest_is_identical_across_thread_counts() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn constraint_digest_is_identical_across_thread_counts() {
     let one_thread = digest_in_child("determinism_child", "constraints", 1, "forward");
     let four_threads = digest_in_child("determinism_child", "constraints", 4, "forward");
@@ -1809,6 +1837,7 @@ fn run_soft_bodies(worker_threads: u32) -> Digest {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn soft_body_digest_is_identical_across_thread_counts() {
     let one_thread = digest_in_child("determinism_child", "soft_bodies", 1, "forward");
     let four_threads = digest_in_child("determinism_child", "soft_bodies", 4, "forward");
@@ -1825,6 +1854,7 @@ fn fleet_in_child(threads: u32, variant: &str) -> Digest {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn fleet_digest_is_identical_across_thread_counts() {
     // Jolt runs the 40 vehicle listeners in min(40 / 8, workers + 1) jobs: 2 with one worker,
     // 5 with four. The second four-worker run samples scheduling at an equal job count.
@@ -1841,6 +1871,7 @@ fn fleet_digest_is_identical_across_thread_counts() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn fleet_digest_is_identical_across_thread_counts_with_collision_steps() {
     // 40 vehicle listeners give 2 listener jobs with one worker and 5 with four, in every
     // collision step.
@@ -1855,6 +1886,7 @@ fn fleet_digest_is_identical_across_thread_counts_with_collision_steps() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn fleet_digest_detects_a_changed_input() {
     let forward = fleet_in_child(4, "forward");
     let nudged = fleet_in_child(4, "nudged");
@@ -2062,6 +2094,7 @@ fn ragdoll_pile_in_child(threads: u32) -> Digest {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn ragdoll_pile_digest_is_identical_across_thread_counts() {
     let one_thread = ragdoll_pile_in_child(1);
     let four_threads = ragdoll_pile_in_child(4);

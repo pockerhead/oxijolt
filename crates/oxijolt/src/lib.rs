@@ -95,6 +95,21 @@
 //! exception is the physics-update-error assertion, whose condition [`PhysicsWorld::step`]
 //! returns in its [`StepReport`].
 //!
+//! # wasm32-unknown-unknown
+//! The crate builds for `wasm32-unknown-unknown` from source with wasi-sdk and needs Rust 1.91
+//! or newer there; the documentation of `oxijolt-sys` lists the build requirements and the
+//! module's runtime rules. On this target:
+//! - **No threads.** [`WorldSettings::default`] runs a world's jobs with
+//!   [`WorldSettings::single_threaded`], and [`PhysicsWorld::new`] refuses
+//!   [`WorldSettings::worker_threads`] with [`WorldError::InvalidValue`]. A caller [`JobSystem`]
+//!   is accepted as elsewhere; the stepping thread runs the jobs it leaves.
+//! - **Panics trap.** The standard library aborts on panic and `catch_unwind` catches nothing, so
+//!   a panic in a listener, filter, collector, job system or tire callback stops the module
+//!   instead of being resumed after the call, as the callbacks' documentation describes for
+//!   native targets.
+//! - **32-bit sizes.** `usize` is 32 bits; buffer lengths computed from Jolt's counts are checked
+//!   against overflow ([limits doc][32-bit sizes]).
+//!
 //! # Features
 //! Every feature adds to the API except `double-precision`, which changes [`Real`] in every
 //! signature: only the final application enables it, and libraries built on oxijolt forward it.
@@ -146,6 +161,7 @@
 //! [job system guide]: https://github.com/pockerhead/oxijolt/blob/main/docs/job-system.md
 //! [determinism]: https://github.com/pockerhead/oxijolt/blob/main/docs/determinism.md
 //! [limits doc]: https://github.com/pockerhead/oxijolt/blob/main/docs/limits.md
+//! [32-bit sizes]: https://github.com/pockerhead/oxijolt/blob/main/docs/limits.md#sizes-on-32-bit-targets
 //! [coverage]: https://github.com/pockerhead/oxijolt/blob/main/docs/coverage.md#not-covered
 #![warn(
     missing_docs,

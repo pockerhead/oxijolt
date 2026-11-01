@@ -146,7 +146,7 @@
 //!   time and reset the same statics. C code that calls joltc's `JPH_Init` symbol directly bypasses
 //!   the wrapper and is unsupported.
 //! - Static destructors never run, so destroy every joltc object explicitly.
-//! - wasi-libc's imports are defined by this crate, so a linked module imports nothing. The seven
+//! - wasi-libc's imports are defined by this crate, so a linked module imports nothing. The twelve
 //!   functions are exports of every module that links the crate:
 //!
 //!   | WASI function | Behaviour |
@@ -158,6 +158,11 @@
 //!   | `sched_yield` | succeeds and does nothing |
 //!   | `clock_time_get` | traps: the simulation must not read a clock |
 //!   | `poll_oneoff` | traps: only sleeps reach it, and nothing can wake the module |
+//!   | `environ_sizes_get` | writes 0 and 0: the environment is empty |
+//!   | `environ_get` | succeeds and writes nothing |
+//!   | `fd_prestat_get` | `EBADF`: no directory is preopened |
+//!   | `fd_prestat_dir_name` | `EBADF` |
+//!   | `proc_exit` | traps: there is no process to exit |
 //! - Rust's allocator and wasi-libc's `malloc` both grow linear memory, and each owns its own
 //!   allocations: free memory with the allocator that gave it.
 //! - Panics abort on this target; they do not unwind.

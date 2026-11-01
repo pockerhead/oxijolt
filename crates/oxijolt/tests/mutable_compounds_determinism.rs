@@ -4,6 +4,9 @@
 //! The runs match bit for bit with 1 and 4 worker threads, in one process and in two, and after
 //! a rollback with a detour from a state saved right after the last edit.
 
+// The thread and process tests are compiled out on wasm32; their helpers and imports stay.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 mod common;
 
 use common::controls::fall_asleep;
@@ -324,6 +327,7 @@ fn a_rollback_after_the_last_edit_replays_exactly() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn mutable_compounds_match_across_processes() {
     let one = digest_in_child("mutable_compounds_determinism_child", "compounds", 1, "");
     let four = digest_in_child("mutable_compounds_determinism_child", "compounds", 4, "");

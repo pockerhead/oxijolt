@@ -6,6 +6,9 @@
 //! (asserts builds abort on it) or a crash fails the parent test, which names the last case the
 //! child started. Every case is independent of the worker count and of the other cases' outcomes.
 
+// The thread and process tests are compiled out on wasm32; their helpers and imports stay.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 mod common;
 
 use std::io::Write as _;
@@ -24,6 +27,7 @@ mod tapered;
 const CHILD: &str = "shape_stress_child";
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn shapes_survive_seeded_stress() {
     let output = Command::new(std::env::current_exe().unwrap())
         .args([

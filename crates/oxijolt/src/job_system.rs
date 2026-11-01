@@ -109,7 +109,8 @@ pub trait JobSystem: Send + Sync + 'static {
     /// itself; running it later does nothing.
     ///
     /// A panic here does not unwind into Jolt; see
-    /// [`PhysicsWorld::step`](crate::PhysicsWorld::step).
+    /// [`PhysicsWorld::step`](crate::PhysicsWorld::step). On wasm32 it traps
+    /// ([wasm32](crate#wasm32-unknown-unknown)).
     fn queue_job(&self, job: Job);
 }
 
@@ -592,6 +593,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_arch = "wasm32"))]
     fn concurrent_panics_keep_one_payload_and_drop_the_others() {
         const THREADS: usize = 8;
 
@@ -627,6 +629,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_arch = "wasm32"))]
     fn a_job_run_while_its_update_finishes_runs_once() {
         const JOBS: usize = 64;
 

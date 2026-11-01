@@ -2,6 +2,9 @@
 //! the same with 1 and 4 worker threads in separate processes, and a rollback after a divergent
 //! detour replays the straight run bit for bit.
 
+// The thread and process tests are compiled out on wasm32; their helpers and imports stay.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 mod common;
 
 use common::determinism::{assert_same, child_request, digest_in_child, finish_child, Digest};
@@ -212,6 +215,7 @@ fn mesh_shapes_child() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn new_shapes_run_identically_with_1_and_4_workers() {
     let one = digest_in_child("mesh_shapes_child", "straight", 1, "");
     let four = digest_in_child("mesh_shapes_child", "straight", 4, "");
@@ -222,6 +226,7 @@ fn new_shapes_run_identically_with_1_and_4_workers() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn rollback_after_a_detour_replays_the_straight_run() {
     let straight = digest_in_child("mesh_shapes_child", "straight", 1, "");
     let replay = digest_in_child("mesh_shapes_child", "rollback", 4, "");

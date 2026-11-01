@@ -3,6 +3,9 @@
 //! bit for bit the same with 1 and 4 worker threads, each run in its own process, and most of
 //! them land on the mesh.
 
+// The thread and process tests are compiled out on wasm32; their helpers and imports stay.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 #[path = "real_meshes_checks/mod.rs"]
 mod checks;
 mod common;
@@ -121,16 +124,19 @@ fn assert_runs_agree(scenario: &str) {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn track_tile_runs_identically_with_1_and_4_workers() {
     assert_runs_agree("track-straight");
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn dungeon_corridor_runs_identically_with_1_and_4_workers() {
     assert_runs_agree("corridor-wide-corner");
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 #[ignore = "needs scripts/fetch_models.py"]
 fn skull_runs_identically_with_1_and_4_workers() {
     assert_runs_agree("skull");

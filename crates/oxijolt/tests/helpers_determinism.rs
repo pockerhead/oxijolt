@@ -3,6 +3,9 @@
 //! and a fast ball thrown at the floor, run bit for bit the same with 1 and 4 worker threads, in
 //! one process and in two, and after a rollback with a detour.
 
+// The thread and process tests are compiled out on wasm32; their helpers and imports stay.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 mod common;
 
 use common::determinism::{assert_same, child_request, digest_in_child, finish_child, Digest};
@@ -364,6 +367,7 @@ fn a_rollback_replays_buoyancy_queries_and_estimates_exactly() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn helpers_match_across_processes() {
     let one = digest_in_child("helpers_determinism_child", "helpers", 1, "");
     let four = digest_in_child("helpers_determinism_child", "helpers", 4, "");

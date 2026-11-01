@@ -310,6 +310,7 @@ fn study_child() {
 /// No world step runs: this guards the caller and the character queries, not solver
 /// scheduling.
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn study_runs_match_across_processes_and_worker_counts() {
     let mut scenes = Scenes::default();
     for case in determinism_cases(&mut scenes) {
