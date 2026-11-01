@@ -168,6 +168,18 @@ impl GearConstraintSettings {
         self.hinges = Some([hinge1, hinge2]);
         self
     }
+
+    /// The hinge that holds body 1 (Jolt's gear 1 constraint), if
+    /// [`constraints`](Self::constraints) set one.
+    pub fn gear1_constraint(&self) -> Option<ConstraintId<HingeConstraint>> {
+        self.hinges.map(|[hinge1, _]| hinge1)
+    }
+
+    /// The hinge that holds body 2 (Jolt's gear 2 constraint), if
+    /// [`constraints`](Self::constraints) set one.
+    pub fn gear2_constraint(&self) -> Option<ConstraintId<HingeConstraint>> {
+        self.hinges.map(|[_, hinge2]| hinge2)
+    }
 }
 
 impl sealed::Settings for GearConstraintSettings {
@@ -242,6 +254,18 @@ impl ConstraintSettings for GearConstraintSettings {
 }
 
 impl ConstraintRef<'_, GearConstraint> {
+    /// The hinge that holds body 1, if the gear was created with
+    /// [`GearConstraintSettings::constraints`]; it cannot be removed while the gear exists.
+    pub fn gear1_constraint(&self) -> Option<ConstraintId<HingeConstraint>> {
+        self.reference(0)
+    }
+
+    /// The hinge that holds body 2, if the gear was created with
+    /// [`GearConstraintSettings::constraints`]; it cannot be removed while the gear exists.
+    pub fn gear2_constraint(&self) -> Option<ConstraintId<HingeConstraint>> {
+        self.reference(1)
+    }
+
     /// The angular impulse in N·m·s the gear applied in the last collision step: to body 1 about
     /// its axis and, as is rather than `ratio` times it, to body 2 about its axis (see
     /// [docs/constraints.md#limits-on-what-is-accepted]).
@@ -335,6 +359,18 @@ impl RackAndPinionConstraintSettings {
         self
     }
 
+    /// The hinge that holds the pinion (Jolt's pinion constraint), if
+    /// [`constraints`](Self::constraints) set one.
+    pub fn pinion_constraint(&self) -> Option<ConstraintId<HingeConstraint>> {
+        self.constraints.map(|(hinge, _)| hinge)
+    }
+
+    /// The slider that holds the rack (Jolt's rack constraint), if
+    /// [`constraints`](Self::constraints) set one.
+    pub fn rack_constraint(&self) -> Option<ConstraintId<SliderConstraint>> {
+        self.constraints.map(|(_, slider)| slider)
+    }
+
     fn to_jph(&self) -> JPH_RackAndPinionConstraintSettings {
         JPH_RackAndPinionConstraintSettings {
             base: self.solver.to_jph(),
@@ -411,6 +447,20 @@ impl ConstraintSettings for RackAndPinionConstraintSettings {
 }
 
 impl ConstraintRef<'_, RackAndPinionConstraint> {
+    /// The hinge that holds the pinion, if the rack and pinion was created with
+    /// [`RackAndPinionConstraintSettings::constraints`]; it cannot be removed while the rack and
+    /// pinion exists.
+    pub fn pinion_constraint(&self) -> Option<ConstraintId<HingeConstraint>> {
+        self.reference(0)
+    }
+
+    /// The slider that holds the rack, if the rack and pinion was created with
+    /// [`RackAndPinionConstraintSettings::constraints`]; it cannot be removed while the rack and
+    /// pinion exists.
+    pub fn rack_constraint(&self) -> Option<ConstraintId<SliderConstraint>> {
+        self.reference(1)
+    }
+
     /// The angular impulse in N·m·s the rack and pinion applied to the pinion (body 1) in the
     /// last collision step; the rack (body 2) gets `-ratio` times it in N·s along its axis.
     pub fn total_lambda(&self) -> f32 {

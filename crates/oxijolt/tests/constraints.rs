@@ -1440,6 +1440,90 @@ fn gear_references_correct_drift() {
     assert!(worst < 1e-2, "{worst} rad");
 }
 
+#[test]
+fn coupling_settings_name_their_references() {
+    let GearPair { hinges, .. } = gear_pair();
+    let RackScene { hinge, slider, .. } = rack_scene();
+
+    let gear = GearConstraintSettings::new(Z, Z, 2.0);
+    assert_eq!(gear.gear1_constraint(), None);
+    assert_eq!(gear.gear2_constraint(), None);
+    let gear = gear.constraints(hinges[0], hinges[1]);
+    assert_eq!(gear.gear1_constraint(), Some(hinges[0]));
+    assert_eq!(gear.gear2_constraint(), Some(hinges[1]));
+
+    let rack = RackAndPinionConstraintSettings::new(Z, X, 4.0);
+    assert_eq!(rack.pinion_constraint(), None);
+    assert_eq!(rack.rack_constraint(), None);
+    let rack = rack.constraints(hinge, slider);
+    assert_eq!(rack.pinion_constraint(), Some(hinge));
+    assert_eq!(rack.rack_constraint(), Some(slider));
+}
+
+#[test]
+fn created_couplings_name_their_references() {
+    let GearPair {
+        mut world,
+        discs,
+        hinges,
+    } = gear_pair();
+    let bare = world
+        .create_constraint(discs[0], discs[1], &GearConstraintSettings::new(Z, Z, 2.0))
+        .unwrap();
+    let referencing = world
+        .create_constraint(
+            discs[0],
+            discs[1],
+            &GearConstraintSettings::new(Z, Z, 2.0).constraints(hinges[0], hinges[1]),
+        )
+        .unwrap();
+    let bare = world.constraint(bare).unwrap();
+    assert_eq!(bare.gear1_constraint(), None);
+    assert_eq!(bare.gear2_constraint(), None);
+    let referencing = world.constraint(referencing).unwrap();
+    assert_eq!(referencing.gear1_constraint(), Some(hinges[0]));
+    assert_eq!(referencing.gear2_constraint(), Some(hinges[1]));
+
+    let RackScene {
+        mut world,
+        pinion,
+        rack,
+        hinge,
+        slider,
+    } = rack_scene();
+    let bare = world
+        .create_constraint(
+            pinion,
+            rack,
+            &RackAndPinionConstraintSettings::new(Z, X, 4.0),
+        )
+        .unwrap();
+    let referencing = world
+        .create_constraint(
+            pinion,
+            rack,
+            &RackAndPinionConstraintSettings::new(Z, X, 4.0).constraints(hinge, slider),
+        )
+        .unwrap();
+    let bare = world.constraint(bare).unwrap();
+    assert_eq!(bare.pinion_constraint(), None);
+    assert_eq!(bare.rack_constraint(), None);
+    let coupling = world.constraint(referencing).unwrap();
+    assert_eq!(coupling.pinion_constraint(), Some(hinge));
+    assert_eq!(coupling.rack_constraint(), Some(slider));
+    // The getters name the constraints the removal guard protects.
+    let references: [AnyConstraintId; 2] = [
+        coupling.pinion_constraint().unwrap().into(),
+        coupling.rack_constraint().unwrap().into(),
+    ];
+    for reference in references {
+        assert_eq!(
+            world.remove_constraint(reference),
+            Err(ConstraintError::UsedByConstraint(referencing.into()))
+        );
+    }
+}
+
 struct RackScene {
     world: PhysicsWorld,
     pinion: BodyId,

@@ -95,6 +95,8 @@ Everything planned for 1.0 is done; what works today, with links to the guides, 
 - [x] Body properties at run time: friction, restitution, gravity factor, damping, motion quality,
   layer, collision group, sensor
 - [x] Solver step overrides and priority per constraint
+- [x] The hinges and slider a gear or rack and pinion references, readable from its settings and
+  the created constraint
 
 ## Status
 

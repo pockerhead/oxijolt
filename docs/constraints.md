@@ -196,13 +196,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## References between constraints
 
-A gear can name the hinges that hold its two bodies (`GearConstraintSettings::hinges`), and a rack
-and pinion the hinge and slider that hold its bodies
+A gear can name the hinges that hold its two bodies (`GearConstraintSettings::constraints`), and a
+rack and pinion the hinge and slider that hold its bodies
 (`RackAndPinionConstraintSettings::constraints`). Jolt then corrects drift from their angle and
 position; without them it couples the velocities only and the bodies slowly drift apart. Each
 referenced constraint must hold the coupled body as its body 2, about the same axis direction. A
 referenced hinge or slider cannot be removed while the coupling exists
-(`ConstraintError::UsedByConstraint`); remove the coupling first.
+(`ConstraintError::UsedByConstraint`); remove the coupling first. The settings and the created
+coupling's `ConstraintRef` name the references: `gear1_constraint` and `gear2_constraint` for a
+gear, `pinion_constraint` and `rack_constraint` for a rack and pinion, `None` when there are none.
 
 A gear's drift correction uses hinge angles in `[-π, π]`, which is consistent across the wrap at ±π
 only for an integer ratio; with another ratio Jolt corrects towards a wrong angle once gear 2 has
