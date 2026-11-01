@@ -165,7 +165,7 @@ quality bounds (with each engine's defaults Rapier 8, oxijolt 7); oxijolt lets s
 through the ground and its plank towers collapse. oxijolt brings
 Jolt's character controller, wheeled and tracked vehicles and ragdolls; outside x86_64 Windows
 and Linux and Apple silicon it needs a C++ toolchain, and on wasm32-unknown-unknown it builds
-single-threaded and is not tested in CI.
+single-threaded, checked in CI against Linux native results.
 
 ## Documentation
 

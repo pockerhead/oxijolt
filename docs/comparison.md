@@ -848,8 +848,9 @@ Checked on 2026-10-07 against oxijolt at this commit, rapier3d 0.36.0 (tag `v0.3
 - **macOS** comes prebuilt and is tested in CI on Apple silicon only; Intel Macs build from
   source. This comparison runs on Windows and Linux only: its harness reads CPU time and memory
   from those two systems.
-- **Same results across operating systems** are an opt-in feature that CI does not check yet;
-  Rapier tests a snapshot on native and WASM targets.
+- **Same results across operating systems** are an opt-in feature; CI checks wasm in Node and
+  Chrome against Linux native, but not native operating systems against each other yet. Rapier
+  tests a snapshot on native and WASM targets.
 - **Save and restore** covers the same world with an unchanged structure only ([state](state.md)).
 - **Speed on scenes of many contacts.** At matched settings Rapier's step is 1.9 to 2.2 times
   faster on `boxes`, 1.3 to 1.85 times on `pyramid`, 1.2 to 1.75 times on `capsules`, 1.4 times
