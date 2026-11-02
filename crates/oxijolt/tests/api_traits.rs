@@ -55,6 +55,8 @@ fn settings_are_clone_and_comparable() {
     settings::<BodySettings>();
     settings::<Inertia>();
     copy::<Inertia>();
+    settings::<MassProperties>();
+    copy::<MassProperties>();
     settings::<BuoyancySettings>();
     settings::<ExtendedUpdateSettings>();
     settings::<CharacterContactSettings>();

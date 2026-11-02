@@ -254,8 +254,8 @@ pub use ragdoll::{
     SkeletonPose, TranslationLocks,
 };
 pub use shape::{
-    CompoundChild, CompoundSubShape, DroppedTriangles, HeightFieldSettings, MeshBuildQuality,
-    MeshSettings, MutableCompound, Shape, SubShapeId,
+    CompoundChild, CompoundSubShape, DroppedTriangles, HeightFieldSettings, MassProperties,
+    MeshBuildQuality, MeshSettings, MutableCompound, Shape, SubShapeId,
 };
 pub use soft_body::{
     LongRangeAttachment, SoftBodyBackStop, SoftBodyBendType, SoftBodyDihedralBend, SoftBodyEdge,
