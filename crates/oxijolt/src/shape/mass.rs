@@ -5,10 +5,14 @@ use crate::Shape;
 
 /// The mass and inertia of a shape, from [`Shape::mass_properties`].
 ///
-/// The values are those of a body made from the shape without a mass override, in the form
-/// [`BodySettings::mass_and_inertia`](crate::BodySettings::mass_and_inertia) takes:
-/// `mass_and_inertia(p.mass, Inertia::Tensor(p.inertia))` provides what the body would
-/// otherwise get from the shape, under the rules of [`Inertia`](crate::Inertia).
+/// The values describe the shape, in the form
+/// [`BodySettings::mass_and_inertia`](crate::BodySettings::mass_and_inertia) takes. A body made
+/// from the shape without a mass override derives its mass and inertia from them, except that
+/// Jolt gives a body whose moments are near zero (a 1 cm sphere) a unit sphere's inertia
+/// instead. `mass_and_inertia(p.mass, Inertia::Tensor(p.inertia))` gives the body what it would
+/// otherwise get when the tensor meets the rules of [`Inertia`](crate::Inertia); a tensor with a
+/// principal moment below [`limits::MIN_PROVIDED_INERTIA`](crate::limits::MIN_PROVIDED_INERTIA),
+/// such as that 1 cm sphere's, is refused.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[non_exhaustive]
 pub struct MassProperties {
@@ -35,7 +39,7 @@ impl Shape {
     /// Jolt adds rotated children in `f32`, so its tensor can differ across the diagonal in the
     /// last bits. Jolt's decomposition of the tensor reads only the entries above the diagonal
     /// (`EigenValueSymmetric`); the tensor returned here copies them below it, so it is
-    /// symmetric and what a body's inertia is derived from.
+    /// symmetric and holds what Jolt's decomposition reads.
     ///
     /// The centre of mass is [`center_of_mass`](Self::center_of_mass).
     ///

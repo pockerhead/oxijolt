@@ -50,13 +50,17 @@ current rotation, and the rows and columns of rotation axes locked with `allowed
 so the tensor times an angular impulse is the change of angular velocity
 `add_angular_impulse` gives, up to Jolt's clamp at `limits::MAX_ANGULAR_VELOCITY`. It is `None` for static, kinematic and soft bodies.
 
-`Shape::mass_properties` reads what a body gets from a shape by default: the mass and the
-inertia tensor about the shape's centre of mass, in the shape's axes, in rows like
-`Inertia::Tensor` (Jolt `Shape::GetMassProperties`, at Jolt's density of 1000 kg/m³). A
-compound's mass is the sum of its children's; meshes, heightfields and planes give mass 0 and a
-zero tensor. `BodySettings::mass_and_inertia(p.mass, Inertia::Tensor(p.inertia))` provides what a
-body would otherwise get from the shape: for a box, a sphere and two compounds, one with a rotated
-child, the bodies read the same mass and inverse inertia bit for bit (`mass_properties.rs`). The tensor is exactly symmetric: Jolt adds
+`Shape::mass_properties` reads the shape's mass and its inertia tensor about the shape's
+centre of mass, in the shape's axes, in rows like `Inertia::Tensor` (Jolt
+`Shape::GetMassProperties`, at Jolt's density of 1000 kg/m³). A compound's mass is the sum of its
+children's; meshes, heightfields and planes give mass 0 and a zero tensor. A body made from the
+shape by default derives its mass and inertia from these values, except that Jolt replaces
+near-zero moments with a unit sphere's inertia (a 1 cm sphere gets `2.5 / mass` as its inverse
+inertia). `BodySettings::mass_and_inertia(p.mass, Inertia::Tensor(p.inertia))` provides what a
+body would otherwise get from the shape when the tensor passes the provided-inertia rules: for a
+box, a sphere and two compounds, one with a rotated child, the bodies read the same mass and
+inverse inertia bit for bit (`mass_properties.rs`). A tensor with a principal moment below
+`limits::MIN_PROVIDED_INERTIA`, such as the 1 cm sphere's, is refused. The tensor is exactly symmetric: Jolt adds
 rotated compound children in `f32`, so its own tensor can differ across the diagonal in the last
 bits, and the readout copies the entries above the diagonal, the ones Jolt's decomposition reads.
 

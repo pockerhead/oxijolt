@@ -141,6 +141,35 @@ fn providing_a_shapes_mass_properties_gives_the_body_it_gets_by_default() {
 }
 
 #[test]
+fn a_tensor_below_the_provided_inertia_floor_is_read_but_not_taken_back() {
+    // A 1 cm sphere: 4.19 g and moments of 1.68e-7 kg·m², below `limits::MIN_PROVIDED_INERTIA`.
+    let shape = Shape::new_sphere(0.01).unwrap();
+    let properties = shape.mass_properties();
+    let r = 0.01_f64;
+    let mass = 4.0 / 3.0 * std::f64::consts::PI * r * r * r * DENSITY;
+    assert_close(properties.mass, mass);
+    assert_diagonal(properties.inertia, [0.4 * mass * r * r; 3]);
+    assert!(properties.inertia[0][0] < limits::MIN_PROVIDED_INERTIA);
+
+    let mut world = world(Vec3::ZERO, 1);
+    // By default Jolt finds the moments near zero and gives the body a unit sphere's inertia.
+    let by_default = world
+        .create_body(&shape, &BodySettings::new_dynamic())
+        .unwrap();
+    let inverse = world.body(by_default).unwrap().inverse_inertia().unwrap();
+    assert_close(inverse[0][0], 2.5 / f64::from(properties.mass));
+    // Provided back, the tensor is refused.
+    let provided = BodySettings::new_dynamic()
+        .mass_and_inertia(properties.mass, Inertia::Tensor(properties.inertia));
+    assert_eq!(
+        world.create_body(&shape, &provided),
+        Err(BodyError::InvalidValue(
+            "provided inertia needs principal moments of at least limits::MIN_PROVIDED_INERTIA"
+        ))
+    );
+}
+
+#[test]
 fn meshes_height_fields_and_planes_have_zero_mass_and_inertia() {
     let (vertices, triangles) = grid(2, 1.0, |_, _| 0.0);
     let (mesh, _) = Shape::new_mesh(&vertices, &triangles).unwrap();
