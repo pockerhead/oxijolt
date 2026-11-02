@@ -188,6 +188,10 @@ impl WorldSettings {
     /// Default 10240. Raising it does not raise [`max_body_pairs`](Self::max_body_pairs) or
     /// [`max_contact_constraints`](Self::max_contact_constraints): size those separately for the
     /// contacts the scene is expected to have.
+    ///
+    /// A world reads it back with [`PhysicsWorld::max_bodies`].
+    ///
+    /// [`PhysicsWorld::max_bodies`]: crate::PhysicsWorld::max_bodies
     #[must_use]
     pub fn max_bodies(mut self, value: u32) -> Self {
         self.max_bodies = value;
@@ -199,7 +203,10 @@ impl WorldSettings {
     /// [`max_bodies`](Self::max_bodies); size it for the expected overlapping pairs. A full buffer
     /// sets [`StepReport::body_pair_cache_full`].
     ///
+    /// A world reads it back with [`PhysicsWorld::max_body_pairs`].
+    ///
     /// [`StepReport::body_pair_cache_full`]: crate::StepReport::body_pair_cache_full
+    /// [`PhysicsWorld::max_body_pairs`]: crate::PhysicsWorld::max_body_pairs
     #[must_use]
     pub fn max_body_pairs(mut self, value: u32) -> Self {
         self.max_body_pairs = value;
@@ -212,8 +219,11 @@ impl WorldSettings {
     /// does not grow with [`max_bodies`](Self::max_bodies). A full buffer sets
     /// [`StepReport::contact_constraints_full`] or [`StepReport::manifold_cache_full`].
     ///
+    /// A world reads it back with [`PhysicsWorld::max_contact_constraints`].
+    ///
     /// [`StepReport::contact_constraints_full`]: crate::StepReport::contact_constraints_full
     /// [`StepReport::manifold_cache_full`]: crate::StepReport::manifold_cache_full
+    /// [`PhysicsWorld::max_contact_constraints`]: crate::PhysicsWorld::max_contact_constraints
     #[must_use]
     pub fn max_contact_constraints(mut self, value: u32) -> Self {
         self.max_contact_constraints = value;
@@ -286,6 +296,10 @@ impl WorldSettings {
     }
 
     /// Size in bytes of the scratch memory the world's steps allocate from. Default 10 MiB.
+    ///
+    /// A world reads it back with [`PhysicsWorld::temp_allocator_size`].
+    ///
+    /// [`PhysicsWorld::temp_allocator_size`]: crate::PhysicsWorld::temp_allocator_size
     #[must_use]
     pub fn temp_allocator_size(mut self, value: u32) -> Self {
         self.temp_allocator_size = value;
@@ -294,6 +308,10 @@ impl WorldSettings {
 
     /// Gravity in m/s², finite and at most [`limits::MAX_ACCELERATION`] long. Default
     /// `(0, -9.81, 0)`, Jolt's default. Zero is allowed.
+    ///
+    /// A world reads it back with [`PhysicsWorld::gravity`].
+    ///
+    /// [`PhysicsWorld::gravity`]: crate::PhysicsWorld::gravity
     #[must_use]
     pub fn gravity(mut self, value: Vec3) -> Self {
         self.gravity = value;
@@ -301,6 +319,10 @@ impl WorldSettings {
     }
 
     /// The collision layer setup. Default [`CollisionLayers::default`].
+    ///
+    /// A world reads it back with [`PhysicsWorld::layers`].
+    ///
+    /// [`PhysicsWorld::layers`]: crate::PhysicsWorld::layers
     #[must_use]
     pub fn layers(mut self, value: CollisionLayers) -> Self {
         self.layers = value;
@@ -313,6 +335,10 @@ impl WorldSettings {
     /// [`MAX_SOLVER_STEPS`](Self::MAX_SOLVER_STEPS). Default 10, Jolt's. Fewer steps make a step
     /// cheaper and joints and stacks softer. Set once, when the world is created; a test checks
     /// that a chain at 4 steps gives the same results with 1 and 4 worker threads.
+    ///
+    /// A world reads it back with [`PhysicsWorld::velocity_steps`].
+    ///
+    /// [`PhysicsWorld::velocity_steps`]: crate::PhysicsWorld::velocity_steps
     #[must_use]
     pub fn velocity_steps(mut self, value: u32) -> Self {
         self.velocity_steps = value;
@@ -323,6 +349,10 @@ impl WorldSettings {
     /// drifted after the velocity iterations (Jolt `PhysicsSettings::mNumPositionSteps`), at most
     /// [`MAX_SOLVER_STEPS`](Self::MAX_SOLVER_STEPS); 0 turns the position pass off. Default 2,
     /// Jolt's. Set once, when the world is created.
+    ///
+    /// A world reads it back with [`PhysicsWorld::position_steps`].
+    ///
+    /// [`PhysicsWorld::position_steps`]: crate::PhysicsWorld::position_steps
     #[must_use]
     pub fn position_steps(mut self, value: u32) -> Self {
         self.position_steps = value;
@@ -343,8 +373,11 @@ impl WorldSettings {
     /// other values with [`WorldError::InvalidValue`]. Default 0.02 m, Jolt's. Set once, when the
     /// world is created. See [docs/limits.md].
     ///
+    /// A world reads it back with [`PhysicsWorld::penetration_slop`].
+    ///
     /// [`PhysicsWorld::new`]: crate::PhysicsWorld::new
     /// [docs/limits.md]: https://github.com/pockerhead/oxijolt/blob/main/docs/limits.md#contact-distances
+    /// [`PhysicsWorld::penetration_slop`]: crate::PhysicsWorld::penetration_slop
     #[must_use]
     pub fn penetration_slop(mut self, value: f32) -> Self {
         self.penetration_slop = value;
@@ -362,8 +395,11 @@ impl WorldSettings {
     /// other values with [`WorldError::InvalidValue`]. Default 0.02 m, Jolt's. Set once, when the
     /// world is created. See [docs/limits.md].
     ///
+    /// A world reads it back with [`PhysicsWorld::speculative_contact_distance`].
+    ///
     /// [`PhysicsWorld::new`]: crate::PhysicsWorld::new
     /// [docs/limits.md]: https://github.com/pockerhead/oxijolt/blob/main/docs/limits.md#contact-distances
+    /// [`PhysicsWorld::speculative_contact_distance`]: crate::PhysicsWorld::speculative_contact_distance
     #[must_use]
     pub fn speculative_contact_distance(mut self, value: f32) -> Self {
         self.speculative_contact_distance = value;

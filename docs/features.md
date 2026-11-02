@@ -70,6 +70,9 @@ what is planned next.
   `WorldSettings::job_system_kind` which one settings choose.
 - A [comparison with Rapier and Avian](comparison.md) on Rapier's stress scenes: speed at 1 to 16
   threads, quality, determinism and features, with the scripts and raw results.
+- A world reads back the limits and collision layers it was created with
+  (`PhysicsWorld::max_bodies`, `max_body_pairs`, `max_contact_constraints`,
+  `temp_allocator_size`, `layers`).
 - Solver velocity and position steps chosen per world (`WorldSettings::velocity_steps`,
   `position_steps`), within Jolt's limits ([limits](limits.md#solver-step-counts)).
 - Penetration slop and speculative contact distance chosen per world
