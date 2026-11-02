@@ -43,13 +43,19 @@ fn rotate(q: Quat, v: [f64; 3]) -> [f64; 3] {
     ]
 }
 
+/// `value` in `f64`; `Real` is already `f64` with the `double-precision` feature.
+#[allow(clippy::useless_conversion)]
+fn wide(value: Real) -> f64 {
+    f64::from(value)
+}
+
 /// The point at `local` in the static body's frame, in world space.
 fn to_world(local: [f64; 3]) -> RVec3 {
     let r = rotate(rotation(), local);
     RVec3::new(
-        (ORIGIN.x as f64 + r[0]) as Real,
-        (ORIGIN.y as f64 + r[1]) as Real,
-        (ORIGIN.z as f64 + r[2]) as Real,
+        (wide(ORIGIN.x) + r[0]) as Real,
+        (wide(ORIGIN.y) + r[1]) as Real,
+        (wide(ORIGIN.z) + r[2]) as Real,
     )
 }
 
@@ -98,9 +104,9 @@ fn world_anchor(world: &PhysicsWorld, id: AnyConstraintId, side: usize) -> [f64;
         [local.x as f64, local.y as f64, local.z as f64],
     );
     [
-        centre.x as f64 + turned[0],
-        centre.y as f64 + turned[1],
-        centre.z as f64 + turned[2],
+        wide(centre.x) + turned[0],
+        wide(centre.y) + turned[1],
+        wide(centre.z) + turned[2],
     ]
 }
 
@@ -300,7 +306,7 @@ fn points_given_relative_to_the_centres_of_mass_stay_where_they_were_in_world_sp
     // Along the static body's X axis its centre of mass is at x = 2 and the cube's at x = 5.2;
     // the point lies at x = 4.6.
     let point = to_world([4.6, 0.1, -0.2]);
-    let point = [point.x as f64, point.y as f64, point.z as f64];
+    let point = [wide(point.x), wide(point.y), wide(point.z)];
     let local = |x: Real| RVec3::new(x, 0.1, -0.2);
     let (on_support, on_cube) = (local(2.6), local(-0.6));
     for side in [Side::One, Side::Two] {

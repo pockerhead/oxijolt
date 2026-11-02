@@ -367,9 +367,8 @@ change up to the same kind of rounding: 3.8e-6 m for that change and at most 7.6
 more changes that end with the first shape again, for each of the nine kinds a static body can
 join, on either side, enabled or disabled (`src/constraint/shape_change_tests.rs`, single
 precision). Without the notification the points would move with the centre of mass. A gear reads
-only the angles of the
-hinges it couples, so a gear that references hinges on the static body keeps coupling, at ratio
-2 and at `limits::MAX_GEAR_RATIO` (`static_shape_constraints.rs`).
+only the angles of the hinges it couples, so a gear that references hinges on the static body
+keeps coupling, at ratio 2 and at `limits::MAX_GEAR_RATIO` (`static_shape_constraints.rs`).
 
 Jolt saves neither shapes nor motion types, so each successful change makes earlier `WorldState`s
 unrestorable ([state.md](state.md)): a rollback cannot cross it.
