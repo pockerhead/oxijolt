@@ -23,12 +23,17 @@ All notable changes to this fork. The format follows [Keep a Changelog](https://
   `WorldSettings::worker_threads` there; a panic in a callback traps the module, since the target
   aborts on panic. Native defaults are unchanged. `oxijolt-sys` now also defines the WASI
   environment, preopen and exit functions that libc++ links in for the safe layer, so its module
-  imports nothing either. Not built or tested in CI. Refs #5.
+  imports nothing either. CI runs it in Node and headless Chrome and compares a scene's results
+  with a native Linux build ([determinism](docs/determinism.md#how-it-is-checked)). Refs #5.
 - Release archives for `wasm32-unknown-unknown` in the eight feature subsets. Each bundles
   wasi-sdk 34.0's libc++, libc++abi, wasi-libc and `clang_rt.builtins` with their licences, so a
   wasm build that takes it needs neither wasi-sdk nor CMake. A wasm source build now copies those
   libraries into its prefix, and a wasm `JOLTC_LIB_DIR` prefix links without `WASI_SDK_PATH`.
   Refs #5.
+- A browser example, `examples/web`: a page that steps up to 1000 balls in a wasm32 module of the
+  safe crate and draws them on a canvas, with plain JavaScript and an empty import object. The
+  building guide has a WebAssembly section with the toolchain, the archives and the example
+  ([building](docs/building.md#webassembly)). Refs #5.
 
 ## 1.5.0 — 2026-11-01
 
