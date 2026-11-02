@@ -106,6 +106,7 @@ Everything planned for 1.0 is done; what works today, with links to the guides, 
 - [x] A browser example: a wasm32 module stepped and drawn with plain JavaScript
 - [x] Centre of mass readouts for shapes and bodies
 - [x] Shape changes of static bodies that constraints use
+- [x] Shape changes that wake only the bodies near given regions
 
 ## Status
 

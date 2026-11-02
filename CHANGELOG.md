@@ -6,6 +6,11 @@ All notable changes to this fork. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- `BodyMut::set_shape_waking_in` changes a body's shape like `set_shape` but wakes only the
+  non-static bodies within the speculative contact distance of the boxes the caller gives, each
+  once, in body-id order. A large static compound that gains or loses a few children no longer
+  wakes every sleeping body near it. Regions are checked like `activate_bodies_in_box` before
+  anything changes. Refs #14.
 - `PhysicsWorld::job_system_kind` and `PhysicsWorld::max_concurrency` read back the job system a
   world steps with: the new `JobSystemKind` (Jolt's thread pool with its worker count, Jolt's
   single-threaded job system or the caller's `JobSystem`) and the concurrency it was created
