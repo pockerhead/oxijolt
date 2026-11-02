@@ -81,6 +81,42 @@ fn gravity_round_trips_including_zero() {
 }
 
 #[test]
+fn a_default_world_reads_back_jolts_default_limits_and_layers() {
+    let world = PhysicsWorld::new(WorldSettings::default()).unwrap();
+    assert_eq!(world.max_bodies(), 10240);
+    assert_eq!(world.max_body_pairs(), 65536);
+    assert_eq!(world.max_contact_constraints(), 10240);
+    assert_eq!(world.temp_allocator_size(), 10 * 1024 * 1024);
+    assert_eq!(world.layers(), &CollisionLayers::default());
+}
+
+#[test]
+fn a_world_reads_back_the_limits_and_layers_it_was_created_with() {
+    let mut layers = CollisionLayers::new(2);
+    let ground = layers.add_object_layer(BroadPhaseLayer::new(0));
+    let debris = layers.add_object_layer(BroadPhaseLayer::new(1));
+    let player = layers.add_object_layer(BroadPhaseLayer::new(1));
+    layers
+        .enable_collision(ground, debris)
+        .enable_collision(ground, player);
+    let world = PhysicsWorld::new(
+        WorldSettings::default()
+            .max_bodies(777)
+            .max_body_pairs(1234)
+            .max_contact_constraints(4321)
+            .temp_allocator_size(3 * 1024 * 1024)
+            .layers(layers.clone()),
+    )
+    .unwrap();
+    assert_eq!(world.max_bodies(), 777);
+    assert_eq!(world.max_body_pairs(), 1234);
+    assert_eq!(world.max_contact_constraints(), 4321);
+    assert_eq!(world.temp_allocator_size(), 3 * 1024 * 1024);
+    assert_eq!(world.layers(), &layers);
+    assert_ne!(world.layers(), &CollisionLayers::default());
+}
+
+#[test]
 fn step_rejects_bad_delta_time() {
     let mut world = world(Vec3::new(0.0, -9.81, 0.0), 1);
     let cube = add_cube(&mut world, RVec3::new(0.0, 2.0, 0.0));

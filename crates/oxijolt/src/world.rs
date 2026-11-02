@@ -39,7 +39,7 @@ use crate::owned::{JoltObject, Owned};
 use crate::panic_slot::first_payload;
 use crate::ragdoll::RagdollEntry;
 use crate::vehicle::VehicleEntry;
-use crate::{CharacterContactListener, StepError, Vec3, WorldError};
+use crate::{CharacterContactListener, CollisionLayers, StepError, Vec3, WorldError};
 
 mod rebase;
 mod settings;
@@ -235,6 +235,11 @@ pub struct PhysicsWorld {
     pub(crate) narrow_phase_query: NonNull<JPH_NarrowPhaseQuery>,
     pub(crate) broad_phase_query: NonNull<JPH_BroadPhaseQuery>,
     pub(crate) object_layer_count: u32,
+    // What the world was created with and Jolt has no getter for.
+    max_body_pairs: u32,
+    max_contact_constraints: u32,
+    temp_allocator_size: u32,
+    layers: CollisionLayers,
     pub(crate) tag: WorldTag,
     /// Raw ids of the characters' inner bodies.
     pub(crate) inner_bodies: BTreeSet<u32>,
@@ -490,6 +495,10 @@ impl PhysicsWorld {
             narrow_phase_query,
             broad_phase_query,
             object_layer_count: settings.layers.object_layer_count(),
+            max_body_pairs: settings.max_body_pairs,
+            max_contact_constraints: settings.max_contact_constraints,
+            temp_allocator_size: settings.temp_allocator_size,
+            layers: settings.layers,
             tag: WorldTag::next(),
             inner_bodies: BTreeSet::new(),
             next_character_id: 1,
@@ -574,6 +583,42 @@ impl PhysicsWorld {
         unsafe { physics_settings(self.system.as_ptr()) }.speculativeContactDistance
     }
 
+    /// Maximum number of bodies the world holds, read from Jolt (`PhysicsSystem::GetMaxBodies`)
+    /// ([`WorldSettings::max_bodies`]). Configuration, not part of a
+    /// [`WorldState`](crate::WorldState).
+    pub fn max_bodies(&self) -> u32 {
+        // SAFETY: the system is live; the getter reads a constant.
+        unsafe { JPH_PhysicsSystem_GetMaxBodies(self.system.as_ptr()) }
+    }
+
+    /// Maximum number of body pairs per collision step, as the world was created with
+    /// ([`WorldSettings::max_body_pairs`]). Jolt has no getter for it, so the world keeps the
+    /// value it passed. Configuration, not part of a [`WorldState`](crate::WorldState).
+    pub fn max_body_pairs(&self) -> u32 {
+        self.max_body_pairs
+    }
+
+    /// Maximum number of contact constraints per collision step, as the world was created with
+    /// ([`WorldSettings::max_contact_constraints`]). Jolt has no getter for it, so the world keeps
+    /// the value it passed. Configuration, not part of a [`WorldState`](crate::WorldState).
+    pub fn max_contact_constraints(&self) -> u32 {
+        self.max_contact_constraints
+    }
+
+    /// Size in bytes of the world's temp allocator, as the world was created with
+    /// ([`WorldSettings::temp_allocator_size`]). Jolt has no getter for it, so the world keeps
+    /// the value it passed. Configuration, not part of a [`WorldState`](crate::WorldState).
+    pub fn temp_allocator_size(&self) -> u32 {
+        self.temp_allocator_size
+    }
+
+    /// The collision layer setup the world was created with ([`WorldSettings::layers`]): the
+    /// world's copy of the caller's setup, from which it built Jolt's layer tables.
+    /// Configuration, not part of a [`WorldState`](crate::WorldState).
+    pub fn layers(&self) -> &CollisionLayers {
+        &self.layers
+    }
+
     /// Number of bodies in the world.
     pub fn body_count(&self) -> u32 {
         // SAFETY: the system is live; Jolt counts under its own body mutex.
@@ -584,9 +629,7 @@ impl PhysicsWorld {
     /// only when the world holds `GetMaxBodies()` bodies, so creators check this before they
     /// change anything and a full world rejects them cleanly.
     pub(crate) fn has_room_for_bodies(&self, count: usize) -> bool {
-        // SAFETY: the system is live; the getter reads a constant.
-        let max_bodies = unsafe { JPH_PhysicsSystem_GetMaxBodies(self.system.as_ptr()) };
-        max_bodies
+        self.max_bodies()
             .checked_sub(self.body_count())
             .is_some_and(|room| count as u64 <= u64::from(room))
     }
