@@ -859,8 +859,13 @@ impl Shape {
         unsafe { JPH_Shape_MustBeStatic(self.as_ptr()) }
     }
 
-    /// The centre of mass in shape-local space, metres.
-    pub(crate) fn center_of_mass(&self) -> Vec3 {
+    /// The centre of mass in the shape's own space, in metres, relative to the shape's origin
+    /// (Jolt `Shape::GetCenterOfMass`). Zero for boxes, spheres, capsules and cylinders; a
+    /// compound's is its children's mass-weighted centre, and
+    /// [`new_offset_center_of_mass`](Self::new_offset_center_of_mass) adds its offset. A body
+    /// with this shape reads it in world space with
+    /// [`BodyRef::center_of_mass_position`](crate::BodyRef::center_of_mass_position).
+    pub fn center_of_mass(&self) -> Vec3 {
         let mut center = Vec3::ZERO.to_jph();
         // SAFETY: the shape is live for the call; the getter only reads it, and `center` is a
         // live local.

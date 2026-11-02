@@ -50,6 +50,14 @@ current rotation, and the rows and columns of rotation axes locked with `allowed
 so the tensor times an angular impulse is the change of angular velocity
 `add_angular_impulse` gives, up to Jolt's clamp at `limits::MAX_ANGULAR_VELOCITY`. It is `None` for static, kinematic and soft bodies.
 
+`Shape::center_of_mass` is the centre of mass in the shape's own space (a compound's is its
+children's mass-weighted centre), and `BodyRef::center_of_mass_position` is the body's in world
+space: `position() + rotation() * shape.center_of_mass()`, for static and kinematic bodies too.
+The velocity of a point `r` of a rigid body is
+`linear_velocity() + angular_velocity() × (r - center_of_mass_position())`, for example for a
+piece split off a compound. A soft body reads its position, which each step moves to the centre of
+its vertices' bounding box unless `SoftBodySettings::update_position` is `false`.
+
 ```rust
 use oxijolt::*;
 

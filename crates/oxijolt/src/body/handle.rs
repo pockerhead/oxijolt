@@ -61,6 +61,26 @@ impl BodyRef<'_> {
         RVec3::from_jph(value)
     }
 
+    /// Position of the centre of mass in world space, in metres: [`position`](Self::position)
+    /// plus [`rotation`](Self::rotation) times the shape's
+    /// [`Shape::center_of_mass`](crate::Shape::center_of_mass). With the rotation it is the
+    /// body's centre-of-mass frame, in which Jolt applies velocities and
+    /// [`inverse_inertia`](Self::inverse_inertia) is taken.
+    ///
+    /// Static and kinematic bodies have one too, from their shape. A soft body's shape has its
+    /// centre of mass at its origin, so this is the soft body's position, which each step moves
+    /// to the centre of the vertices' bounding box (unless
+    /// [`SoftBodySettings::update_position`](crate::SoftBodySettings::update_position) is
+    /// `false`), not to the vertices' mass-weighted centre.
+    pub fn center_of_mass_position(&self) -> RVec3 {
+        let mut value = RVec3::ZERO.to_jph();
+        // SAFETY: as in `position`; Jolt reads the body under its body read lock.
+        unsafe {
+            JPH_BodyInterface_GetCenterOfMassPosition(self.interface(), self.id.raw, &mut value)
+        };
+        RVec3::from_jph(value)
+    }
+
     /// Rotation.
     pub fn rotation(&self) -> Quat {
         let mut value = Quat::IDENTITY.to_jph();

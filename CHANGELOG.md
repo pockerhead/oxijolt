@@ -34,6 +34,10 @@ All notable changes to this fork. The format follows [Keep a Changelog](https://
   safe crate and draws them on a canvas, with plain JavaScript and an empty import object. The
   building guide has a WebAssembly section with the toolchain, the archives and the example
   ([building](docs/building.md#webassembly)). Refs #5.
+- `BodyRef::center_of_mass_position` reads a body's centre of mass in world space, and
+  `Shape::center_of_mass`, until now internal, is public: the centre of mass in the shape's own
+  space. A soft body reads its position, the centre of its vertices' bounding box after a step.
+  Readouts only, not part of `WorldState`. Refs #12.
 
 ## 1.5.0 — 2026-11-01
 
