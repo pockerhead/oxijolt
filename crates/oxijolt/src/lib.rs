@@ -96,9 +96,9 @@
 //! returns in its [`StepReport`].
 //!
 //! # wasm32-unknown-unknown
-//! The crate builds for `wasm32-unknown-unknown` from source with wasi-sdk and needs Rust 1.91
-//! or newer there; the documentation of `oxijolt-sys` lists the build requirements and the
-//! module's runtime rules. On this target:
+//! The crate builds for `wasm32-unknown-unknown` from a release archive, or from source with
+//! wasi-sdk, and needs Rust 1.91 or newer there; the documentation of `oxijolt-sys` lists the
+//! build requirements and the module's runtime rules. On this target:
 //! - **No threads.** [`WorldSettings::default`] runs a world's jobs with
 //!   [`WorldSettings::single_threaded`], and [`PhysicsWorld::new`] refuses
 //!   [`WorldSettings::worker_threads`] with [`WorldError::InvalidValue`]. A caller [`JobSystem`]

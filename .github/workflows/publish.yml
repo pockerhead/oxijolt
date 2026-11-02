@@ -3,8 +3,8 @@
 # tag. Start it by hand only to resume a failed upload, with ref=release/v<version>. A crate
 # already on crates.io is skipped; an oxijolt-sys published with another archive list fails the
 # run, and the fix is a new version. Linux and macOS build the packages from the real download
-# before anything is uploaded. Needs a crates.io API token in the repository secret
-# CARGO_REGISTRY_TOKEN.
+# before anything is uploaded, Linux also for wasm32-unknown-unknown. Needs a crates.io API token
+# in the repository secret CARGO_REGISTRY_TOKEN.
 name: Publish to crates.io
 
 on:
@@ -80,6 +80,8 @@ jobs:
           persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
 
       # The commit must be the tag's commit plus the list, and every public asset must hash to
       # the list's line, before anything is uploaded.
@@ -93,7 +95,7 @@ jobs:
           [ "$changed" = "$LIST" ] || { echo "the release commit changes more than $LIST:"; echo "$changed"; exit 1; }
           grep -qxF "version=$version" "$LIST" || { echo "$LIST is not for version $version"; exit 1; }
           archives=$(grep -c '^archive=' "$LIST" || true)
-          [ "$archives" -eq 24 ] || { echo "$LIST lists $archives archives, expected 24"; exit 1; }
+          [ "$archives" -eq 32 ] || { echo "$LIST lists $archives archives, expected 32"; exit 1; }
           url=$(sed -n 's/^url=//p' "$LIST")
           assets="$RUNNER_TEMP/assets"
           mkdir -p "$assets"
@@ -104,15 +106,18 @@ jobs:
           echo "CRATE_VERSION=$crate_version" >> "$GITHUB_ENV"
 
       # Each crate built from its package, downloading its archive from the GitHub release over
-      # TLS; CMake and a C++ compiler are missing and any fallback is an error.
+      # TLS, for Linux and for wasm32-unknown-unknown; CMake, a C++ compiler and wasi-sdk are
+      # missing and any fallback is an error.
       - name: Verify the packages
         run: |
-          log="$RUNNER_TEMP/package.log"
-          env -u JOLTC_LIB_DIR JOLTC_PREBUILT=require CMAKE=oxijolt-no-cmake CXX=oxijolt-no-cxx \
-            cargo package --locked -p oxijolt-sys -p oxijolt -vv > "$log" 2>&1 || { tail -80 "$log"; exit 1; }
-          grep "using the prebuilt archive" "$log"
-          used=$(grep -c "using the prebuilt archive" "$log" || true)
-          [ "$used" -ge 2 ] || { echo "expected both verify builds to take the archive, found $used"; exit 1; }
+          for target in "" wasm32-unknown-unknown; do
+            log="$RUNNER_TEMP/package-${target:-host}.log"
+            env -u JOLTC_LIB_DIR -u WASI_SDK_PATH JOLTC_PREBUILT=require CMAKE=oxijolt-no-cmake CXX=oxijolt-no-cxx \
+              cargo package --locked -p oxijolt-sys -p oxijolt ${target:+--target "$target"} -vv > "$log" 2>&1 || { tail -80 "$log"; exit 1; }
+            grep "using the prebuilt archive" "$log"
+            used=$(grep -c "using the prebuilt archive" "$log" || true)
+            [ "$used" -ge 2 ] || { echo "expected both verify builds to take the archive, found $used"; exit 1; }
+          done
 
       # The packages were verified above, so the uploads skip the second build. crates.io keeps
       # the build metadata in the version (`1.0.1+jolt-5.6.0`).

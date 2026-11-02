@@ -2,6 +2,7 @@ name: Release
 
 # Releases a `v<version>` tag: prebuilt native archives, their list in the crate, crates.io.
 #   build                  one archive per target and feature subset, from the tagged commit
+#   build-wasm             the same for wasm32-unknown-unknown, with wasi-sdk's runtime inside
 #   archive-list           writes their sha256 into crates/oxijolt-sys/prebuilt.txt as one commit
 #                          on top of the tag, then packages both crates and checks that their
 #                          builds take the archives (served locally) without CMake; no write token
@@ -10,10 +11,10 @@ name: Release
 #   record-release-branch  pushes that commit to `release/v<version>`, which a maintainer merges
 #                          into main; nothing here writes main
 #   crates-io              publish.yml from that commit, which first checks the public assets
-# A manual run, or a branch push that changes this file, runs `build`, `archive-list` and
-# `macos-packages` only and keeps the archives as workflow artifacts. Path filters do not apply
-# to tag pushes. A failed tag run resumes with "Re-run failed jobs", or with the Publish workflow
-# and ref=release/v<version>.
+# A manual run, or a branch push that changes this file, runs `build`, `build-wasm`,
+# `archive-list` and `macos-packages` only and keeps the archives as workflow artifacts. Path
+# filters do not apply to tag pushes. A failed tag run resumes with "Re-run failed jobs", or with
+# the Publish workflow and ref=release/v<version>.
 
 on:
   push:
@@ -332,12 +333,90 @@ jobs:
           path: artifact/
           if-no-files-found: error
 
+  # wasm32-unknown-unknown archives, built with the wasi-sdk of CI's wasm job. Each bundles the
+  # SDK's runtime libraries and their licences, so a build that takes it needs neither CMake nor
+  # wasi-sdk. scripts/build_wasm_archive.sh builds, packs and smoke tests one archive (the raw
+  # fixture in Node, without the SDK); it runs the same way locally.
+  build-wasm:
+    name: wasm32-unknown-unknown (${{ matrix.features || 'default' }})
+    needs: version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        features:
+          - ""
+          - double-precision
+          - cross-platform-deterministic
+          - debug-renderer
+          - double-precision,cross-platform-deterministic
+          - double-precision,debug-renderer
+          - cross-platform-deterministic,debug-renderer
+          - double-precision,cross-platform-deterministic,debug-renderer
+    defaults:
+      run:
+        shell: bash
+    env:
+      CRATE: ${{ needs.version.outputs.name }}
+      FEATURES: ${{ matrix.features }}
+      # The pin of ci.yml's wasm job; the licences in scripts/build_wasm_archive.sh are this SDK's.
+      WASI_SDK_VERSION: "34.0"
+      # GitHub's digest of the release asset wasi-sdk-34.0-x86_64-linux.tar.gz.
+      WASI_SDK_SHA256: b761e3a0721dbae9c09a0059e5fdb2bf917d1b4a8a7b430fb3b5aafb0984b2c4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Check pinned commits
+        run: |
+          joltc=$(git rev-parse HEAD:crates/oxijolt-sys/vendor/joltc)
+          jolt=$(git rev-parse HEAD:crates/oxijolt-sys/vendor/JoltPhysics)
+          grep -q "\"$joltc\"" crates/oxijolt-sys/build.rs || { echo "build.rs JOLTC_COMMIT differs from the gitlink $joltc"; exit 1; }
+          grep -q "\"$jolt\"" crates/oxijolt-sys/build.rs || { echo "build.rs JOLT_COMMIT differs from the gitlink $jolt"; exit 1; }
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Install wasi-sdk
+        run: |
+          archive="wasi-sdk-$WASI_SDK_VERSION-x86_64-linux.tar.gz"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION%%.*}/$archive"
+          echo "$WASI_SDK_SHA256  $RUNNER_TEMP/$archive" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP"
+          echo "WASI_SDK_PATH=$RUNNER_TEMP/wasi-sdk-$WASI_SDK_VERSION-x86_64-linux" >> "$GITHUB_ENV"
+
+      # Uploaded from the workspace, like the native archives.
+      - name: Build, pack and smoke test the archive
+        run: |
+          bash scripts/build_wasm_archive.sh "$FEATURES" artifact
+          archives=(artifact/*.tar.gz)
+          [ ${#archives[@]} -eq 1 ] || { echo "expected one archive, found ${#archives[@]}"; exit 1; }
+          name=$(basename "${archives[0]}" .tar.gz)
+          echo "ARCHIVE=$name" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARCHIVE }}
+          path: artifact/
+          if-no-files-found: error
+
   # The release commit Y: the tagged commit X plus the archive list. This job runs build scripts
   # (cargo package), so it gets no write token and keeps no credentials; it hands Y on as a git
   # bundle.
   archive-list:
     name: Archive list
-    needs: [version, build]
+    needs: [version, build, build-wasm]
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
@@ -360,6 +439,8 @@ jobs:
           persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
 
       - uses: actions/download-artifact@v4
         with:
@@ -367,7 +448,7 @@ jobs:
           pattern: ${{ needs.version.outputs.name }}-*
           merge-multiple: true
 
-      # The full release set: 3 targets x 8 feature subsets, every archive built from this commit.
+      # The full release set: 4 targets x 8 feature subsets, every archive built from this commit.
       - name: Write the list
         run: |
           cargo run --locked -p xtask -- prebuilt-list --dist "$RUNNER_TEMP/dist" \
@@ -388,20 +469,23 @@ jobs:
       # The crates as they will be published, each built from its package with the build
       # script's download path: the archives come from a local mirror of the release, CMake and a
       # C++ compiler are missing, and `require` makes any fallback an error. This also proves that
-      # the packaged native sources have the fingerprint of the list.
+      # the packaged native sources have the fingerprint of the list. The second round builds
+      # them for wasm32-unknown-unknown, with no wasi-sdk on the runner.
       - name: Packages take the archives
         run: |
           python3 -m http.server 8765 --bind 127.0.0.1 --directory "$RUNNER_TEMP/dist" > "$RUNNER_TEMP/server.log" 2>&1 &
           server=$!
           trap 'kill "$server"' EXIT
           curl -s --retry 20 --retry-connrefused --retry-delay 1 -o /dev/null http://127.0.0.1:8765/
-          log="$RUNNER_TEMP/package.log"
-          env -u JOLTC_LIB_DIR JOLTC_PREBUILT=require JOLTC_PREBUILT_URL=http://127.0.0.1:8765 \
-            CMAKE=oxijolt-no-cmake CXX=oxijolt-no-cxx \
-            cargo package --locked -p "$CRATE" -p "$SAFE_CRATE" -vv > "$log" 2>&1 || { tail -80 "$log"; exit 1; }
-          grep "using the prebuilt archive" "$log"
-          used=$(grep -c "using the prebuilt archive" "$log" || true)
-          [ "$used" -ge 2 ] || { echo "expected both verify builds to take the archive, found $used"; exit 1; }
+          for target in "" wasm32-unknown-unknown; do
+            log="$RUNNER_TEMP/package-${target:-host}.log"
+            env -u JOLTC_LIB_DIR -u WASI_SDK_PATH JOLTC_PREBUILT=require JOLTC_PREBUILT_URL=http://127.0.0.1:8765 \
+              CMAKE=oxijolt-no-cmake CXX=oxijolt-no-cxx \
+              cargo package --locked -p "$CRATE" -p "$SAFE_CRATE" ${target:+--target "$target"} -vv > "$log" 2>&1 || { tail -80 "$log"; exit 1; }
+            grep "using the prebuilt archive" "$log"
+            used=$(grep -c "using the prebuilt archive" "$log" || true)
+            [ "$used" -ge 2 ] || { echo "expected both verify builds to take the archive, found $used"; exit 1; }
+          done
           grep '"GET ' "$RUNNER_TEMP/server.log"
 
       - name: Bundle the release commit
@@ -506,7 +590,7 @@ jobs:
           shopt -s nullglob
           archives=(*.tar.gz)
           sums=(*.tar.gz.sha256)
-          [ ${#archives[@]} -eq 24 ] && [ ${#sums[@]} -eq 24 ] || { echo "expected 24 archives and 24 checksums, found ${#archives[@]} and ${#sums[@]}"; exit 1; }
+          [ ${#archives[@]} -eq 32 ] && [ ${#sums[@]} -eq 32 ] || { echo "expected 32 archives and 32 checksums, found ${#archives[@]} and ${#sums[@]}"; exit 1; }
           sha256sum -c "${sums[@]}"
 
       - name: Write the release notes
@@ -519,7 +603,8 @@ jobs:
           takes an unpacked archive, checked against the crate features. Each `.sha256` file holds the
           archive's checksum.
 
-          - Targets: `x86_64-pc-windows-msvc`, `x86_64-unknown-linux-gnu` and `aarch64-apple-darwin`.
+          - Targets: `x86_64-pc-windows-msvc`, `x86_64-unknown-linux-gnu`, `aarch64-apple-darwin` and
+            `wasm32-unknown-unknown`.
           - Windows: built with Visual Studio 2022 and the dynamic MSVC runtime (`/MD`). Link with that
             MSVC toolset or a newer one (the version is in `PROVENANCE.txt`); not usable with `crt-static`.
           - Linux: built with GCC 12 on Ubuntu 22.04; needs glibc 2.35 or newer and a compatible
@@ -527,6 +612,9 @@ jobs:
           - macOS (Apple silicon): built on the `macos-15` runner with its Xcode (versions in
             `PROVENANCE.txt`) for macOS 11.0 or newer; the build script refuses it for an older
             deployment target. Intel Macs build from source.
+          - wasm32-unknown-unknown: built with wasi-sdk 34.0 and Rust's rust-lld; each archive bundles
+            the SDK's libc++, libc++abi, wasi-libc and clang_rt.builtins with their licences in
+            `licenses/`, so a build needs neither wasi-sdk nor CMake. Needs Rust 1.91 or newer.
           - Jolt assertions are off.
           - CPU on x86_64: AVX2, BMI1, LZCNT, POPCNT and F16C; builds without `cross-platform-deterministic`
             also use FMA. On Apple silicon: no extra CPU features. `PROVENANCE.txt` in each archive lists

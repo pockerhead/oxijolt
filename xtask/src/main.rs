@@ -25,8 +25,8 @@ mod targets;
 #[cfg(test)]
 #[path = "../../crates/oxijolt-sys/build/cmake_options.rs"]
 mod cmake_options;
-// build.rs reads wasi-sdk with these helpers; its tests run here.
-#[cfg(test)]
+// build.rs reads wasi-sdk with these helpers; its tests run here, and the archive checks name
+// the runtime files a wasm prefix bundles.
 #[allow(dead_code)]
 #[path = "../../crates/oxijolt-sys/build/wasi_sdk.rs"]
 mod wasi_sdk;

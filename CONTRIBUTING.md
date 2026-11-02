@@ -111,8 +111,8 @@ signature or layout is a real difference in the inputs and is investigated first
 ## Releases
 The owner cuts a release: set the same `version` in both crates' `Cargo.toml`, commit, and push the tag
 `v<version>` (without the `+jolt-…` build metadata). The `Release` workflow does the rest:
-1. builds the 24 native archives (x86_64 Windows MSVC and Linux GNU, aarch64 macOS, eight feature subsets
-   each) from the tagged commit;
+1. builds the 32 archives (x86_64 Windows MSVC and Linux GNU, aarch64 macOS and wasm32-unknown-unknown,
+   eight feature subsets each) from the tagged commit;
 2. writes their sha256 into `crates/oxijolt-sys/prebuilt.txt` with `cargo xtask prebuilt-list`, as one commit
    by github-actions[bot] on top of the tag, and checks without a write token, on Linux and macOS, that both
    packaged crates build from the archives without CMake;

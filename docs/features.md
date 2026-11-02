@@ -87,8 +87,9 @@ what is planned next.
   (`PhysicsWorld::active_body_poses`).
 - `oxijolt::prelude` for the common types, and `oxijolt::error::{Error, Result}` that wraps the
   error of every area.
-- Prebuilt native libraries on x86_64 Windows (MSVC), x86_64 Linux (GNU) and macOS on Apple
-  silicon: the build script downloads the release archive that matches the build, checks it
+- Prebuilt native libraries on x86_64 Windows (MSVC), x86_64 Linux (GNU), macOS on Apple
+  silicon and `wasm32-unknown-unknown` (with wasi-sdk's runtime inside, so a wasm build needs
+  neither wasi-sdk nor CMake): the build script downloads the release archive that matches the build, checks it
   against a sha256 packaged in the crate and builds from source when none fits (feature
   `prebuilt`, on by default;
   [building](building.md#prebuilt-native-libraries)).

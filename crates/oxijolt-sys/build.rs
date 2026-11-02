@@ -56,7 +56,7 @@ mod wasi_sdk;
 use cmake_options::{AndroidNdk, FeatureSwitches, ANDROID_GENERATOR};
 use prebuilt::{Mode, Unavailable};
 use targets::Family;
-use wasi_sdk::{SdkIdentity, WasiSdk};
+use wasi_sdk::{SdkIdentity, WasiSdk, WASM_TARGET};
 
 /// joltc commit of the `vendor/joltc` submodule. Must match the gitlink; CI checks this.
 const JOLTC_COMMIT: &str = "886e088675bae3a086f8318c7803f8ee962c2f2c";
@@ -69,8 +69,8 @@ const JOLT_VERSION: &str = "5.6.0";
 const JOLTC_EXT_REVISION: &str = "28";
 /// Name of the manifest file in an install prefix.
 const MANIFEST_FILE: &str = "oxijolt-sys-manifest.txt";
-/// The one wasm32 target that builds; it links wasi-sdk's C++ runtime.
-const WASM_TARGET: &str = "wasm32-unknown-unknown";
+/// Manifest key of a wasm prefix: the wasi-sdk that built it and whose runtime it bundles.
+const WASI_SDK_KEY: &str = "wasi_sdk";
 
 /// Everything about the target and the crate features that shapes the native build.
 struct NativeConfig {
@@ -87,8 +87,6 @@ struct NativeConfig {
     family: &'static Family,
     /// MSVC runtime library in CMake's spelling, or `"none"` off MSVC.
     crt: &'static str,
-    /// wasi-sdk of a wasm32-unknown-unknown build that links; `None` otherwise.
-    wasi_sdk: Option<(WasiSdk, SdkIdentity)>,
 }
 
 impl NativeConfig {
@@ -123,7 +121,6 @@ impl NativeConfig {
             target_arch: var("CARGO_CFG_TARGET_ARCH"),
             family,
             crt,
-            wasi_sdk: None,
         })
     }
 
@@ -158,10 +155,10 @@ fn on_off(value: bool) -> &'static str {
 /// Every input that changes the ABI or the archive contents, in manifest order.
 ///
 /// Both the CMake path (writing) and the prebuilt path (validating) use this
-/// one list, so they cannot drift apart. wasm builds add the wasi-sdk that compiled the prefix
-/// and links its runtime.
+/// one list, so they cannot drift apart. A wasm prefix also names the wasi-sdk that built it
+/// ([`WASI_SDK_KEY`]), which the CMake path adds and [`check_manifest`] requires.
 fn manifest_entries(cfg: &NativeConfig) -> Vec<(&'static str, String)> {
-    let mut entries = vec![
+    vec![
         ("format", "1".to_owned()),
         ("joltc_commit", JOLTC_COMMIT.to_owned()),
         ("joltc_ext", JOLTC_EXT_REVISION.to_owned()),
@@ -180,16 +177,16 @@ fn manifest_entries(cfg: &NativeConfig) -> Vec<(&'static str, String)> {
         ("floating_point_exceptions", "OFF".to_owned()),
         ("profiler", "OFF".to_owned()),
         ("joltc_lib", cfg.joltc_lib().to_owned()),
-    ];
-    if let Some((_, id)) = &cfg.wasi_sdk {
-        entries.push(("wasi_sdk", id.manifest_value().to_owned()));
-    }
-    entries
+    ]
 }
 
-/// The manifest file contents: one `key=value` per line.
-fn manifest_text(cfg: &NativeConfig) -> String {
-    manifest_entries(cfg)
+/// The manifest file contents: one `key=value` per line, and the wasi-sdk of a wasm build.
+fn manifest_text(cfg: &NativeConfig, wasi_sdk: Option<&SdkIdentity>) -> String {
+    let mut entries = manifest_entries(cfg);
+    if let Some(id) = wasi_sdk {
+        entries.push((WASI_SDK_KEY, id.manifest_value().to_owned()));
+    }
+    entries
         .iter()
         .map(|(key, value)| format!("{key}={value}\n"))
         .collect()
@@ -221,12 +218,9 @@ fn main() -> anyhow::Result<()> {
     }
     println!("cargo:rerun-if-changed=build.rs");
 
-    let mut cfg = NativeConfig::from_env()?;
+    let cfg = NativeConfig::from_env()?;
     check_wasm_target(&cfg)?;
     let docs_rs = env::var_os("DOCS_RS").is_some();
-    if cfg.target == WASM_TARGET && !docs_rs {
-        cfg.wasi_sdk = Some(locate_wasi_sdk()?);
-    }
     let prefix = if docs_rs {
         headers_only_prefix()?
     } else {
@@ -411,12 +405,14 @@ fn archive_config(cfg: &NativeConfig) -> prebuilt::ArchiveConfig {
     }
 }
 
-/// What will link an archive for this target. Only MSVC, native Linux GNU and macOS builds
-/// have archives.
+/// What will link an archive for this target. Only MSVC, native Linux GNU, macOS and wasm
+/// builds have archives.
 #[cfg(feature = "prebuilt")]
 fn linker(cfg: &NativeConfig) -> Result<prebuilt::Linker, Unavailable> {
     let var = |name: &str| env::var(name).ok();
-    if cfg.target_env == "msvc" {
+    if cfg.target == WASM_TARGET {
+        Ok(prebuilt::Linker::Wasm)
+    } else if cfg.target_env == "msvc" {
         let found =
             prebuilt::effective_msvc_linker(var, || prebuilt_archive::find_link_exe(&cfg.target));
         Ok(prebuilt::Linker::Msvc(found))
@@ -447,10 +443,8 @@ fn fetch_archive(
     cfg: &NativeConfig,
     out_dir: &Path,
 ) -> Result<PathBuf, Unavailable> {
-    let joltc = cfg.archive_name(cfg.joltc_lib());
-    let jolt = cfg.archive_name("Jolt");
-    let libraries = [joltc.as_str(), jolt.as_str()];
-    if let Some(prefix) = prebuilt_archive::cached(out_dir, archive, libraries) {
+    let files = prebuilt_archive::PrefixFiles::new(&cfg.target, cfg.joltc_lib());
+    if let Some(prefix) = prebuilt_archive::cached(out_dir, archive, &files) {
         return Ok(prefix);
     }
     let list_url = list.url.as_deref().unwrap_or_default();
@@ -459,10 +453,11 @@ fn fetch_archive(
     let url = prebuilt_curl::archive_url(&base, &archive.name);
     let limits = prebuilt_curl::Limits::DEFAULT;
     let bytes = prebuilt_curl::download("curl".as_ref(), &url, https_only, &limits)?;
-    prebuilt_archive::verify_and_unpack(&bytes, archive, libraries, out_dir)
+    prebuilt_archive::verify_and_unpack(&bytes, archive, &files, out_dir)
 }
 
-/// Builds the native prefix from the submodules with CMake and returns its path.
+/// Builds the native prefix from the submodules with CMake and returns its path. A wasm build
+/// needs wasi-sdk and copies its runtime libraries into the prefix.
 fn build_with_cmake(cfg: &NativeConfig) -> anyhow::Result<PathBuf> {
     let crate_dir = manifest_dir()?;
     let joltc_dir = crate_dir.join("vendor").join("joltc");
@@ -567,7 +562,12 @@ fn build_with_cmake(cfg: &NativeConfig) -> anyhow::Result<PathBuf> {
         config.generator(ANDROID_GENERATOR);
     }
 
-    if let Some((sdk, _)) = &cfg.wasi_sdk {
+    let wasi_sdk = if cfg.target == WASM_TARGET {
+        Some(locate_wasi_sdk()?)
+    } else {
+        None
+    };
+    if let Some((sdk, _)) = &wasi_sdk {
         for (name, value) in sdk.cmake_options() {
             config.define(name, value);
         }
@@ -580,29 +580,55 @@ fn build_with_cmake(cfg: &NativeConfig) -> anyhow::Result<PathBuf> {
     }
 
     let prefix = config.build();
-    write_manifest(&prefix, cfg)?;
+    if let Some((sdk, id)) = &wasi_sdk {
+        bundle_wasi_runtime(&prefix, sdk, id)?;
+    }
+    write_manifest(&prefix, cfg, wasi_sdk.as_ref().map(|(_, id)| id))?;
     Ok(prefix)
 }
 
+/// Copies wasi-sdk's runtime libraries into the prefix's `lib/`, only when their content
+/// changes, so that the prefix links without the SDK.
+fn bundle_wasi_runtime(prefix: &Path, sdk: &WasiSdk, id: &SdkIdentity) -> anyhow::Result<()> {
+    let sources = sdk.runtime_library_sources(id);
+    for (source, file) in sources.iter().zip(wasi_sdk::runtime_library_files()) {
+        let bytes = fs::read(source).with_context(|| format!("cannot read {source}"))?;
+        let path = prefix.join("lib").join(file);
+        if fs::read(&path).ok().as_deref() != Some(bytes.as_slice()) {
+            fs::write(&path, bytes).with_context(|| format!("cannot write {}", path.display()))?;
+        }
+    }
+    Ok(())
+}
+
 /// Writes the manifest into the prefix, only when its content changes.
-fn write_manifest(prefix: &Path, cfg: &NativeConfig) -> anyhow::Result<()> {
+fn write_manifest(
+    prefix: &Path,
+    cfg: &NativeConfig,
+    wasi_sdk: Option<&SdkIdentity>,
+) -> anyhow::Result<()> {
     let path = prefix.join(MANIFEST_FILE);
-    let text = manifest_text(cfg);
+    let text = manifest_text(cfg, wasi_sdk);
     if fs::read_to_string(&path).ok().as_deref() != Some(text.as_str()) {
         fs::write(&path, text).with_context(|| format!("cannot write {}", path.display()))?;
     }
     Ok(())
 }
 
-/// Validates a prebuilt prefix from `JOLTC_LIB_DIR` and returns it. Never runs CMake.
+/// Validates a prebuilt prefix from `JOLTC_LIB_DIR` and returns it. Never runs CMake, and a
+/// wasm prefix, which bundles its runtime, needs no wasi-sdk.
 fn use_prebuilt(dir: PathBuf, cfg: &NativeConfig) -> anyhow::Result<PathBuf> {
     let header = dir.join("include").join("joltc.h");
     let ext_header = dir.join("include").join("joltc_ext.h");
     let manifest = dir.join(MANIFEST_FILE);
-    let archives = [
+    let mut archives = vec![
         dir.join("lib").join(cfg.archive_name(cfg.joltc_lib())),
         dir.join("lib").join(cfg.archive_name("Jolt")),
     ];
+    if cfg.target == WASM_TARGET {
+        let runtime = wasi_sdk::runtime_library_files();
+        archives.extend(runtime.iter().map(|file| dir.join("lib").join(file)));
+    }
 
     let inputs: Vec<&PathBuf> = [&header, &ext_header, &manifest]
         .into_iter()
@@ -656,6 +682,13 @@ fn check_manifest(path: &Path, cfg: &NativeConfig) -> anyhow::Result<()> {
 
     let expected = manifest_entries(cfg);
     let mut differences = Vec::new();
+    // The SDK a wasm prefix names is the one its bundled runtime comes from; this build uses no
+    // SDK, so any is accepted.
+    if cfg.target == WASM_TARGET && found.remove(WASI_SDK_KEY).is_none_or(|sdk| sdk.is_empty()) {
+        differences.push(format!(
+            "  {WASI_SDK_KEY}: prebuilt=<missing> expected=<the wasi-sdk that built it>"
+        ));
+    }
     for (key, value) in &expected {
         match found.remove(*key) {
             Some(prebuilt) if prebuilt == *value => {}
@@ -747,10 +780,8 @@ fn link(prefix: &Path, cfg: &NativeConfig) {
         "linux" => println!("cargo:rustc-link-lib=dylib=stdc++"),
         _ => {}
     }
-    if let Some((sdk, id)) = &cfg.wasi_sdk {
-        for dir in sdk.link_search_dirs(id) {
-            println!("cargo:rustc-link-search=native={dir}");
-        }
+    if cfg.target == WASM_TARGET {
+        // The prefix bundles wasi-sdk's runtime next to joltc and Jolt.
         for lib in wasi_sdk::RUNTIME_LIBRARIES {
             println!("cargo:rustc-link-lib=static={lib}");
         }

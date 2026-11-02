@@ -102,6 +102,7 @@ Everything planned for 1.0 is done; what works today, with links to the guides, 
 - [x] oxijolt builds for wasm32-unknown-unknown, single-threaded
 - [x] CI checks wasm32 (Node and Chrome) against native cross-platform-deterministic results
 - [x] A world's creation limits and collision layers, readable from the world
+- [x] Prebuilt wasm32-unknown-unknown archives in releases, with wasi-sdk's runtime bundled
 
 ## Status
 
@@ -165,8 +166,8 @@ same results at every thread count. oxijolt and Rapier each kept 7 of 10 scenes 
 quality bounds (with each engine's defaults Rapier 8, oxijolt 7); oxijolt lets some capsules
 through the ground and its plank towers collapse. oxijolt brings
 Jolt's character controller, wheeled and tracked vehicles and ragdolls; outside x86_64 Windows
-and Linux and Apple silicon it needs a C++ toolchain, and on wasm32-unknown-unknown it builds
-single-threaded, checked in CI against Linux native results.
+and Linux, Apple silicon and wasm32-unknown-unknown it needs a C++ toolchain, and on
+wasm32-unknown-unknown it builds single-threaded, checked in CI against Linux native results.
 
 ## Documentation
 
