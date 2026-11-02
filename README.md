@@ -104,6 +104,7 @@ Everything planned for 1.0 is done; what works today, with links to the guides, 
 - [x] A world's creation limits and collision layers, readable from the world
 - [x] Prebuilt wasm32-unknown-unknown archives in releases, with wasi-sdk's runtime bundled
 - [x] A browser example: a wasm32 module stepped and drawn with plain JavaScript
+- [x] Centre of mass readouts for shapes and bodies
 
 ## Status
 

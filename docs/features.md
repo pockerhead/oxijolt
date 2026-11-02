@@ -37,6 +37,8 @@ what is planned next.
   (`BodySettings::mass_and_inertia`) ([guide](bodies.md#mass-and-inertia)).
 - The world-space inverse inertia a dynamic body has, rotation and locked axes included
   (`BodyRef::inverse_inertia`) ([guide](bodies.md#mass-and-inertia)).
+- Centre of mass readouts: a shape's in its own space (`Shape::center_of_mass`) and a body's in
+  world space (`BodyRef::center_of_mass_position`) ([guide](bodies.md#mass-and-inertia)).
 - Ragdolls from a skeleton, posed, motor-driven or kinematic, with settle detection, and a skeleton
   mapper to and from a detailed animation skeleton ([guide](guide.md#ragdolls)).
 - Twelve kinds of constraints with motors, springs and limits: fixed, point, distance, hinge,
