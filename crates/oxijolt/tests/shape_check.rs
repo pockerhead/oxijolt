@@ -169,6 +169,15 @@ fn pending_forces_are_refused_until_reset() {
     assert_refused(&mut world, cube, &lopsided, None, pending);
     world.body_mut(cube).unwrap().reset_forces();
     assert_accepted(&mut world, cube, &lopsided, None);
+    // A torque alone is a pending load too.
+    world
+        .body_mut(cube)
+        .unwrap()
+        .add_torque(Vec3::new(0.0, 1.0, 0.0))
+        .unwrap();
+    assert_refused(&mut world, cube, &cube_shape(), None, pending);
+    world.body_mut(cube).unwrap().reset_forces();
+    assert_accepted(&mut world, cube, &cube_shape(), None);
 }
 
 #[test]
