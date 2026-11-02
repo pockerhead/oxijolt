@@ -152,7 +152,8 @@ outward surface normal of the obstacle: a floor below gives a normal pointing up
   fraction 0) and triangles are hit from both sides.
 - `cast_ray_all`: every hit along a ray under the same rules, one per convex shape and one per
   triangle crossed, sorted by fraction, then body id, then sub-shape id. The first is `cast_ray`'s
-  hit.
+  hit unless several hits share the closest fraction; `cast_ray` then returns one of them, picked
+  by Jolt's traversal, which may depend on the broad phase's history.
 - `cast_shape`: the first obstacle a moving shape hits, with the distance it can move, the contact
   point and the obstacle's normal. `ShapeCast::target_distance` (spheres and capsules) stops the
   cast short of the obstacle.

@@ -9,11 +9,25 @@ use oxijolt::*;
 
 const ALL: QueryFilter<'static> = QueryFilter::new();
 
-/// Every hit of `ray`, checked against `cast_ray`: the first hit is its hit, and the hits are
+/// Every hit of `ray`, checked against `cast_ray`: its hit is one of the hits at the first
+/// hit's fraction (the first hit itself when no other shares that fraction), and the hits are
 /// sorted by fraction, body id and sub-shape id.
 fn all_hits(world: &PhysicsWorld, ray: &RayCast, filter: &QueryFilter<'_>) -> Vec<RayCastHit> {
     let hits = world.cast_ray_all(ray, filter).unwrap();
-    assert_eq!(hits.first().copied(), world.cast_ray(ray, filter).unwrap());
+    let closest = world.cast_ray(ray, filter).unwrap();
+    assert_eq!(
+        hits.first().map(|hit| hit.fraction),
+        closest.map(|hit| hit.fraction)
+    );
+    if let Some(closest) = closest {
+        let mut tied = hits
+            .iter()
+            .take_while(|hit| hit.fraction == closest.fraction);
+        assert!(
+            tied.any(|hit| *hit == closest),
+            "{closest:?} not in {hits:?}"
+        );
+    }
     for pair in hits.windows(2) {
         let key = |hit: &RayCastHit| (hit.fraction, hit.body, hit.sub_shape_id);
         assert!(key(&pair[0]) <= key(&pair[1]), "{hits:?}");
@@ -136,6 +150,123 @@ fn hits_are_ordered_by_fraction_not_by_bounds() {
         (hits[2].distance - (5.0 - 0.39_f32.sqrt())).abs() <= 1.0e-4,
         "{hits:?}"
     );
+}
+
+#[test]
+fn coincident_bodies_are_ordered_by_body_id() {
+    let mut world = world(Vec3::ZERO, 1);
+    let shape = Shape::new_box(Vec3::new(1.0, 1.0, 1.0)).unwrap();
+    let boxes: Vec<BodyId> = (0..4)
+        .map(|_| {
+            world
+                .create_body(&shape, &BodySettings::new_static())
+                .unwrap()
+        })
+        .collect();
+    let from_outside = RayCast::new(RVec3::new(-4.0, 0.0, 0.0), Vec3::new(8.0, 0.0, 0.0));
+    let from_inside = RayCast::new(RVec3::ZERO, Vec3::new(8.0, 0.0, 0.0));
+    for optimized in [false, true] {
+        if optimized {
+            world.optimize_broad_phase();
+        }
+        for (ray, fraction) in [(&from_outside, 0.375), (&from_inside, 0.0)] {
+            // `all_hits` checks that `cast_ray`'s hit is one of the tied ones; which one it is
+            // follows Jolt's traversal.
+            let hits = all_hits(&world, ray, &ALL);
+            let bodies: Vec<BodyId> = hits.iter().map(|hit| hit.body).collect();
+            assert_eq!(bodies, boxes, "optimized: {optimized}");
+            assert!(hits.iter().all(|hit| hit.fraction == fraction), "{hits:?}");
+        }
+    }
+}
+
+#[test]
+fn a_compound_reports_each_leaf_the_ray_hits() {
+    let mut world = world(Vec3::ZERO, 1);
+    let unit_box = cube_shape();
+    // Children 0 and 2 coincide at x 2, child 1 sits at x 5.
+    let compound = Shape::new_compound(&[
+        child(&unit_box, Vec3::new(2.0, 0.0, 0.0), Groups::STRUCTURE),
+        child(&unit_box, Vec3::new(5.0, 0.0, 0.0), Groups::FEATURE),
+        child(&unit_box, Vec3::new(2.0, 0.0, 0.0), Groups::ITEM),
+    ])
+    .unwrap();
+    let body = world
+        .create_body(&compound, &BodySettings::new_static())
+        .unwrap();
+    let hits = all_hits(&world, &along_x(), &ALL);
+    assert_eq!(hits.len(), 3, "{hits:?}");
+    assert!(hits.iter().all(|hit| hit.body == body));
+    // The coincident children tie at x 1.5 and are ordered by sub-shape id.
+    assert_eq!(hits[0].fraction, hits[1].fraction);
+    assert!(hits[0].sub_shape_id < hits[1].sub_shape_id);
+    assert!((hits[0].distance - 1.5).abs() <= 1.0e-5, "{hits:?}");
+    assert!((hits[2].distance - 4.5).abs() <= 1.0e-5, "{hits:?}");
+    let mut tied: Vec<u32> = hits[..2]
+        .iter()
+        .map(|hit| hit.compound_child.unwrap().index)
+        .collect();
+    tied.sort_unstable();
+    assert_eq!(tied, [0, 2]);
+    assert_eq!(
+        hits[2].compound_child,
+        Some(CompoundSubShape {
+            index: 1,
+            user_data: Groups::FEATURE
+        })
+    );
+
+    // Child groups drop leaves of the body, the body filter drops the body.
+    let no_item = QueryFilter::new().child_groups(1 << Groups::STRUCTURE | 1 << Groups::FEATURE);
+    let children: Vec<u32> = all_hits(&world, &along_x(), &no_item)
+        .iter()
+        .map(|hit| hit.compound_child.unwrap().index)
+        .collect();
+    assert_eq!(children, [0, 1]);
+    let keep_none = |_: BodyId| false;
+    let filter = QueryFilter::new().body_filter(&keep_none);
+    assert!(all_hits(&world, &along_x(), &filter).is_empty());
+}
+
+#[test]
+fn a_ray_through_a_closed_mesh_hits_each_triangle_it_crosses() {
+    let mut world = world(Vec3::ZERO, 1);
+    // A closed cube mesh of half extent 1; vertex i has x, y, z = +1 for bits 0, 1, 2 of i.
+    let vertices: Vec<Vec3> = (0..8)
+        .map(|i| {
+            let side = |bit: u32| if i & bit == 0 { -1.0 } else { 1.0 };
+            Vec3::new(side(1), side(2), side(4))
+        })
+        .collect();
+    let triangles = [
+        [0, 2, 6],
+        [0, 6, 4],
+        [1, 7, 3],
+        [1, 5, 7],
+        [0, 4, 5],
+        [0, 5, 1],
+        [2, 3, 7],
+        [2, 7, 6],
+        [0, 1, 3],
+        [0, 3, 2],
+        [4, 6, 7],
+        [4, 7, 5],
+    ];
+    let (mesh, dropped) = Shape::new_mesh(&vertices, &triangles).unwrap();
+    assert!(dropped.is_empty());
+    let body = world
+        .create_body(&mesh, &BodySettings::new_static())
+        .unwrap();
+    // Off every face diagonal: one triangle where the ray enters, one where it leaves.
+    let ray = RayCast::new(RVec3::new(-3.0, 0.3, 0.1), Vec3::new(6.0, 0.0, 0.0));
+    let hits = all_hits(&world, &ray, &ALL);
+    assert_eq!(hits.len(), 2, "{hits:?}");
+    assert!(hits.iter().all(|hit| hit.body == body));
+    assert_ne!(hits[0].sub_shape_id, hits[1].sub_shape_id);
+    for (hit, distance) in hits.iter().zip([2.0, 4.0]) {
+        assert!((hit.distance - distance).abs() <= 1.0e-5, "{hit:?}");
+        assert!(hit.normal.x.abs() > 0.99, "{hit:?}");
+    }
 }
 
 #[test]

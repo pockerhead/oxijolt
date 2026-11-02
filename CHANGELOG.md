@@ -13,8 +13,8 @@ All notable changes to this fork. The format follows [Keep a Changelog](https://
   `exclude_body`. The closure is `Sync`, so a `QueryFilter` stays `Send + Sync`; a panic in it is
   resumed after the query, as in the other filter callbacks. Refs #17.
 - `PhysicsWorld::cast_ray_all` returns every hit of a ray, with the rules, validation and errors of
-  `cast_ray`, sorted by fraction, then body id, then sub-shape id; the first hit is `cast_ray`'s.
-  Refs #18.
+  `cast_ray`, sorted by fraction, then body id, then sub-shape id. The first hit is `cast_ray`'s,
+  unless several share the closest fraction: `cast_ray` then returns one of them. Refs #18.
 - `Shape::mass_properties` reads a shape's mass and its inertia tensor about its centre of mass
   (Jolt `Shape::GetMassProperties`, density 1000 kg/m³) as the new `MassProperties`, in rows like
   `Inertia::Tensor` and exactly symmetric, the form `BodySettings::mass_and_inertia` takes.

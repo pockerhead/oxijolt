@@ -158,6 +158,10 @@ impl PhysicsWorld {
     /// faces whatever its convex radius. [`RayCastHit::normal`] is the outward normal of the hit
     /// face.
     ///
+    /// When several hits share the closest fraction, the one returned follows Jolt's traversal
+    /// and may depend on the broad phase's history; [`cast_ray_all`](Self::cast_ray_all) orders
+    /// such hits by body id and sub-shape id.
+    ///
     /// The origin must be finite with every component at most [`limits::MAX_POSITION`] in
     /// absolute value and the direction finite and not zero; otherwise
     /// [`QueryError::InvalidValue`] is returned.
@@ -179,6 +183,9 @@ impl PhysicsWorld {
     /// enters it, or at `0.0` when the ray starts inside it), a mesh or heightfield once per
     /// triangle crossed. Hits follow the rules of [`cast_ray`](Self::cast_ray), and the
     /// validation and errors are the same.
+    ///
+    /// The first hit has the fraction of `cast_ray`'s hit and is the same hit unless several
+    /// share that fraction; `cast_ray` then returns one of them.
     pub fn cast_ray_all(
         &self,
         ray: &RayCast,
