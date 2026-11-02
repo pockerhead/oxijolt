@@ -1,8 +1,6 @@
 //! A static body's shape change keeps the world attachment points of the constraints that use
 //! it, read back from Jolt's constraint-to-body matrices, with the static body on either side.
 
-use oxijolt_sys::*;
-
 use super::id::AnyConstraintId;
 use super::*;
 use crate::{
@@ -123,10 +121,9 @@ const KINDS: [ConstraintType; 9] = [
     ConstraintType::Path,
 ];
 
-/// A world with the static compound ([`first_shape`]) at [`ORIGIN`], a dynamic cube beyond its
-/// +X end, and one constraint of `kind` between them with the static body on `side`.
-fn scene(kind: ConstraintType, side: Side) -> (PhysicsWorld, BodyId, AnyConstraintId) {
-    let mut world = PhysicsWorld::new(WorldSettings::default()).unwrap();
+/// The static compound ([`first_shape`]) at [`ORIGIN`] and a dynamic cube beyond its +X end,
+/// centred at x = 5.2 along the static body's X axis.
+fn bodies(world: &mut PhysicsWorld) -> [BodyId; 2] {
     let support = world
         .create_body(
             &first_shape(),
@@ -144,6 +141,14 @@ fn scene(kind: ConstraintType, side: Side) -> (PhysicsWorld, BodyId, AnyConstrai
                 .rotation(rotation()),
         )
         .unwrap();
+    [support, dynamic]
+}
+
+/// A world with [`bodies`] and one constraint of `kind` between them with the static body on
+/// `side`.
+fn scene(kind: ConstraintType, side: Side) -> (PhysicsWorld, BodyId, AnyConstraintId) {
+    let mut world = PhysicsWorld::new(WorldSettings::default()).unwrap();
+    let [support, dynamic] = bodies(&mut world);
     let [body1, body2] = match side {
         Side::One => [support, dynamic],
         Side::Two => [dynamic, support],
@@ -221,15 +226,26 @@ fn anchors(world: &PhysicsWorld, id: AnyConstraintId, side: Side) -> [[f64; 3]; 
     }
 }
 
+/// Disables `id` in Jolt directly; reading attachment points needs no body wake.
+fn disable(world: &mut PhysicsWorld, id: AnyConstraintId) {
+    let constraint = world.constraints[&id.raw].constraint.as_ptr();
+    // SAFETY: the world owns the live constraint and is borrowed mutably; no step runs. The
+    // setter writes a member.
+    unsafe { JPH_Constraint_SetEnabled(constraint, false) };
+}
+
 /// The largest move of the static body's world attachment point over every kind and side
 /// after each shape of `shapes` in turn, one maximum per change; asserts that the dynamic
-/// body's point does not move at all.
-fn anchor_moves(shapes: &[Shape]) -> Vec<f64> {
+/// body's point does not move at all. With `disabled`, the constraints are disabled first.
+fn anchor_moves(shapes: &[Shape], disabled: bool) -> Vec<f64> {
     let mut worst = vec![0.0f64; shapes.len()];
     for kind in KINDS {
         for side in [Side::One, Side::Two] {
             let (mut world, support, id) = scene(kind, side);
             let [support_before, dynamic_before] = anchors(&world, id, side);
+            if disabled {
+                disable(&mut world, id);
+            }
             for (change, shape) in shapes.iter().enumerate() {
                 world
                     .body_mut(support)
@@ -252,7 +268,7 @@ fn anchor_moves(shapes: &[Shape]) -> Vec<f64> {
 
 #[test]
 fn a_static_shape_change_keeps_the_world_anchors_of_every_kind_on_either_side() {
-    let moves = anchor_moves(&[boxes_at(&[2.0, 4.0])]);
+    let moves = anchor_moves(&[boxes_at(&[2.0, 4.0])], false);
     println!("largest anchor move: {:e} m", moves[0]);
     assert!(moves[0] <= ROUNDING_PER_CHANGE, "{moves:?}");
 }
@@ -265,12 +281,54 @@ fn repeated_static_shape_changes_and_a_set_back_keep_the_world_anchors() {
         boxes_at(&[0.5, 2.0, 4.0, 6.3]),
         first_shape(),
     ];
-    let moves = anchor_moves(&shapes);
-    println!("largest anchor moves: {moves:?} m");
-    for (change, moved) in moves.iter().enumerate() {
+    for disabled in [false, true] {
+        let moves = anchor_moves(&shapes, disabled);
+        println!("largest anchor moves (disabled: {disabled}): {moves:?} m");
+        for (change, moved) in moves.iter().enumerate() {
+            assert!(
+                *moved <= ROUNDING_PER_CHANGE * (change + 1) as f64,
+                "disabled: {disabled}, {moves:?}"
+            );
+        }
+    }
+}
+
+/// Points given relative to the centres of mass refer to the centres of mass at creation: after
+/// the static body's centre of mass moves, the world attachment points stay where they were.
+#[test]
+fn points_given_relative_to_the_centres_of_mass_stay_where_they_were_in_world_space() {
+    // Along the static body's X axis its centre of mass is at x = 2 and the cube's at x = 5.2;
+    // the point lies at x = 4.6.
+    let point = to_world([4.6, 0.1, -0.2]);
+    let point = [point.x as f64, point.y as f64, point.z as f64];
+    let local = |x: Real| RVec3::new(x, 0.1, -0.2);
+    let (on_support, on_cube) = (local(2.6), local(-0.6));
+    for side in [Side::One, Side::Two] {
+        let mut world = PhysicsWorld::new(WorldSettings::default()).unwrap();
+        let [support, cube] = bodies(&mut world);
+        let (body1, body2, point1, point2) = match side {
+            Side::One => (support, cube, on_support, on_cube),
+            Side::Two => (cube, support, on_cube, on_support),
+        };
+        let settings = PointConstraintSettings::default()
+            .space(ConstraintSpace::LocalToBodyCom)
+            .point1(point1)
+            .point2(point2);
+        let id = world
+            .create_constraint(body1, body2, &settings)
+            .unwrap()
+            .into();
+        let [before, _] = anchors(&world, id, side);
+        assert!(distance(before, point) <= ROUNDING_PER_CHANGE, "{side:?}");
+        world
+            .body_mut(support)
+            .unwrap()
+            .set_shape(&boxes_at(&[2.0, 4.0]), None, Activation::DontActivate)
+            .unwrap();
+        let [after, _] = anchors(&world, id, side);
         assert!(
-            *moved <= ROUNDING_PER_CHANGE * (change + 1) as f64,
-            "{moves:?}"
+            distance(after, point) <= 2.0 * ROUNDING_PER_CHANGE,
+            "{side:?}"
         );
     }
 }

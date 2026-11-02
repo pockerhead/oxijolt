@@ -12,7 +12,8 @@
 mod common;
 
 use common::constraint_rigs::{
-    all_kinds_rig, anchor, assert_every_getter_loaded, cube, readout_bits,
+    all_kinds_rig, anchor, assert_every_getter_loaded, cube, readout_bits, readout_coverage,
+    shifted,
 };
 use common::determinism::{assert_same, child_request, digest_in_child, finish_child, Digest};
 use common::{record_body, world, DT};
@@ -151,7 +152,7 @@ fn the_joints_of_every_kind_hold_through_a_static_shape_change() {
 
 #[test]
 fn a_gear_over_hinges_on_a_static_support_keeps_coupling_after_the_support_changes_shape() {
-    let run = |change: bool| {
+    let run = |ratio: f32, change: bool| {
         let mut world = world(GRAVITY, 1);
         let support = anchor(&mut world, RVec3::new(1.0, 0.0, 1.0));
         let centres = [RVec3::new(0.0, 0.0, 0.0), RVec3::new(2.0, 0.0, 0.0)];
@@ -162,9 +163,11 @@ fn a_gear_over_hinges_on_a_static_support_keeps_coupling_after_the_support_chang
             let hinge = HingeConstraintSettings::new(centres[i], z, x);
             world.create_constraint(support, discs[i], &hinge).unwrap()
         });
-        world
-            .create_constraint(discs[0], discs[1], &GearConstraintSettings::new(z, z, 2.0))
-            .unwrap();
+        let gear = GearConstraintSettings::new(z, z, ratio).constraints(hinges[0], hinges[1]);
+        let gear = world.create_constraint(discs[0], discs[1], &gear).unwrap();
+        let references = world.constraint(gear).unwrap();
+        assert_eq!(references.gear1_constraint(), Some(hinges[0]));
+        assert_eq!(references.gear2_constraint(), Some(hinges[1]));
         let mut motor = world.constraint_mut(hinges[0]).unwrap();
         motor.set_motor_state(MotorState::Velocity);
         motor.set_target_angular_velocity(1.0).unwrap();
@@ -183,19 +186,26 @@ fn a_gear_over_hinges_on_a_static_support_keeps_coupling_after_the_support_chang
             [0, 1].map(|i| distance(world.body(discs[i]).unwrap().position(), centres[i]));
         (angles, offsets)
     };
-    let (angles, offsets) = run(true);
-    let (control_angles, _) = run(false);
-    // 2.5 s at 1 rad/s turn the driven disc 2.5 rad and the other half as far the other way.
-    assert!((angles[0] - 2.5).abs() < 0.05, "{angles:?}");
-    assert!((angles[0] + 2.0 * angles[1]).abs() < 1e-3, "{angles:?}");
-    for (angle, control) in angles.iter().zip(control_angles) {
+    // Ratio 2 and the largest ratio a gear accepts.
+    for ratio in [2.0, limits::MAX_GEAR_RATIO] {
+        let (angles, offsets) = run(ratio, true);
+        let (control_angles, _) = run(ratio, false);
+        // 2.5 s at 1 rad/s turn the driven disc 2.5 rad and the other one `ratio` times less
+        // the other way.
+        assert!((angles[0] - 2.5).abs() < 0.05, "{ratio}: {angles:?}");
         assert!(
-            (angle - control).abs() < 1e-4,
-            "{angles:?} {control_angles:?}"
+            (angles[0] + ratio * angles[1]).abs() < 1e-3,
+            "{ratio}: {angles:?}"
         );
-    }
-    for offset in offsets {
-        assert!(offset < DRIFT, "{offsets:?}");
+        for (angle, control) in angles.iter().zip(control_angles) {
+            assert!(
+                (angle - control).abs() < 1e-4,
+                "{ratio}: {angles:?} {control_angles:?}"
+            );
+        }
+        for offset in offsets {
+            assert!(offset < DRIFT, "{ratio}: {offsets:?}");
+        }
     }
 }
 
@@ -227,6 +237,103 @@ fn a_static_body_created_able_to_move_changes_shape_under_a_constraint() {
         assert!(world.step(DT).unwrap().is_complete());
     }
     assert!(distance(world.body(held).unwrap().position(), RVec3::ZERO) < DRIFT);
+}
+
+#[test]
+fn a_disabled_weld_holds_where_it_was_once_enabled_after_shape_changes() {
+    // Without gravity the cube stays where it was created while the weld is disabled.
+    let mut world = world(Vec3::ZERO, 1);
+    let support = anchor(&mut world, RVec3::new(0.0, 0.0, 1.0));
+    let held = cube(&mut world, RVec3::ZERO, 2.0);
+    let weld = FixedConstraintSettings::new(
+        RVec3::new(0.0, 0.0, 0.5),
+        Vec3::new(1.0, 0.0, 0.0),
+        Vec3::new(0.0, 1.0, 0.0),
+    );
+    let weld = world.create_constraint(support, held, &weld).unwrap();
+    world.constraint_mut(weld).unwrap().set_enabled(false);
+    for shape in [grown_anchor(), off_centre_anchor()] {
+        world
+            .body_mut(support)
+            .unwrap()
+            .set_shape(&shape, None, Activation::DontActivate)
+            .unwrap();
+        assert!(world.step(DT).unwrap().is_complete());
+    }
+    world.constraint_mut(weld).unwrap().set_enabled(true);
+    for _ in 0..60 {
+        assert!(world.step(DT).unwrap().is_complete());
+    }
+    let offset = distance(world.body(held).unwrap().position(), RVec3::ZERO);
+    assert!(offset < DRIFT, "{offset}");
+}
+
+/// A weld, a point pendulum and a rope pendulum, each with its static anchor as body 2: the
+/// anchors, the cubes and the constraints.
+fn side_two_rig(world: &mut PhysicsWorld) -> ([BodyId; 3], [BodyId; 3], Vec<AnyConstraintId>) {
+    let x = Vec3::new(1.0, 0.0, 0.0);
+    let y = Vec3::new(0.0, 1.0, 0.0);
+    let pivots = [0.0, 8.0, 16.0].map(|x| RVec3::new(x, 10.0, -20.0));
+    let anchors = pivots.map(|pivot| anchor(world, shifted(pivot, [0.0, 0.0, 1.0])));
+    // The weld holds the cube beside its centre; the pendulums hang 0.3 rad off vertical.
+    let below = |pivot| shifted(pivot, [0.75 * 0.3f32.sin(), -0.75 * 0.3f32.cos(), 0.0]);
+    let cubes = [
+        cube(world, pivots[0], 2.0),
+        cube(world, below(pivots[1]), 2.0),
+        cube(world, below(pivots[2]), 2.0),
+    ];
+    let weld = FixedConstraintSettings::new(shifted(pivots[0], [0.4, 0.25, 0.0]), x, y);
+    let point = PointConstraintSettings::new(pivots[1]);
+    let rope = DistanceConstraintSettings::new(below(pivots[2]), pivots[2]);
+    let constraints = vec![
+        world
+            .create_constraint(cubes[0], anchors[0], &weld)
+            .unwrap()
+            .into(),
+        world
+            .create_constraint(cubes[1], anchors[1], &point)
+            .unwrap()
+            .into(),
+        world
+            .create_constraint(cubes[2], anchors[2], &rope)
+            .unwrap()
+            .into(),
+    ];
+    (anchors, cubes, constraints)
+}
+
+#[test]
+fn loaded_joints_with_the_static_body_on_side_2_hold_through_its_shape_change() {
+    let mut changed = world(GRAVITY, 1);
+    let mut control = world(GRAVITY, 1);
+    let (anchors, cubes, constraints) = side_two_rig(&mut changed);
+    let (_, control_cubes, _) = side_two_rig(&mut control);
+    let shape = off_centre_anchor();
+    let mut worst: Real = 0.0;
+    for tick in 1..=TICKS {
+        if tick == EDIT_TICK {
+            for &id in &anchors {
+                changed
+                    .body_mut(id)
+                    .unwrap()
+                    .set_shape(&shape, None, Activation::DontActivate)
+                    .unwrap();
+            }
+        }
+        assert!(changed.step(DT).unwrap().is_complete());
+        assert!(control.step(DT).unwrap().is_complete());
+        if tick == EDIT_TICK {
+            let (_, unloaded) = readout_coverage(&changed, &constraints);
+            assert!(unloaded.is_empty(), "no load in {unloaded:?}");
+        }
+        for (&id, &control_id) in cubes.iter().zip(&control_cubes) {
+            let a = changed.body(id).unwrap().position();
+            let b = control.body(control_id).unwrap().position();
+            worst = worst.max(distance(a, b));
+        }
+    }
+    println!("largest drift from the unchanged run: {worst:e} m");
+    assert!(worst < DRIFT, "{worst}");
 }
 
 #[test]

@@ -365,10 +365,11 @@ rounding: a static body at about 100 m moved by 7.6e-6 m (one `f32` ulp) when it
 moved 1 m. The constraints of a static body keep their world attachment points through its shape
 change up to the same kind of rounding: 3.8e-6 m for that change and at most 7.6e-6 m after two
 more changes that end with the first shape again, for each of the nine kinds a static body can
-join, on either side (`src/constraint/shape_change_tests.rs`, single precision). Without the
-notification the points would move with the centre of mass. A gear reads only the angles of the
-hinges it couples, so a gear over hinges on the static body keeps coupling
-(`static_shape_constraints.rs`).
+join, on either side, enabled or disabled (`src/constraint/shape_change_tests.rs`, single
+precision). Without the notification the points would move with the centre of mass. A gear reads
+only the angles of the
+hinges it couples, so a gear that references hinges on the static body keeps coupling, at ratio
+2 and at `limits::MAX_GEAR_RATIO` (`static_shape_constraints.rs`).
 
 Jolt saves neither shapes nor motion types, so each successful change makes earlier `WorldState`s
 unrestorable ([state.md](state.md)): a rollback cannot cross it.
@@ -497,8 +498,10 @@ change above: the body rules, fresh mass properties and the wake of the bodies n
 the old and new bounds. On a large compound that box can hold many sleeping bodies. Each `set_shape`
 changes one body; when a publication goes to several bodies and a later one refuses it, the earlier
 ones keep it. Bodies, worlds and scaled shapes that hold an earlier publication keep it unchanged.
-A body that a constraint, character, vehicle or ragdoll holds refuses the change; remove the
-constraint, install the publication and create the constraint again.
+A body that a character, vehicle or ragdoll holds refuses the change, and so does a kinematic or
+dynamic body that a constraint uses: remove the constraint, install the publication and create the
+constraint again. A static body that constraints use takes the publication and its constraints
+keep their world attachment points, as above.
 
 Children are numbered in order. Removing one moves the later ones down by one, and a child count
 that crosses a power of two changes the width of every child index, so a sub-shape id from before a
