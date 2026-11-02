@@ -6,6 +6,15 @@ All notable changes to this fork. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- `Shape::mass_properties` reads a shape's mass and its inertia tensor about its centre of mass
+  (Jolt `Shape::GetMassProperties`, density 1000 kg/m³) as the new `MassProperties`, in rows like
+  `Inertia::Tensor` and exactly symmetric, the form `BodySettings::mass_and_inertia` takes.
+  Meshes, heightfields and planes read
+  mass 0 and a zero tensor. Refs #15.
+- `BodyMut::check_shape(shape, mass)` runs the checks of `set_shape` without changing anything and
+  returns the same error; `Ok` means `set_shape` with the same arguments succeeds while the world
+  stays as it is. Earlier states stay restorable and no body wakes. The regions of
+  `set_shape_waking_in` are not checked. Refs #16.
 - `BodyMut::set_shape_waking_in` changes a body's shape like `set_shape` but wakes only the
   non-static bodies within the speculative contact distance of the boxes the caller gives, each
   once, in body-id order. A large static compound that gains or loses a few children no longer
