@@ -1,0 +1,13 @@
+[package]
+name = "oxijolt-web-example"
+description = "A pile of balls stepped by oxijolt in a wasm32-unknown-unknown module and drawn in a browser"
+version = "0.0.0"
+edition = "2021"
+publish = false
+license = "MIT OR Apache-2.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+oxijolt = { path = "../../crates/oxijolt" }

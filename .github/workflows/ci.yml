@@ -553,6 +553,10 @@ jobs:
 
       - run: bash scripts/check_wasm_raw.sh
       - run: bash scripts/check_wasm_safe.sh
+      - name: Browser example builds
+        run: cargo build --locked -p oxijolt-web-example --target wasm32-unknown-unknown
+        env:
+          JOLTC_PREBUILT: "off"
       - run: bash scripts/check_wasm_determinism.sh
 
       - if: failure()

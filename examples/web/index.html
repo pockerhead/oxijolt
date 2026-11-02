@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>oxijolt in the browser</title>
+<style>
+    body { font-family: sans-serif; margin: 1.5em; }
+    canvas { border: 1px solid #ccc; display: block; margin-top: 0.8em; }
+    #status { font-family: monospace; margin-top: 0.5em; }
+</style>
+</head>
+<body>
+<h1>oxijolt in the browser</h1>
+<p>Jolt Physics stepped at 60 Hz in a <code>wasm32-unknown-unknown</code> module, seen from the
+    front (the bin is 3 m deep).</p>
+<label>Balls <input id="count" type="range" min="50" max="1000" step="50" value="300"></label>
+<span id="count-value">300</span>
+<button id="restart">Restart</button>
+<canvas id="view" width="640" height="400"></canvas>
+<div id="status">loading the module...</div>
+<script type="module" src="main.js"></script>
+</body>
+</html>

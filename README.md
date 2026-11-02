@@ -98,11 +98,12 @@ Everything planned for 1.0 is done; what works today, with links to the guides, 
 - [x] The hinges and slider a gear or rack and pinion references, readable from its settings and
   the created constraint
 - [x] A world's job system kind and concurrency, readable from the world and the kind from its settings
-- [x] oxijolt-sys builds for wasm32-unknown-unknown from source (wasi-sdk)
+- [x] oxijolt-sys builds for wasm32-unknown-unknown (from a release archive, or from source with wasi-sdk)
 - [x] oxijolt builds for wasm32-unknown-unknown, single-threaded
 - [x] CI checks wasm32 (Node and Chrome) against native cross-platform-deterministic results
 - [x] A world's creation limits and collision layers, readable from the world
 - [x] Prebuilt wasm32-unknown-unknown archives in releases, with wasi-sdk's runtime bundled
+- [x] A browser example: a wasm32 module stepped and drawn with plain JavaScript
 
 ## Status
 

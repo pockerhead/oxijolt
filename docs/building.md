@@ -196,28 +196,64 @@ configuration. The supported targets are those with committed bindings (`build/t
 | `wasm32` | `wasm32-unknown-unknown`, `wasm32-unknown-emscripten`, `wasm32-wasip1` |
 
 Other 32-bit targets and unregistered ones are refused when the build starts.
-`wasm32-unknown-unknown` needs Rust 1.91 or newer. It takes a release archive like the targets
-above; its source build needs [wasi-sdk](https://github.com/WebAssembly/wasi-sdk):
-`WASI_SDK_PATH` names its install directory and Ninja is on `PATH`; wasi-sdk 34.0 is tested. The
-source build copies the SDK's runtime libraries (libc++ and libc++abi of the `noeh` variant,
-wasi-libc and clang's builtins) into the prefix, so a `JOLTC_LIB_DIR` prefix links without the
-SDK; its manifest names the SDK that built it. `wasm32-unknown-emscripten` and `wasm32-wasip1`
-have committed bindings only and are refused, also under `DOCS_RS`. The safe crate `oxijolt` builds for wasm32-unknown-unknown as
-well, single-threaded; its crate documentation lists what changes on that target.
-`bash scripts/check_wasm_raw.sh` builds a raw wasm32-unknown-unknown module in both precisions
-and runs it in Node (a world kept across export calls, no WASI imports); it needs `WASI_SDK_PATH`, Ninja and Node.
-`bash scripts/check_wasm_safe.sh` does the same for a module of the safe crate (default world,
-refused worker threads, save and restore, a panicking listener that traps).
-`bash scripts/check_wasm_determinism.sh` compares the module's results with a native run
-([determinism](determinism.md#how-it-is-checked)); it also needs Chrome. CI runs the three scripts
-on Linux with wasi-sdk 34 and Rust 1.91. CI builds and tests
-`x86_64-pc-windows-msvc`, `x86_64-unknown-linux-gnu` and `aarch64-apple-darwin`; the other
-targets have bindings that the generator produced byte-identical to their family's, but CI does
-not build or test them. Android cross
-builds go through the NDK's CMake toolchain (`ANDROID_NDK_HOME`).
+`wasm32-unknown-unknown` has [its own section](#webassembly). `wasm32-unknown-emscripten` and
+`wasm32-wasip1` have committed bindings only and are refused, also under `DOCS_RS`. CI builds and
+tests `x86_64-pc-windows-msvc`, `x86_64-unknown-linux-gnu`, `aarch64-apple-darwin` and
+`wasm32-unknown-unknown`; the other targets have bindings that the generator produced
+byte-identical to their family's, but CI does not build or test them. Android cross builds go
+through the NDK's CMake toolchain (`ANDROID_NDK_HOME`).
 
 On Windows the native libraries use the same C runtime as the Rust target: the dynamic one (`/MD`)
 by default, the static one (`/MT`) with `-C target-feature=+crt-static`.
+
+## WebAssembly
+
+Both crates build for `wasm32-unknown-unknown`, the target browsers and Node run.
+
+- **Toolchain.** Rust 1.91 or newer for this target, while the crates' `rust-version` stays 1.88
+  for the others. The build script refuses an older rustc here, because rust-lld before LLVM 21
+  mis-links wasi-sdk's objects. Add the target with `rustup target add wasm32-unknown-unknown`.
+- **Native libraries.** A [release archive](#prebuilt-native-libraries) is used when one fits,
+  as on the native targets. It bundles wasi-sdk 34.0's runtime libraries (libc++ and libc++abi of
+  the `noeh` variant, wasi-libc and clang's builtins) with their licences, so the build needs
+  neither wasi-sdk nor CMake. Otherwise the libraries are built from source, which needs
+  [wasi-sdk](https://github.com/WebAssembly/wasi-sdk) (`WASI_SDK_PATH` names its install
+  directory; 34.0 is tested) and Ninja on `PATH`. `WASI_SDK_PATH` is read by the source build
+  only. The source build copies the SDK's runtime libraries into its prefix, so a `JOLTC_LIB_DIR`
+  prefix links without the SDK; its manifest names the SDK that built it.
+- **No imports.** `oxijolt-sys` defines the WASI functions wasi-libc calls, so a module that
+  links it imports nothing and a JavaScript host instantiates it with an empty import object; the
+  crate documentation of `oxijolt-sys` lists them and the module's runtime rules.
+- **Single-threaded.** Worlds default to Jolt's single-threaded job system, and
+  `WorldSettings::worker_threads` is refused ([job systems](job-system.md)).
+- **Panics trap.** The standard library aborts on panic on this target, so a panic in a
+  listener, filter or other callback stops the module instead of being caught after the call.
+- **Same results as native.** Built with `cross-platform-deterministic`, a module steps the
+  determinism scene to the same bits as a native Linux build, in Node in both precisions and in
+  headless Chrome in single precision ([determinism](determinism.md#how-it-is-checked)).
+
+### Browser example
+
+`examples/web` is a page that steps a pile of up to 1000 balls in a module of the safe crate and
+draws it on a canvas, with plain JavaScript and no binding generator. From the repository root:
+
+```bash
+cargo build --release -p oxijolt-web-example --target wasm32-unknown-unknown
+python3 -m http.server 8000
+```
+
+Then open `http://localhost:8000/examples/web/`. The page shows the mean step time of the last
+60 steps as measured in that browser. [examples/web/README.md](../examples/web/README.md) says
+how the page talks to the module.
+
+### Checks
+
+`bash scripts/check_wasm_raw.sh` builds a raw module in both precisions and runs it in Node (a
+world kept across export calls, no WASI imports). `bash scripts/check_wasm_safe.sh` does the same
+for a module of the safe crate (default world, refused worker threads, save and restore, a
+panicking listener that traps). `bash scripts/check_wasm_determinism.sh` compares the module's
+results with a native run and also needs Chrome. The three need `WASI_SDK_PATH`, Ninja and Node;
+CI runs them on Linux with wasi-sdk 34 and Rust 1.91, and builds the browser example.
 
 ## Features
 

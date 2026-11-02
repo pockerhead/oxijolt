@@ -93,14 +93,16 @@ what is planned next.
   against a sha256 packaged in the crate and builds from source when none fits (feature
   `prebuilt`, on by default;
   [building](building.md#prebuilt-native-libraries)).
-- The raw layer, `oxijolt-sys`, builds for `wasm32-unknown-unknown` from source with wasi-sdk:
+- The raw layer, `oxijolt-sys`, builds for `wasm32-unknown-unknown` with Rust 1.91 or newer:
   its `JPH_Init` runs the module's C++ static constructors once, and the module imports no WASI
-  functions ([building](building.md#targets)). The safe API builds for it too, single-threaded:
+  functions ([building](building.md#webassembly)). The safe API builds for it too, single-threaded:
   worlds default to Jolt's single-threaded job system there, `WorldSettings::worker_threads` is
   refused, and a panic in a callback traps the module ([job systems](job-system.md)). CI checks
   that a wasm module, in Node and in headless Chrome, steps a test scene to the same bits as a
   native Linux build, both with `cross-platform-deterministic`
-  ([determinism](determinism.md#how-it-is-checked)).
+  ([determinism](determinism.md#how-it-is-checked)). A browser example, `examples/web`, steps a
+  pile of balls in such a module and draws it on a canvas with plain JavaScript
+  ([building](building.md#browser-example)).
 - One set of API rules for names, constructors, settings, errors and derives
   ([api-guidelines.md](api-guidelines.md)), and Rust 1.88 as the minimum version, checked in CI.
 
