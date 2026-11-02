@@ -427,9 +427,13 @@ impl PhysicsWorld {
     /// checking at creation is enough.
     ///
     /// Jolt still lets the two bodies collide with each other where their shapes touch. While
-    /// the constraint exists, [`remove_body`](Self::remove_body) and the motion type and shape
-    /// changes of [`BodyMut`](crate::BodyMut) refuse its bodies
-    /// ([`BodyError::UsedByConstraint`]).
+    /// the constraint exists, [`remove_body`](Self::remove_body) and the motion type changes of
+    /// [`BodyMut`](crate::BodyMut) refuse its bodies ([`BodyError::UsedByConstraint`]), and so
+    /// do shape changes of a kinematic or dynamic body. A static body may change shape: the
+    /// constraint keeps its attachment points in world space (see
+    /// [`BodyMut::set_shape`](crate::BodyMut::set_shape)). Points given in
+    /// [`ConstraintSpace::LocalToBodyCom`] are relative to each body's centre of mass at
+    /// creation.
     ///
     /// Each point where the constraint holds a dynamic body must have a lever-arm ratio of at
     /// most [`limits::MAX_LEVER_ARM_RATIO`], its distance from the body's centre of mass
@@ -443,9 +447,9 @@ impl PhysicsWorld {
     /// Frequency-mode springs ([`SpringSettings::FrequencyAndDamping`]) become a stiffness and
     /// damping that grow with the bodies' effective mass, so they are checked against an upper
     /// bound of it, taken from the dynamic bodies' mass and inertia now: `max(mass, largest
-    /// principal moment)` of each. While the constraint exists, the motion type and shape
-    /// changes of [`BodyMut`](crate::BodyMut) refuse its bodies, so the bound holds for the
-    /// constraint's life.
+    /// principal moment)` of each. While the constraint exists, the motion type changes of
+    /// [`BodyMut`](crate::BodyMut) refuse its bodies, and so do the shape changes of its
+    /// dynamic bodies, so the bound holds for the constraint's life.
     ///
     /// Fails with [`ConstraintError::InvalidValue`] when a setting or a lever-arm ratio is out of
     /// range, with [`ConstraintError::NotDynamic`] as above, with
@@ -491,6 +495,7 @@ impl PhysicsWorld {
     /// ```
     ///
     /// [`ConstraintSpace::WorldSpace`]: crate::ConstraintSpace::WorldSpace
+    /// [`ConstraintSpace::LocalToBodyCom`]: crate::ConstraintSpace::LocalToBodyCom
     /// [`limits::MAX_LEVER_ARM_RATIO`]: crate::limits::MAX_LEVER_ARM_RATIO
     pub fn create_constraint<S: ConstraintSettings>(
         &mut self,
@@ -706,6 +711,24 @@ impl PhysicsWorld {
     pub(crate) fn remove_all_constraints(&mut self) {
         while let Some((raw, entry)) = self.constraints.pop_last() {
             self.unregister_constraint(raw, entry);
+        }
+    }
+
+    /// Tells every constraint that uses `body`, in id order and disabled ones too, that the
+    /// centre of mass of its shape moved by `delta` in the body's space (new minus old; Jolt
+    /// `Constraint::NotifyShapeChanged`), so that each keeps its attachment points in world
+    /// space. Jolt does not do this itself when a shape changes.
+    pub(crate) fn notify_shape_changed(&mut self, body: BodyId, delta: Vec3) {
+        let Some(ids) = self.constraint_bodies.get(&body.to_raw()) else {
+            return;
+        };
+        let mut delta = delta.to_jph();
+        for raw in ids {
+            let constraint = self.constraints[raw].constraint.as_ptr();
+            // SAFETY: the world owns the live constraint and is borrowed mutably, and no step
+            // runs; `body` is one of the constraint's two bodies (`constraint_bodies`), and the
+            // call only rewrites that side's local frame. joltc copies `delta`, a live local.
+            unsafe { JPH_Constraint_NotifyShapeChanged(constraint, body.to_raw(), &mut delta) };
         }
     }
 

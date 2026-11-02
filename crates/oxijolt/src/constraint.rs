@@ -996,4 +996,6 @@ impl SixDofConstraintSettings {
 }
 
 #[cfg(test)]
+mod shape_change_tests;
+#[cfg(test)]
 mod tests;

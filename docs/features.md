@@ -39,6 +39,8 @@ what is planned next.
   (`BodyRef::inverse_inertia`) ([guide](bodies.md#mass-and-inertia)).
 - Centre of mass readouts: a shape's in its own space (`Shape::center_of_mass`) and a body's in
   world space (`BodyRef::center_of_mass_position`) ([guide](bodies.md#mass-and-inertia)).
+- Shape changes of static bodies that constraints use: the constraints keep their world
+  attachment points ([guide](constraints.md#bodies)).
 - Ragdolls from a skeleton, posed, motor-driven or kinematic, with settle detection, and a skeleton
   mapper to and from a detailed animation skeleton ([guide](guide.md#ragdolls)).
 - Twelve kinds of constraints with motors, springs and limits: fixed, point, distance, hinge,

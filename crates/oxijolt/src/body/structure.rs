@@ -70,6 +70,8 @@ struct ShapeChange {
     /// Whether a dynamic body holds forces or torques added since the last step.
     pending_load: bool,
     bounds: JPH_AABox,
+    /// The old shape's centre of mass in the body's space.
+    center_of_mass: Vec3,
 }
 
 /// An empty box for a getter to fill.
@@ -169,8 +171,10 @@ impl BodyMut<'_> {
     /// Gives the body a new shape (Jolt `BodyInterface::SetShape`). The body takes its own
     /// reference to `shape`, so the caller may drop it, and Jolt releases the old one.
     ///
-    /// The body origin stays where it is and the centre of mass moves with the shape. A body
-    /// that can move gets the mass properties a body created with `shape` and `mass` would have
+    /// The body origin stays where it is and the centre of mass moves with the shape. Jolt
+    /// stores the centre of mass position and derives the origin from it, so the origin read
+    /// back can move by rounding ([docs/bodies.md#shape-and-motion-type-changes]). A body that
+    /// can move gets the mass properties a body created with `shape` and `mass` would have
     /// ([`BodySettings::mass`]): `Some(m)` scales the shape's inertia to the mass `m`, `None`
     /// takes the shape's own mass and inertia. A static body that cannot move ignores `mass`,
     /// which is still checked. Velocities, forces, the motion type and the degrees of freedom
@@ -185,15 +189,25 @@ impl BodyMut<'_> {
     ///
     /// Jolt does not save shapes, so every successful call, also one with the body's current
     /// shape, makes every earlier [`WorldState`](crate::WorldState) unrestorable
-    /// ([`StateError::WorldChanged`]). A character touching the body keeps the sub-shape ids it
+    /// ([`StateError::WorldChanged`]).
+    ///
+    /// A static body may change shape while constraints use it. The constraints are told how
+    /// far the centre of mass moved (Jolt `Constraint::NotifyShapeChanged`), so their attachment
+    /// points stay where they are in world space up to rounding, also where a point no longer
+    /// lies on the new shape: removing material does not break a weld. The joints keep their
+    /// warm start, motor states and ids. Points given in [`ConstraintSpace::LocalToBodyCom`]
+    /// referred to the old centre of mass; a constraint created afterwards uses the new one.
+    ///
+    /// A character touching the body keeps the sub-shape ids it
     /// read from the old shape until its next update, so
     /// [`CharacterRef::ground_compound_child`] and [`CharacterRef::contact_compound_child`] read
     /// them against the new shape meanwhile.
     ///
     /// Fails, changing nothing, with:
-    /// - [`BodyError::OwnedByCharacter`], [`BodyError::UsedByVehicle`],
-    ///   [`BodyError::OwnedByRagdoll`] or [`BodyError::UsedByConstraint`] for a body that a
-    ///   character, vehicle, ragdoll or constraint holds;
+    /// - [`BodyError::OwnedByCharacter`], [`BodyError::UsedByVehicle`] or
+    ///   [`BodyError::OwnedByRagdoll`] for a body that a character, vehicle or ragdoll holds;
+    /// - [`BodyError::UsedByConstraint`] for a kinematic or dynamic body that a constraint
+    ///   uses, whose creation checks used the body's mass, inertia and centre of mass;
     /// - [`BodyError::NotRigidBody`] for a soft body;
     /// - [`BodyError::InvalidValue`] when the body's motion type, movement capability or sensor
     ///   flag refuses the shape or mass, as [`PhysicsWorld::create_body`] would refuse them, or
@@ -201,9 +215,11 @@ impl BodyMut<'_> {
     ///   [`reset_forces`](Self::reset_forces) first).
     ///
     /// [`BodySettings::mass`]: crate::BodySettings::mass
+    /// [docs/bodies.md#shape-and-motion-type-changes]: https://github.com/pockerhead/oxijolt/blob/main/docs/bodies.md#shape-and-motion-type-changes
     /// [`PhysicsWorld::remove_body`]: crate::PhysicsWorld::remove_body
     /// [`PhysicsWorld::create_body`]: crate::PhysicsWorld::create_body
     /// [`StateError::WorldChanged`]: crate::StateError::WorldChanged
+    /// [`ConstraintSpace::LocalToBodyCom`]: crate::ConstraintSpace::LocalToBodyCom
     /// [`CharacterRef::ground_compound_child`]: crate::CharacterRef::ground_compound_child
     /// [`CharacterRef::contact_compound_child`]: crate::CharacterRef::contact_compound_child
     pub fn set_shape(
@@ -213,7 +229,7 @@ impl BodyMut<'_> {
         activation: Activation,
     ) -> Result<(), BodyError> {
         let id = self.inner.id;
-        self.world.check_not_owned(id)?;
+        self.check_shape_owner()?;
         self.reject_soft_body()?;
         if let Some(mass) = mass {
             require(is_mass(mass), MASS_RULE)?;
@@ -248,6 +264,11 @@ impl BodyMut<'_> {
                 Activation::DontActivate.to_jph(),
             )
         };
+        // Jolt's own subtraction (`Body::UpdateCenterOfMassInternal`), lane by lane in f32.
+        let new = shape.center_of_mass();
+        let old = before.center_of_mass;
+        let delta = Vec3::new(new.x - old.x, new.y - old.y, new.z - old.z);
+        self.world.notify_shape_changed(id, delta);
         let after = with_locked_body(self.inner.body_lock_interface, id, |body| {
             let body = body.as_ptr();
             let mut bounds = NO_BOUNDS;
@@ -293,6 +314,18 @@ impl BodyMut<'_> {
         Ok(())
     }
 
+    /// Refuses a body whose shape a character, vehicle, ragdoll or constraint relies on
+    /// (`PhysicsWorld::check_not_owned`), except a static body that only constraints use: a
+    /// static body's mass never reaches them and they are told where its centre of mass moved.
+    fn check_shape_owner(&self) -> Result<(), BodyError> {
+        match self.world.check_not_owned(self.inner.id) {
+            Err(BodyError::UsedByConstraint(_)) if self.motion_type() == MotionType::Static => {
+                Ok(())
+            }
+            result => result,
+        }
+    }
+
     /// Reads what [`set_shape`](Self::set_shape) checks, under a read lock that is released
     /// before it returns.
     fn shape_change(&self) -> Result<ShapeChange, BodyError> {
@@ -300,9 +333,10 @@ impl BodyMut<'_> {
             let body = body.as_ptr();
             let mut bounds = NO_BOUNDS;
             let (mut force, mut torque) = (Vec3::ZERO.to_jph(), Vec3::ZERO.to_jph());
-            // SAFETY: `body` is locked for reading for the duration of the closure; the getters
-            // only read it and write the live locals. The accumulated force and torque are read
-            // only from a dynamic body, which has motion properties.
+            let mut center_of_mass = Vec3::ZERO.to_jph();
+            // SAFETY: `body` is locked for reading for the duration of the closure, which keeps
+            // its shape alive; the getters only read and write the live locals. The accumulated
+            // force and torque are read only from a dynamic body, which has motion properties.
             unsafe {
                 let dynamic = JPH_Body_IsDynamic(body);
                 if dynamic {
@@ -310,6 +344,7 @@ impl BodyMut<'_> {
                     JPH_Body_GetAccumulatedTorque(body, &mut torque);
                 }
                 JPH_Body_GetWorldSpaceBounds(body, &mut bounds);
+                JPH_Shape_GetCenterOfMass(JPH_Body_GetShape(body), &mut center_of_mass);
                 ShapeChange {
                     motion_type: MotionType::from_jph(JPH_Body_GetMotionType(body)),
                     can_move: JPH_Body_CanBeKinematicOrDynamic(body),
@@ -318,6 +353,7 @@ impl BodyMut<'_> {
                         && (Vec3::from_jph(force) != Vec3::ZERO
                             || Vec3::from_jph(torque) != Vec3::ZERO),
                     bounds,
+                    center_of_mass: Vec3::from_jph(center_of_mass),
                 }
             }
         })

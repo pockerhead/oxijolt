@@ -105,6 +105,7 @@ Everything planned for 1.0 is done; what works today, with links to the guides, 
 - [x] Prebuilt wasm32-unknown-unknown archives in releases, with wasi-sdk's runtime bundled
 - [x] A browser example: a wasm32 module stepped and drawn with plain JavaScript
 - [x] Centre of mass readouts for shapes and bodies
+- [x] Shape changes of static bodies that constraints use
 
 ## Status
 
