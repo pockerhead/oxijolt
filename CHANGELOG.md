@@ -24,6 +24,11 @@ All notable changes to this fork. The format follows [Keep a Changelog](https://
   aborts on panic. Native defaults are unchanged. `oxijolt-sys` now also defines the WASI
   environment, preopen and exit functions that libc++ links in for the safe layer, so its module
   imports nothing either. Not built or tested in CI. Refs #5.
+- Release archives for `wasm32-unknown-unknown` in the eight feature subsets. Each bundles
+  wasi-sdk 34.0's libc++, libc++abi, wasi-libc and `clang_rt.builtins` with their licences, so a
+  wasm build that takes it needs neither wasi-sdk nor CMake. A wasm source build now copies those
+  libraries into its prefix, and a wasm `JOLTC_LIB_DIR` prefix links without `WASI_SDK_PATH`.
+  Refs #5.
 
 ## 1.5.0 — 2026-11-01
 

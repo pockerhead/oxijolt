@@ -18,7 +18,8 @@ use anyhow::{bail, ensure, Context};
 use flate2::read::GzDecoder;
 
 use crate::prebuilt::{self, Archive, ArchiveConfig, ArchiveList, Version2};
-use crate::prebuilt_archive;
+use crate::prebuilt_archive::{self, PrefixFiles};
+use crate::wasi_sdk::WASM_TARGET;
 
 /// The manifest every native prefix carries (`MANIFEST_FILE` in build.rs).
 const MANIFEST_FILE: &str = "oxijolt-sys-manifest.txt";
@@ -30,6 +31,7 @@ const RELEASE_TARGETS: &[(&str, &str)] = &[
     ("x86_64-pc-windows-msvc", "MultiThreadedDLL"),
     ("x86_64-unknown-linux-gnu", "none"),
     ("aarch64-apple-darwin", "none"),
+    (WASM_TARGET, "none"),
 ];
 
 /// The oldest macOS Rust links `target` for; an archive must not need a newer one.
@@ -175,9 +177,15 @@ pub fn read_archive(path: &Path, commit: &str) -> anyhow::Result<Archive> {
         }
     };
 
-    let libraries = library_files(&get(&manifest, "target")?, &get(&manifest, "joltc_lib")?);
-    prebuilt_archive::check_entries(&bytes, name, [&libraries[0], &libraries[1]])
+    let files = PrefixFiles::new(&get(&manifest, "target")?, &get(&manifest, "joltc_lib")?);
+    let entries = prebuilt_archive::check_entries(&bytes, name, &files)
         .map_err(|e| anyhow::anyhow!("{file}: {e}"))?;
+    let missing: Vec<String> = prebuilt_archive::allowed_entries(name, &files)
+        .into_iter()
+        .filter(|entry| !entry.directory && !entries.contains(entry))
+        .map(|entry| entry.path)
+        .collect();
+    ensure!(missing.is_empty(), "{file}: missing {missing:?}");
 
     let source = get(&provenance, "source")?;
     ensure!(
@@ -198,6 +206,13 @@ pub fn read_archive(path: &Path, commit: &str) -> anyhow::Result<Archive> {
         let compiler = get(&provenance, "compiler")?;
         Some(msvc_toolset(&compiler).with_context(|| format!("{file}: compiler {compiler:?}"))?)
     };
+    if config.target == WASM_TARGET {
+        // The wasi-sdk whose runtime the archive bundles.
+        ensure!(
+            !get(&manifest, "wasi_sdk")?.is_empty(),
+            "{file}: `wasi_sdk` is empty"
+        );
+    }
     let glibc = if config.target.ends_with("-linux-gnu") {
         let glibc = get(&provenance, "glibc")?;
         Some(Version2::parse(&glibc).with_context(|| format!("{file}: glibc {glibc:?}"))?)
@@ -271,19 +286,6 @@ fn metadata_files(bytes: &[u8], name: &str) -> anyhow::Result<(String, String)> 
         manifest.with_context(|| format!("{manifest_path} missing"))?,
         provenance.with_context(|| format!("{provenance_path} missing"))?,
     ))
-}
-
-/// The file names of the joltc library `joltc_lib` and of Jolt for `target`, as the target's
-/// toolchain spells static libraries.
-pub fn library_files(target: &str, joltc_lib: &str) -> [String; 2] {
-    let file = |lib: &str| {
-        if target.ends_with("-msvc") {
-            format!("{lib}.lib")
-        } else {
-            format!("lib{lib}.a")
-        }
-    };
-    [file(joltc_lib), file("Jolt")]
 }
 
 /// The `key<separator>value` lines of `text`, trimmed. A repeated key is an error; lines
@@ -398,6 +400,7 @@ mod tests {
     const WINDOWS: &str = "x86_64-pc-windows-msvc";
     const LINUX: &str = "x86_64-unknown-linux-gnu";
     const MACOS: &str = "aarch64-apple-darwin";
+    const WASM: &str = "wasm32-unknown-unknown";
     const URL: &str = "http://127.0.0.1:1/";
 
     struct Fixture {
@@ -492,18 +495,18 @@ mod tests {
         fixture.add_release(LINUX, 0);
         let error = fixture.list(false).expect_err("partial").to_string();
         assert!(error.contains("--allow-partial"), "{error}");
-        for target in [WINDOWS, LINUX, MACOS] {
+        for target in [WINDOWS, LINUX, MACOS, WASM] {
             for subset in 0..8 {
-                let first = subset == 0 && target != MACOS;
+                let first = subset == 0 && (target == WINDOWS || target == LINUX);
                 if !first {
                     fixture.add_release(target, subset);
                 }
             }
         }
-        assert_eq!(fixture.list(false).expect("full").archives.len(), 24);
+        assert_eq!(fixture.list(false).expect("full").archives.len(), 32);
 
         let without_apple_default = Fixture::new();
-        for target in [WINDOWS, LINUX, MACOS] {
+        for target in [WINDOWS, LINUX, MACOS, WASM] {
             for subset in 0..8 {
                 if (target, subset) != (MACOS, 0) {
                     without_apple_default.add_release(target, subset);
@@ -535,6 +538,35 @@ mod tests {
         let gnu_compiler = provenance_for(&windows, COMMIT).replace("MSVC 19.44.35229.0", "GNU 12");
         let no_glibc = provenance_for(&linux, COMMIT).replace("glibc: 2.35\n", "");
         let twice = format!("{}target=x\n", manifest_for(&windows));
+        let wasm = config(WASM, 0);
+        let no_wasi_sdk: String = manifest_for(&wasm)
+            .lines()
+            .filter(|line| !line.starts_with("wasi_sdk="))
+            .map(|line| format!("{line}\n"))
+            .collect();
+        let without = |config: &ArchiveConfig, dropped: &str| {
+            let name = "a";
+            let bytes = release_archive(name, config, COMMIT);
+            let mut builder = tar::Builder::new(flate2::write::GzEncoder::new(
+                Vec::new(),
+                flate2::Compression::fast(),
+            ));
+            let mut archive = tar::Archive::new(GzDecoder::new(&bytes[..]));
+            for entry in archive.entries().expect("entries") {
+                let mut entry = entry.expect("entry");
+                let path = entry.path().expect("path").to_string_lossy().into_owned();
+                if path.trim_end_matches('/') == format!("{name}/{dropped}") {
+                    continue;
+                }
+                let mut header = entry.header().clone();
+                let mut data = Vec::new();
+                entry.read_to_end(&mut data).expect("read");
+                builder
+                    .append_data(&mut header, &path, &data[..])
+                    .expect("append");
+            }
+            builder.into_inner().expect("tar").finish().expect("gzip")
+        };
         let macos = config(MACOS, 0);
         let apple = |from: &str, to: &str| {
             let provenance = provenance_for(&macos, COMMIT);
@@ -627,6 +659,36 @@ mod tests {
                 ),
                 "is not a file of the archive",
             ),
+            (
+                "wasm without wasi_sdk",
+                release_archive_with("a", &no_wasi_sdk, &provenance_for(&wasm, COMMIT), &[]),
+                "`wasi_sdk` missing",
+            ),
+            (
+                "wasm without a runtime licence",
+                without(&wasm, "licenses/wasi-libc-musl-COPYRIGHT"),
+                "missing [\"a/licenses/wasi-libc-musl-COPYRIGHT\"]",
+            ),
+            (
+                "wasm without a runtime library",
+                without(&wasm, "lib/libc++abi.a"),
+                "missing [\"a/lib/libc++abi.a\"]",
+            ),
+            (
+                "native without a licence",
+                without(&windows, "licenses/JoltPhysics-LICENSE"),
+                "missing [\"a/licenses/JoltPhysics-LICENSE\"]",
+            ),
+            (
+                "a wasm library in a native archive",
+                release_archive_with(
+                    "a",
+                    &manifest_for(&linux),
+                    &provenance_for(&linux, COMMIT),
+                    &[("a/lib/libc.a", b"x")],
+                ),
+                "is not a file of the archive",
+            ),
             ("not gzip", b"plain bytes".to_vec(), "tar.gz"),
         ];
         for (case, bytes, expected) in cases {
@@ -689,14 +751,20 @@ mod tests {
 
     #[test]
     fn library_names_follow_the_target_and_precision() {
-        assert_eq!(library_files(WINDOWS, "joltc"), ["joltc.lib", "Jolt.lib"]);
+        let libraries =
+            |target: &str, joltc_lib: &str| PrefixFiles::new(target, joltc_lib).libraries;
+        assert_eq!(libraries(WINDOWS, "joltc"), ["joltc.lib", "Jolt.lib"]);
         assert_eq!(
-            library_files(LINUX, "joltc_double"),
+            libraries(LINUX, "joltc_double"),
             ["libjoltc_double.a", "libJolt.a"]
         );
-        assert_eq!(library_files(MACOS, "joltc"), ["libjoltc.a", "libJolt.a"]);
+        assert_eq!(libraries(MACOS, "joltc"), ["libjoltc.a", "libJolt.a"]);
         assert_eq!(
-            library_files(MACOS, "joltc_double"),
+            libraries(MACOS, "joltc_double"),
+            ["libjoltc_double.a", "libJolt.a"]
+        );
+        assert_eq!(
+            libraries(WASM, "joltc_double")[..2],
             ["libjoltc_double.a", "libJolt.a"]
         );
     }

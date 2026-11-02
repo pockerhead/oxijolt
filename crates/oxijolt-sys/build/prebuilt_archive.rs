@@ -16,6 +16,7 @@ use sha2::{Digest, Sha256};
 
 use crate::prebuilt::{self, hex, Archive, Unavailable, Version2, SOURCE_INPUTS};
 use crate::targets::normalize_crlf;
+use crate::wasi_sdk;
 
 /// The sha256 of `bytes`.
 pub fn sha256(bytes: &[u8]) -> [u8; 32] {
@@ -90,11 +91,46 @@ pub fn verify(bytes: &[u8], sha256_expected: &[u8; 32]) -> Result<(), Unavailabl
 pub fn verify_and_unpack(
     bytes: &[u8],
     archive: &Archive,
-    libraries: [&str; 2],
+    files: &PrefixFiles,
     out_dir: &Path,
 ) -> Result<PathBuf, Unavailable> {
     verify(bytes, &archive.sha256)?;
-    unpack(bytes, archive, libraries, out_dir)
+    unpack(bytes, archive, files, out_dir)
+}
+
+/// The files of a prefix that depend on its configuration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PrefixFiles {
+    /// The static libraries under `lib/` in the target's spelling: joltc (or joltc_double), Jolt
+    /// and, on wasm, the bundled runtime ([`wasi_sdk::RUNTIME_LIBRARIES`]).
+    pub libraries: Vec<String>,
+    /// The licences under `licenses/` besides joltc's and Jolt's: on wasm those of the bundled
+    /// runtime ([`wasi_sdk::RUNTIME_LICENSES`]), elsewhere none.
+    pub runtime_licenses: Vec<String>,
+}
+
+impl PrefixFiles {
+    /// The files of a prefix for `target` whose joltc library is `joltc_lib` (`joltc` or
+    /// `joltc_double`).
+    pub fn new(target: &str, joltc_lib: &str) -> PrefixFiles {
+        let file = |lib: &str| {
+            if target.ends_with("-msvc") {
+                format!("{lib}.lib")
+            } else {
+                format!("lib{lib}.a")
+            }
+        };
+        let mut libraries = vec![file(joltc_lib), file("Jolt")];
+        let mut runtime_licenses = Vec::new();
+        if target == wasi_sdk::WASM_TARGET {
+            libraries.extend(wasi_sdk::runtime_library_files());
+            runtime_licenses.extend(wasi_sdk::RUNTIME_LICENSES.map(str::to_owned));
+        }
+        PrefixFiles {
+            libraries,
+            runtime_licenses,
+        }
+    }
 }
 
 /// Most decoded bytes an archive may hold, counted on the entry sizes.
@@ -109,22 +145,29 @@ pub struct Entry {
 }
 
 /// The directories and files a release archive named `name` may contain: the prefix layout
-/// with the two `libraries` in the target's spelling (`joltc.lib` and `Jolt.lib`, or
-/// `libjoltc_double.a` and `libJolt.a`), the manifest, the provenance and the licences.
-pub fn allowed_entries(name: &str, libraries: [&str; 2]) -> Vec<Entry> {
+/// with the libraries of `files` (`joltc.lib` and `Jolt.lib`, or `libjoltc_double.a` and
+/// `libJolt.a`, and the bundled runtime on wasm), the manifest, the provenance and the licences.
+pub fn allowed_entries(name: &str, files: &PrefixFiles) -> Vec<Entry> {
     let directories = ["", "lib", "include", "licenses"];
-    let files = [
-        format!("lib/{}", libraries[0]),
-        format!("lib/{}", libraries[1]),
-        "include/joltc.h".to_owned(),
-        "include/joltc_ext.h".to_owned(),
-        "oxijolt-sys-manifest.txt".to_owned(),
-        "PROVENANCE.txt".to_owned(),
-        "LICENSE-MIT".to_owned(),
-        "LICENSE-APACHE".to_owned(),
-        "licenses/joltc-LICENSE".to_owned(),
-        "licenses/JoltPhysics-LICENSE".to_owned(),
+    let libraries = files.libraries.iter().map(|lib| format!("lib/{lib}"));
+    let licenses = files
+        .runtime_licenses
+        .iter()
+        .map(|license| format!("licenses/{license}"));
+    let fixed = [
+        "include/joltc.h",
+        "include/joltc_ext.h",
+        "oxijolt-sys-manifest.txt",
+        "PROVENANCE.txt",
+        "LICENSE-MIT",
+        "LICENSE-APACHE",
+        "licenses/joltc-LICENSE",
+        "licenses/JoltPhysics-LICENSE",
     ];
+    let files: Vec<String> = libraries
+        .chain(fixed.map(str::to_owned))
+        .chain(licenses)
+        .collect();
     let path = |relative: &str| {
         if relative.is_empty() {
             name.to_owned()
@@ -146,14 +189,14 @@ pub fn allowed_entries(name: &str, libraries: [&str; 2]) -> Vec<Entry> {
 /// Reads the `.tar.gz` in `bytes` without writing anything and returns its entries in order,
 /// or refuses the whole archive: a path outside [`allowed_entries`] (which also rules out `..`,
 /// absolute, drive and backslash paths), an entry type other than a regular file or a
-/// directory, a path that appears twice (so there are at most 14 entries), more than
-/// [`MAX_DECODED_BYTES`], or a damaged stream.
+/// directory, a path that appears twice (so there are at most as many entries as allowed), more
+/// than [`MAX_DECODED_BYTES`], or a damaged stream.
 pub fn check_entries(
     bytes: &[u8],
     name: &str,
-    libraries: [&str; 2],
+    files: &PrefixFiles,
 ) -> Result<Vec<Entry>, Unavailable> {
-    let allowed = allowed_entries(name, libraries);
+    let allowed = allowed_entries(name, files);
     let mut entries: Vec<Entry> = Vec::new();
     let mut decoded = 0u64;
     let mut archive = tar::Archive::new(GzDecoder::new(bytes));
@@ -224,10 +267,10 @@ fn marker_path(out_dir: &Path, name: &str) -> PathBuf {
 pub fn unpack(
     bytes: &[u8],
     archive: &Archive,
-    libraries: [&str; 2],
+    files: &PrefixFiles,
     out_dir: &Path,
 ) -> Result<PathBuf, Unavailable> {
-    let entries = check_entries(bytes, &archive.name, libraries)?;
+    let entries = check_entries(bytes, &archive.name, files)?;
     let cache = cache_dir(out_dir);
     let staging = cache.join(format!(".tmp-{}", archive.name));
     let prefix = cache.join(&archive.name);
@@ -329,13 +372,13 @@ impl io::Write for HashingWriter<'_> {
 }
 
 /// The prefix of `archive` unpacked earlier into `out_dir`, when its marker names this
-/// archive's sha256, records each file once, records the two `libraries`, the headers and the
-/// manifest, and every recorded file still has its recorded sha256. Otherwise the cached prefix
-/// and its marker are removed and the result is `None`, so a damaged or edited cache is fetched
-/// again.
-pub fn cached(out_dir: &Path, archive: &Archive, libraries: [&str; 2]) -> Option<PathBuf> {
+/// archive's sha256, records each file once, records the libraries of `files`, the headers and
+/// the manifest, and every recorded file still has its recorded sha256. Otherwise the cached
+/// prefix and its marker are removed and the result is `None`, so a damaged or edited cache is
+/// fetched again.
+pub fn cached(out_dir: &Path, archive: &Archive, files: &PrefixFiles) -> Option<PathBuf> {
     let prefix = cache_dir(out_dir).join(&archive.name);
-    if cache_is_intact(out_dir, archive, libraries, &prefix) {
+    if cache_is_intact(out_dir, archive, files, &prefix) {
         Some(prefix)
     } else {
         remove_cached(out_dir, &archive.name);
@@ -343,7 +386,7 @@ pub fn cached(out_dir: &Path, archive: &Archive, libraries: [&str; 2]) -> Option
     }
 }
 
-fn cache_is_intact(out_dir: &Path, archive: &Archive, libraries: [&str; 2], prefix: &Path) -> bool {
+fn cache_is_intact(out_dir: &Path, archive: &Archive, files: &PrefixFiles, prefix: &Path) -> bool {
     let Ok(record) = fs::read_to_string(marker_path(out_dir, &archive.name)) else {
         return false;
     };
@@ -367,20 +410,20 @@ fn cache_is_intact(out_dir: &Path, archive: &Archive, libraries: [&str; 2], pref
             _ => return false,
         }
     }
-    native_files(libraries)
+    native_files(files)
         .iter()
         .all(|file| recorded.contains(file.as_str()))
 }
 
 /// The files of a prefix the build links or reads, relative to the prefix.
-fn native_files(libraries: [&str; 2]) -> [String; 5] {
-    [
-        format!("lib/{}", libraries[0]),
-        format!("lib/{}", libraries[1]),
-        "include/joltc.h".to_owned(),
-        "include/joltc_ext.h".to_owned(),
-        "oxijolt-sys-manifest.txt".to_owned(),
-    ]
+fn native_files(files: &PrefixFiles) -> Vec<String> {
+    let libraries = files.libraries.iter().map(|lib| format!("lib/{lib}"));
+    let read = [
+        "include/joltc.h",
+        "include/joltc_ext.h",
+        "oxijolt-sys-manifest.txt",
+    ];
+    libraries.chain(read.map(str::to_owned)).collect()
 }
 
 /// Removes the unpacked prefix of the archive `name` and its marker, the marker first.

@@ -14,7 +14,10 @@ use crate::test_support::{config, release_archive, TempDir};
 
 const NAME: &str = "oxijolt-sys-1.2.0-x86_64-pc-windows-msvc-default";
 const COMMIT: &str = "1bb4c1ac08a8ace47f0e826dc14e090f0fc784c1";
-const LIBRARIES: [&str; 2] = ["joltc.lib", "Jolt.lib"];
+/// The files of the archive [`NAME`].
+fn windows_files() -> PrefixFiles {
+    PrefixFiles::new("x86_64-pc-windows-msvc", "joltc")
+}
 
 /// A good archive and its list entry.
 fn good() -> (Vec<u8>, Archive) {
@@ -67,14 +70,14 @@ fn with_extra(extra: (&[u8], EntryType, &[u8])) -> Vec<u8> {
 fn unpack_into(bytes: &[u8], out: &Path) -> Result<std::path::PathBuf, Unavailable> {
     let (_, mut archive) = good();
     archive.sha256 = sha256(bytes);
-    unpack(bytes, &archive, LIBRARIES, out)
+    unpack(bytes, &archive, &windows_files(), out)
 }
 
 #[test]
 fn a_good_archive_unpacks_with_its_marker_and_times() {
     let out = TempDir::new("unpack-good");
     let (bytes, archive) = good();
-    let prefix = verify_and_unpack(&bytes, &archive, LIBRARIES, out.path()).expect("unpack");
+    let prefix = verify_and_unpack(&bytes, &archive, &windows_files(), out.path()).expect("unpack");
     assert_eq!(prefix, out.path().join("prebuilt").join(NAME));
     let joltc = prefix.join("lib/joltc.lib");
     assert_eq!(fs::read(&joltc).expect("read"), b"joltc");
@@ -101,13 +104,13 @@ fn a_good_archive_unpacks_with_its_marker_and_times() {
     assert!(lines.any(|line| line == joltc_line), "{marker}");
     assert!(!out.path().join(format!("prebuilt/.tmp-{NAME}")).exists());
 
-    assert_eq!(cached(out.path(), &archive, LIBRARIES), Some(prefix));
+    assert_eq!(cached(out.path(), &archive, &windows_files()), Some(prefix));
 }
 
 #[test]
 fn an_apple_archive_unpacks_with_unix_library_names() {
     let name = "oxijolt-sys-1.2.0-aarch64-apple-darwin-default";
-    let libraries = ["libjoltc.a", "libJolt.a"];
+    let libraries = PrefixFiles::new("aarch64-apple-darwin", "joltc");
     let out = TempDir::new("unpack-apple");
     let config = config("aarch64-apple-darwin", 0);
     let bytes = release_archive(name, &config, COMMIT);
@@ -119,7 +122,7 @@ fn an_apple_archive_unpacks_with_unix_library_names() {
         glibc: None,
         macos: crate::prebuilt::Version2::parse("11.0"),
     };
-    match verify_and_unpack(&bytes, &archive, ["joltc.lib", "Jolt.lib"], out.path()) {
+    match verify_and_unpack(&bytes, &archive, &windows_files(), out.path()) {
         Err(Unavailable::Unpack(reason)) => {
             assert!(reason.contains("not a file of the archive"), "{reason}")
         }
@@ -127,7 +130,7 @@ fn an_apple_archive_unpacks_with_unix_library_names() {
     }
     assert!(!out.path().join("prebuilt").exists());
 
-    let prefix = verify_and_unpack(&bytes, &archive, libraries, out.path()).expect("unpack");
+    let prefix = verify_and_unpack(&bytes, &archive, &libraries, out.path()).expect("unpack");
     assert_eq!(prefix, out.path().join("prebuilt").join(name));
     assert_eq!(
         fs::read(prefix.join("lib/libjoltc.a")).expect("read"),
@@ -137,7 +140,7 @@ fn an_apple_archive_unpacks_with_unix_library_names() {
         fs::read(prefix.join("lib/libJolt.a")).expect("read"),
         b"Jolt"
     );
-    assert_eq!(cached(out.path(), &archive, libraries), Some(prefix));
+    assert_eq!(cached(out.path(), &archive, &libraries), Some(prefix));
 }
 
 #[test]
@@ -151,7 +154,7 @@ fn an_unpack_replaces_a_stale_prefix_and_staging_directory() {
         &format!(".tmp-{NAME}/{NAME}/lib/joltc.lib"),
         b"half",
     );
-    let prefix = unpack(&bytes, &archive, LIBRARIES, out.path()).expect("unpack");
+    let prefix = unpack(&bytes, &archive, &windows_files(), out.path()).expect("unpack");
     assert!(!prefix.join("lib/old.lib").exists());
     assert_eq!(
         fs::read(prefix.join("lib/joltc.lib")).expect("read"),
@@ -163,9 +166,9 @@ fn an_unpack_replaces_a_stale_prefix_and_staging_directory() {
 fn a_changed_cached_file_is_found_and_the_cache_removed() {
     let out = TempDir::new("cache-flip");
     let (bytes, archive) = good();
-    let prefix = unpack(&bytes, &archive, LIBRARIES, out.path()).expect("unpack");
+    let prefix = unpack(&bytes, &archive, &windows_files(), out.path()).expect("unpack");
     fs::write(prefix.join("lib/Jolt.lib"), b"Jolu").expect("flip");
-    assert_eq!(cached(out.path(), &archive, LIBRARIES), None);
+    assert_eq!(cached(out.path(), &archive, &windows_files()), None);
     assert!(!prefix.exists());
     assert!(!out.path().join(format!("prebuilt/{NAME}.files")).exists());
 }
@@ -174,9 +177,9 @@ fn a_changed_cached_file_is_found_and_the_cache_removed() {
 fn a_cache_of_another_archive_hash_is_not_used() {
     let out = TempDir::new("cache-other");
     let (bytes, mut archive) = good();
-    let prefix = unpack(&bytes, &archive, LIBRARIES, out.path()).expect("unpack");
+    let prefix = unpack(&bytes, &archive, &windows_files(), out.path()).expect("unpack");
     archive.sha256[0] ^= 1;
-    assert_eq!(cached(out.path(), &archive, LIBRARIES), None);
+    assert_eq!(cached(out.path(), &archive, &windows_files()), None);
     assert!(!prefix.exists());
 }
 
@@ -184,9 +187,9 @@ fn a_cache_of_another_archive_hash_is_not_used() {
 fn a_cache_without_its_marker_is_not_used() {
     let out = TempDir::new("cache-marker");
     let (bytes, archive) = good();
-    let prefix = unpack(&bytes, &archive, LIBRARIES, out.path()).expect("unpack");
+    let prefix = unpack(&bytes, &archive, &windows_files(), out.path()).expect("unpack");
     fs::remove_file(out.path().join(format!("prebuilt/{NAME}.files"))).expect("remove");
-    assert_eq!(cached(out.path(), &archive, LIBRARIES), None);
+    assert_eq!(cached(out.path(), &archive, &windows_files()), None);
     assert!(!prefix.exists());
 }
 
@@ -195,12 +198,16 @@ fn a_cache_without_its_marker_is_not_used() {
 fn assert_marker_edit_is_refused(label: &str, edit: impl Fn(&str) -> String) {
     let out = TempDir::new(label);
     let (bytes, archive) = good();
-    let prefix = unpack(&bytes, &archive, LIBRARIES, out.path()).expect("unpack");
+    let prefix = unpack(&bytes, &archive, &windows_files(), out.path()).expect("unpack");
     let marker = out.path().join(format!("prebuilt/{NAME}.files"));
     let record = fs::read_to_string(&marker).expect("marker");
     fs::write(&marker, edit(&record)).expect("edit marker");
     fs::write(prefix.join("lib/Jolt.lib"), b"Jolu").expect("flip");
-    assert_eq!(cached(out.path(), &archive, LIBRARIES), None, "{label}");
+    assert_eq!(
+        cached(out.path(), &archive, &windows_files()),
+        None,
+        "{label}"
+    );
     assert!(!prefix.exists(), "{label}");
 }
 
@@ -241,11 +248,15 @@ fn a_marker_that_misses_a_native_file_is_not_used() {
     ] {
         let out = TempDir::new("cache-missing-record");
         let (bytes, archive) = good();
-        let prefix = unpack(&bytes, &archive, LIBRARIES, out.path()).expect("unpack");
+        let prefix = unpack(&bytes, &archive, &windows_files(), out.path()).expect("unpack");
         let marker = out.path().join(format!("prebuilt/{NAME}.files"));
         let record = fs::read_to_string(&marker).expect("marker");
         fs::write(&marker, without(&record, relative)).expect("edit marker");
-        assert_eq!(cached(out.path(), &archive, LIBRARIES), None, "{relative}");
+        assert_eq!(
+            cached(out.path(), &archive, &windows_files()),
+            None,
+            "{relative}"
+        );
         assert!(!prefix.exists(), "{relative}");
     }
 }
@@ -254,7 +265,7 @@ fn a_marker_that_misses_a_native_file_is_not_used() {
 fn a_marker_that_records_a_file_twice_is_not_used() {
     let out = TempDir::new("cache-duplicate-intact");
     let (bytes, archive) = good();
-    let prefix = unpack(&bytes, &archive, LIBRARIES, out.path()).expect("unpack");
+    let prefix = unpack(&bytes, &archive, &windows_files(), out.path()).expect("unpack");
     let marker = out.path().join(format!("prebuilt/{NAME}.files"));
     let record = fs::read_to_string(&marker).expect("marker");
     let first_file = record.lines().nth(1).expect("a file record");
@@ -266,7 +277,7 @@ fn a_marker_that_records_a_file_twice_is_not_used() {
         ),
     )
     .expect("edit marker");
-    assert_eq!(cached(out.path(), &archive, LIBRARIES), None);
+    assert_eq!(cached(out.path(), &archive, &windows_files()), None);
     assert!(!prefix.exists());
 }
 
@@ -274,7 +285,7 @@ fn a_marker_that_records_a_file_twice_is_not_used() {
 fn the_marker_is_written_whole() {
     let out = TempDir::new("cache-atomic");
     let (bytes, archive) = good();
-    unpack(&bytes, &archive, LIBRARIES, out.path()).expect("unpack");
+    unpack(&bytes, &archive, &windows_files(), out.path()).expect("unpack");
     let cache = out.path().join("prebuilt");
     let mut names: Vec<String> = fs::read_dir(&cache)
         .expect("cache")
@@ -298,7 +309,7 @@ fn a_changed_download_is_never_decompressed() {
     bytes[last] ^= 1;
     assert_eq!(verify(&bytes, &archive.sha256), Err(Unavailable::Checksum));
     assert_eq!(
-        verify_and_unpack(&bytes, &archive, LIBRARIES, out.path()),
+        verify_and_unpack(&bytes, &archive, &windows_files(), out.path()),
         Err(Unavailable::Checksum)
     );
     assert!(!out.path().join("prebuilt").exists());
@@ -438,7 +449,10 @@ fn a_truncated_stream_is_refused() {
 
 #[test]
 fn the_whitelist_follows_the_library_names() {
-    let allowed = allowed_entries("a", ["libjoltc_double.a", "libJolt.a"]);
+    let allowed = allowed_entries(
+        "a",
+        &PrefixFiles::new("x86_64-unknown-linux-gnu", "joltc_double"),
+    );
     let files: Vec<&str> = allowed
         .iter()
         .filter(|entry| !entry.directory)
@@ -447,5 +461,59 @@ fn the_whitelist_follows_the_library_names() {
     assert!(files.contains(&"a/lib/libjoltc_double.a"));
     assert!(files.contains(&"a/lib/libJolt.a"));
     assert!(!files.iter().any(|file| file.ends_with(".lib")));
+    assert!(!files.contains(&"a/lib/libc.a"));
     assert_eq!(allowed.len(), 14);
+}
+
+#[test]
+fn a_wasm_archive_holds_its_runtime_and_licences() {
+    let name = "oxijolt-sys-1.2.0-wasm32-unknown-unknown-default";
+    let files = PrefixFiles::new("wasm32-unknown-unknown", "joltc");
+    assert_eq!(
+        files.libraries,
+        [
+            "libjoltc.a",
+            "libJolt.a",
+            "libc++.a",
+            "libc++abi.a",
+            "libc.a",
+            "libclang_rt.builtins.a"
+        ]
+    );
+    assert_eq!(files.runtime_licenses.len(), 11);
+    assert_eq!(allowed_entries(name, &files).len(), 14 + 4 + 11);
+
+    let out = TempDir::new("unpack-wasm");
+    let config = config("wasm32-unknown-unknown", 0);
+    let bytes = release_archive(name, &config, COMMIT);
+    let archive = Archive {
+        name: name.to_owned(),
+        sha256: sha256(&bytes),
+        config,
+        msvc: None,
+        glibc: None,
+        macos: None,
+    };
+    // A native layout does not allow the runtime.
+    let native = PrefixFiles::new("x86_64-unknown-linux-gnu", "joltc");
+    match verify_and_unpack(&bytes, &archive, &native, out.path()) {
+        Err(Unavailable::Unpack(reason)) => {
+            assert!(reason.contains("not a file of the archive"), "{reason}")
+        }
+        other => panic!("native layout: {other:?}"),
+    }
+
+    let prefix = verify_and_unpack(&bytes, &archive, &files, out.path()).expect("unpack");
+    for file in [
+        "lib/libc++abi.a",
+        "lib/libclang_rt.builtins.a",
+        "licenses/wasi-libc-musl-COPYRIGHT",
+    ] {
+        assert!(prefix.join(file).is_file(), "{file}");
+    }
+    assert_eq!(cached(out.path(), &archive, &files), Some(prefix.clone()));
+
+    // The runtime is linked, so a cache without it is fetched again.
+    fs::write(prefix.join("lib/libc.a"), b"changed").expect("write");
+    assert_eq!(cached(out.path(), &archive, &files), None);
 }

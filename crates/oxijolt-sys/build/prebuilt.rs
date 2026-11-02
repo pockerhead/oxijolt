@@ -596,10 +596,13 @@ pub enum Linker {
     /// An Apple target: the deployment target rustc links for
     /// ([`deployment_target_from_rustc`]).
     Apple { deployment_target: Option<Version2> },
+    /// `wasm32-unknown-unknown`: Rust's own rust-lld links the archive, whose version the build
+    /// script checks for every wasm build.
+    Wasm,
 }
 
 /// Whether `linker` can link `archive`: the toolset, glibc or macOS deployment target is at
-/// least the archive's.
+/// least the archive's. A wasm archive bundles its runtime and has no such baseline.
 pub fn check_linker(archive: &Archive, linker: &Linker) -> Result<(), Unavailable> {
     match linker {
         Linker::Msvc(found) => {
@@ -633,6 +636,7 @@ pub fn check_linker(archive: &Archive, linker: &Linker) -> Result<(), Unavailabl
                 return Err(Unavailable::MacosTooOld { have, need });
             }
         }
+        Linker::Wasm => {}
     }
     Ok(())
 }

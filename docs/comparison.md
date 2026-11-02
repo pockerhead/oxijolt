@@ -839,7 +839,8 @@ Checked on 2026-10-07 against oxijolt at this commit, rapier3d 0.36.0 (tag `v0.3
 
 ## Where oxijolt loses
 
-- **A C++ toolchain and CMake** outside x86_64 Windows and Linux and Apple silicon, and for any
+- **A C++ toolchain and CMake** outside x86_64 Windows and Linux, Apple silicon and
+  `wasm32-unknown-unknown`, and for any
   build no release archive fits: oxijolt then compiles Jolt and joltc with MSVC, GCC or Clang
   through CMake ([building](building.md)). Rapier and Avian are pure Rust.
 - **WASM is single-threaded.** `oxijolt` builds for `wasm32-unknown-unknown` without threads;

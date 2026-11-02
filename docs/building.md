@@ -1,8 +1,9 @@
 # Building
 
 `oxijolt-sys` links joltc and Jolt Physics statically. On x86_64 Windows (MSVC), x86_64 Linux
-(GNU) and macOS on Apple silicon its build script downloads them prebuilt from the GitHub release
-of the crate's version and checks them against a sha256 packaged in the crate. Everywhere else, and whenever an archive does
+(GNU), macOS on Apple silicon and `wasm32-unknown-unknown` its build script downloads them
+prebuilt from the GitHub release of the crate's version and checks them against a sha256 packaged
+in the crate. Everywhere else, and whenever an archive does
 not fit the build, it compiles them from the pinned submodules with CMake, always in Release. The
 Rust bindings are committed, so no build needs LLVM.
 
@@ -74,9 +75,10 @@ these hold:
 
 - the list is for this crate version (build metadata such as `+jolt-5.6.0` aside);
 - it has an archive for the target, the C runtime and the crate features. Releases have one for
-  `x86_64-pc-windows-msvc`, `x86_64-unknown-linux-gnu` and `aarch64-apple-darwin` with each of
-  the eight subsets of `double-precision`, `cross-platform-deterministic` and `debug-renderer`;
-  `asserts` and other targets build from source;
+  `x86_64-pc-windows-msvc`, `x86_64-unknown-linux-gnu`, `aarch64-apple-darwin` and
+  `wasm32-unknown-unknown` with each of the eight subsets of `double-precision`,
+  `cross-platform-deterministic` and `debug-renderer`; `asserts` and other targets build from
+  source;
 - the crate's native sources (`native/`, `build.rs`, `build/cmake_options.rs` and the joltc and
   Jolt sources CMake reads) give the list's fingerprint, so a build with changed native sources
   does not link an archive built from other code;
@@ -86,7 +88,9 @@ these hold:
 - on Linux: a native build (host equals target), no linker or sysroot override, and the host's
   glibc (`getconf GNU_LIBC_VERSION`) is the archive's or newer;
 - on macOS: the deployment target rustc links for (`rustc --print deployment-target`, which
-  honours `MACOSX_DEPLOYMENT_TARGET`; 11.0 by default on Apple silicon) is the archive's or newer.
+  honours `MACOSX_DEPLOYMENT_TARGET`; 11.0 by default on Apple silicon) is the archive's or newer;
+- on `wasm32-unknown-unknown` nothing more: the archive bundles wasi-sdk's runtime libraries, so
+  the build needs neither wasi-sdk nor CMake, only Rust 1.91 or newer as every wasm build does.
 
 The archive is then fetched with `curl` from `<release URL>/<name>.tar.gz`, checked against the
 list's sha256, unpacked into `OUT_DIR/prebuilt/<name>` and validated like a `JOLTC_LIB_DIR`
@@ -106,9 +110,9 @@ then falls back to the source build; it cannot make the build link other bytes. 
 built by this repository's Release workflow from the tagged commit. To compile everything
 yourself, set `JOLTC_PREBUILT=off` or turn the feature off.
 
-The archive is also checked before it is written to disk: only the 14 expected files and
-directories, no links, no paths outside its directory, at most 64 MiB downloaded and 256 MiB
-unpacked.
+The archive is also checked before it is written to disk: only the expected files and
+directories (14, or 29 with the runtime of a wasm archive), no links, no paths outside its
+directory, at most 64 MiB downloaded and 256 MiB unpacked.
 
 ### Order of precedence
 
@@ -192,12 +196,13 @@ configuration. The supported targets are those with committed bindings (`build/t
 | `wasm32` | `wasm32-unknown-unknown`, `wasm32-unknown-emscripten`, `wasm32-wasip1` |
 
 Other 32-bit targets and unregistered ones are refused when the build starts.
-`wasm32-unknown-unknown` builds from source with [wasi-sdk](https://github.com/WebAssembly/wasi-sdk):
-`WASI_SDK_PATH` names its install directory, Ninja is on `PATH` and Rust is 1.91 or newer; wasi-sdk
-34.0 is tested. A `JOLTC_LIB_DIR` prefix for it records the SDK and needs the same `WASI_SDK_PATH`
-to link. No archive is published for wasm, so the default `prebuilt` feature falls back to the
-source build. `wasm32-unknown-emscripten` and `wasm32-wasip1` have committed bindings only and are
-refused, also under `DOCS_RS`. The safe crate `oxijolt` builds for wasm32-unknown-unknown as
+`wasm32-unknown-unknown` needs Rust 1.91 or newer. It takes a release archive like the targets
+above; its source build needs [wasi-sdk](https://github.com/WebAssembly/wasi-sdk):
+`WASI_SDK_PATH` names its install directory and Ninja is on `PATH`; wasi-sdk 34.0 is tested. The
+source build copies the SDK's runtime libraries (libc++ and libc++abi of the `noeh` variant,
+wasi-libc and clang's builtins) into the prefix, so a `JOLTC_LIB_DIR` prefix links without the
+SDK; its manifest names the SDK that built it. `wasm32-unknown-emscripten` and `wasm32-wasip1`
+have committed bindings only and are refused, also under `DOCS_RS`. The safe crate `oxijolt` builds for wasm32-unknown-unknown as
 well, single-threaded; its crate documentation lists what changes on that target.
 `bash scripts/check_wasm_raw.sh` builds a raw wasm32-unknown-unknown module in both precisions
 and runs it in Node (a world kept across export calls, no WASI imports); it needs `WASI_SDK_PATH`, Ninja and Node.
@@ -265,6 +270,12 @@ features joined by `+`), with a `.sha256` file each:
   object in them has that minimum. Intel Macs build from source;
 - on x86_64 the CPU needs AVX2, BMI1, LZCNT, POPCNT and F16C; builds without
   `cross-platform-deterministic` also use FMA. Apple silicon archives use no extra CPU features;
+- `wasm32-unknown-unknown` archives are built on Linux with wasi-sdk 34.0 and bundle its libc++,
+  libc++abi (`noeh`), wasi-libc and `clang_rt.builtins` in `lib/`, with their licences in
+  `licenses/`: wasi-sdk's, LLVM's for libc++, libc++abi and compiler-rt, and wasi-libc's with
+  those of musl, cloudlibc and musl-fts. `bash scripts/build_wasm_archive.sh <features> <dist>`
+  builds, packs and smoke tests one the same way outside CI; it needs wasi-sdk 34.0, Ninja and
+  Node;
 - Jolt's assertions are off.
 
 Each archive holds `lib/`, `include/`, the manifest, `PROVENANCE.txt` (compiler, options and
@@ -276,10 +287,10 @@ to link one by hand, unpack it and point `JOLTC_LIB_DIR` at its directory.
 A maintainer bumps the version of both crates, commits, and pushes the tag `v<version>`. The
 `Release` workflow then:
 
-1. builds the 24 archives from the tagged commit, each with its smoke test;
+1. builds the 32 archives from the tagged commit, each with its smoke test;
 2. writes their list into `crates/oxijolt-sys/prebuilt.txt` as one commit on top of the tag, and
    checks on Linux and macOS that both packaged crates build from the archives (served locally)
-   without CMake;
+   without CMake, on Linux also for `wasm32-unknown-unknown` without wasi-sdk;
 3. attaches the archives to the tag's GitHub release;
 4. pushes that commit to the branch `release/v<version>`;
 5. publishes both crates to crates.io from it (`Publish to crates.io`), after checking every public

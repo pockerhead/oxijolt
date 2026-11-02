@@ -131,9 +131,9 @@
 //!   `JPH_DebugRenderer` alive.
 //!
 //! # wasm32-unknown-unknown
-//! The native build needs wasi-sdk (`WASI_SDK_PATH` set to its install; 34.0 is tested), Ninja on
-//! `PATH` and Rust 1.91 or newer. On this target the module carries its own C++ runtime, which
-//! adds these rules:
+//! The build needs Rust 1.91 or newer. A release archive bundles wasi-sdk's runtime; the source
+//! build needs wasi-sdk (`WASI_SDK_PATH` set to its install; 34.0 is tested) and Ninja on `PATH`.
+//! On this target the module carries its own C++ runtime, which adds these rules:
 //! - `JPH_Init` here is a Rust function that runs the module's C++ static constructors once and
 //!   then calls joltc's `JPH_Init`. Call it before every other joltc function except
 //!   `JPH_SetAssertFailureHandler`, `JPH_SetTraceHandler` and the `*_SetProcs` setters. Without

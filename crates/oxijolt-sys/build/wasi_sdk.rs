@@ -22,9 +22,35 @@ pub const TESTED_SDK_VERSION: &str = "34.0";
 /// links them.
 pub const MIN_RUSTC: (u32, u32) = (1, 91);
 
+/// The one wasm32 target that builds.
+pub const WASM_TARGET: &str = "wasm32-unknown-unknown";
+
 /// The SDK libraries Jolt's C++ code needs at link time, in link order: libc++ and libc++abi of
-/// the `noeh` variant (Jolt builds without exceptions), wasi-libc and clang's builtins.
+/// the `noeh` variant (Jolt builds without exceptions), wasi-libc and clang's builtins. Every
+/// wasm prefix holds them in `lib/` next to joltc and Jolt, so linking it needs no SDK.
 pub const RUNTIME_LIBRARIES: [&str; 4] = ["c++", "c++abi", "c", "clang_rt.builtins"];
+
+/// The licence texts of the bundled runtime libraries in a wasm release archive, under
+/// `licenses/`: wasi-sdk's; libc++'s, libc++abi's and compiler-rt's from the SDK's LLVM; and
+/// wasi-libc's with those of the works it includes (musl, cloudlibc, musl-fts).
+pub const RUNTIME_LICENSES: [&str; 11] = [
+    "wasi-sdk-LICENSE",
+    "libcxx-LICENSE.TXT",
+    "libcxxabi-LICENSE.TXT",
+    "compiler-rt-LICENSE.TXT",
+    "wasi-libc-LICENSE",
+    "wasi-libc-LICENSE-APACHE",
+    "wasi-libc-LICENSE-APACHE-LLVM",
+    "wasi-libc-LICENSE-MIT",
+    "wasi-libc-musl-COPYRIGHT",
+    "wasi-libc-cloudlibc-LICENSE",
+    "wasi-libc-musl-fts-COPYING",
+];
+
+/// The file names of [`RUNTIME_LIBRARIES`], in the same order.
+pub fn runtime_library_files() -> [String; 4] {
+    RUNTIME_LIBRARIES.map(|lib| format!("lib{lib}.a"))
+}
 
 /// `(major, minor)` of `rustc --version` output such as `rustc 1.91.1 (ed61e7d7e 2025-11-07)`.
 pub fn rustc_version(output: &str) -> Option<(u32, u32)> {
@@ -182,22 +208,23 @@ impl WasiSdk {
         ]
     }
 
-    /// Directories of [`RUNTIME_LIBRARIES`], the `noeh` one first.
-    pub fn link_search_dirs(&self, id: &SdkIdentity) -> [String; 3] {
+    /// The SDK files of [`RUNTIME_LIBRARIES`], in the same order: libc++ and libc++abi from the
+    /// `noeh` directory.
+    pub fn runtime_library_sources(&self, id: &SdkIdentity) -> [String; 4] {
         let lib = format!("{}/share/wasi-sysroot/lib/wasm32-wasip1", self.root);
-        [format!("{lib}/noeh"), lib, self.builtins_dir(id)]
-    }
-
-    /// Every SDK file the build reads or links, as full paths.
-    pub fn required_files(&self, id: &SdkIdentity) -> [String; 5] {
-        let [noeh, lib, builtins] = self.link_search_dirs(id);
+        let builtins = self.builtins_dir(id);
         [
-            self.toolchain_file(),
-            format!("{noeh}/libc++.a"),
-            format!("{noeh}/libc++abi.a"),
+            format!("{lib}/noeh/libc++.a"),
+            format!("{lib}/noeh/libc++abi.a"),
             format!("{lib}/libc.a"),
             format!("{builtins}/libclang_rt.builtins.a"),
         ]
+    }
+
+    /// Every SDK file the build reads or copies, as full paths.
+    pub fn required_files(&self, id: &SdkIdentity) -> [String; 5] {
+        let [cxx, cxxabi, c, builtins] = self.runtime_library_sources(id);
+        [self.toolchain_file(), cxx, cxxabi, c, builtins]
     }
 
     fn builtins_dir(&self, id: &SdkIdentity) -> String {
@@ -254,14 +281,6 @@ mod tests {
             ]
         );
         assert_eq!(
-            sdk.link_search_dirs(&id),
-            [
-                "/opt/wasi-sdk/share/wasi-sysroot/lib/wasm32-wasip1/noeh".to_owned(),
-                "/opt/wasi-sdk/share/wasi-sysroot/lib/wasm32-wasip1".to_owned(),
-                "/opt/wasi-sdk/lib/clang/23/lib/wasm32-unknown-wasip1".to_owned(),
-            ]
-        );
-        assert_eq!(
             sdk.required_files(&id),
             [
                 "/opt/wasi-sdk/share/cmake/wasi-sdk-p1.cmake".to_owned(),
@@ -276,6 +295,10 @@ mod tests {
             RUNTIME_LIBRARIES,
             ["c++", "c++abi", "c", "clang_rt.builtins"]
         );
+        let sources = sdk.runtime_library_sources(&id);
+        for (source, file) in sources.iter().zip(runtime_library_files()) {
+            assert!(source.ends_with(&format!("/{file}")), "{source} {file}");
+        }
         assert_eq!(WASI_GENERATOR, "Ninja");
     }
 
