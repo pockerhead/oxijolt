@@ -50,6 +50,16 @@ current rotation, and the rows and columns of rotation axes locked with `allowed
 so the tensor times an angular impulse is the change of angular velocity
 `add_angular_impulse` gives, up to Jolt's clamp at `limits::MAX_ANGULAR_VELOCITY`. It is `None` for static, kinematic and soft bodies.
 
+`Shape::mass_properties` reads what a body gets from a shape by default: the mass and the
+inertia tensor about the shape's centre of mass, in the shape's axes, in rows like
+`Inertia::Tensor` (Jolt `Shape::GetMassProperties`, at Jolt's density of 1000 kg/m³). A
+compound's mass is the sum of its children's; meshes, heightfields and planes give mass 0 and a
+zero tensor. `BodySettings::mass_and_inertia(p.mass, Inertia::Tensor(p.inertia))` provides what a
+body would otherwise get from the shape: for a box, a sphere and two compounds, one with a rotated
+child, the bodies read the same mass and inverse inertia bit for bit (`mass_properties.rs`). The tensor is exactly symmetric: Jolt adds
+rotated compound children in `f32`, so its own tensor can differ across the diagonal in the last
+bits, and the readout copies the entries above the diagonal, the ones Jolt's decomposition reads.
+
 `Shape::center_of_mass` is the centre of mass in the shape's own space (a compound's is its
 children's mass-weighted centre), and `BodyRef::center_of_mass_position` is the body's in world
 space: `position() + rotation() * shape.center_of_mass()`, for static and kinematic bodies too.
@@ -364,6 +374,11 @@ a changed part leaves bodies asleep floating above removed material or embedded 
 `BodyMut::set_motion_type` switches a body between static, kinematic and dynamic. A body created static changes only when created with
 `BodySettings::allow_dynamic_or_kinematic(true)`. Both refuse bodies that a character, vehicle,
 ragdoll or constraint holds, except that `set_shape` accepts a static body that constraints use.
+`BodyMut::check_shape(shape, mass)` runs the checks of `set_shape` and returns its error without
+changing, waking or invalidating anything; when it returns `Ok`, `set_shape` with the same
+arguments succeeds as long as the world does not change in between. A game that splits a child
+off a dynamic compound asks it first whether the remainder can stay the body's shape (a thin rod
+left over is refused for its inertia). The regions of `set_shape_waking_in` are not checked.
 
 The body origin stays where it is and the centre of mass moves with the shape. Jolt stores the
 centre of mass position and derives the origin from it, so the origin read back can move by

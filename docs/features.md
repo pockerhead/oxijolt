@@ -37,10 +37,14 @@ what is planned next.
   (`BodySettings::mass_and_inertia`) ([guide](bodies.md#mass-and-inertia)).
 - The world-space inverse inertia a dynamic body has, rotation and locked axes included
   (`BodyRef::inverse_inertia`) ([guide](bodies.md#mass-and-inertia)).
+- A shape's mass and inertia tensor about its centre of mass (`Shape::mass_properties`), in the
+  form `BodySettings::mass_and_inertia` takes ([guide](bodies.md#mass-and-inertia)).
 - Centre of mass readouts: a shape's in its own space (`Shape::center_of_mass`) and a body's in
   world space (`BodyRef::center_of_mass_position`) ([guide](bodies.md#mass-and-inertia)).
 - Shape changes of static bodies that constraints use: the constraints keep their world
   attachment points ([guide](constraints.md#bodies)).
+- A shape change checked without making it (`BodyMut::check_shape`), with the error
+  `set_shape` would return ([guide](bodies.md#shape-and-motion-type-changes)).
 - Shape changes that wake only the bodies near caller-given regions, for a large compound that
   changes in a small part (`BodyMut::set_shape_waking_in`)
   ([guide](bodies.md#shape-and-motion-type-changes)).
