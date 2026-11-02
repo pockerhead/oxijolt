@@ -48,17 +48,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      # The crate that links joltc, the crate built on it, and the version without build metadata.
+      # The published crate that links joltc, the published crate built on it, and the version
+      # without build metadata. `publish = false` packages (test fixtures, tools) are left out.
       - id: meta
         shell: bash
         run: |
           cargo metadata --no-deps --format-version 1 > "$RUNNER_TEMP/metadata.json"
-          sys=$(jq -r '[.packages[] | select(.links == "joltc" and any(.targets[]; .kind == ["lib"]))]
+          sys=$(jq -r '[.packages[] | select(.publish != [] and .links == "joltc" and any(.targets[]; .kind == ["lib"]))]
             | if length == 1 then .[0] | "\(.name) \(.version)" else error("expected one package linking joltc") end' "$RUNNER_TEMP/metadata.json")
           name=${sys% *}
           crate_version=${sys#* }
           version=${crate_version%%+*}
-          safe=$(jq -r --arg sys "$name" '[.packages[] | select(any(.dependencies[]; .name == $sys and .kind == null))]
+          safe=$(jq -r --arg sys "$name" '[.packages[] | select(.publish != [] and any(.dependencies[]; .name == $sys and .kind == null))]
             | if length == 1 then .[0].name else error("expected one package depending on \($sys)") end' "$RUNNER_TEMP/metadata.json")
           if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
             echo "tag $GITHUB_REF_NAME does not match the crate version $version"
