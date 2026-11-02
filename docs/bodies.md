@@ -502,9 +502,8 @@ A publication reaches a body only through `BodyMut::set_shape`, which applies ev
 change above: the body rules, fresh mass properties and the wake of the bodies near the box around
 the old and new bounds. On a large compound that box can hold many sleeping bodies;
 `BodyMut::set_shape_waking_in` installs it waking only the bodies near the children that changed,
-as above. Each `set_shape`
-changes one body; when a publication goes to several bodies and a later one refuses it, the earlier
-ones keep it. Bodies, worlds and scaled shapes that hold an earlier publication keep it unchanged.
+as above. Each `set_shape` changes one body; when a publication goes to several bodies and a later
+one refuses it, the earlier ones keep it. Bodies, worlds and scaled shapes that hold an earlier publication keep it unchanged.
 A body that a character, vehicle or ragdoll holds refuses the change, and so does a kinematic or
 dynamic body that a constraint uses: remove the constraint, install the publication and create the
 constraint again. A static body that constraints use takes the publication and its constraints

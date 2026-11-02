@@ -248,7 +248,8 @@ impl BodyMut<'_> {
     /// asleep, and an empty slice wakes no neighbours. Use it when a large static body changes in
     /// a small part, such as a compound that gains or loses a few children: `set_shape` would
     /// wake everything near the whole body. `activation` still decides whether the body itself
-    /// wakes.
+    /// wakes. As in `set_shape`, each box is rounded outward to `f32` before it is widened, so
+    /// in double precision far from the origin a region can wake slightly more than it spans.
     ///
     /// The caller is responsible for the regions: a region that misses a changed part leaves
     /// bodies asleep floating above removed material or embedded in added material. Cover the
