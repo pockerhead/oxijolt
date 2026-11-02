@@ -63,9 +63,9 @@ impl BodyRef<'_> {
 
     /// Position of the centre of mass in world space, in metres: [`position`](Self::position)
     /// plus [`rotation`](Self::rotation) times the shape's
-    /// [`Shape::center_of_mass`](crate::Shape::center_of_mass). With the rotation it is the
-    /// body's centre-of-mass frame, in which Jolt applies velocities and
-    /// [`inverse_inertia`](Self::inverse_inertia) is taken.
+    /// [`Shape::center_of_mass`](crate::Shape::center_of_mass). With the rotation it gives the
+    /// body's centre-of-mass transform. Velocities and
+    /// [`inverse_inertia`](Self::inverse_inertia) are about this point but in world axes.
     ///
     /// Static and kinematic bodies have one too, from their shape. A soft body's shape has its
     /// centre of mass at its origin, so this is the soft body's position, which each step moves
