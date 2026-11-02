@@ -109,6 +109,14 @@ fn for_skinning() {
     thread_safe::<SoftBodyBackStop>();
 }
 
+/// A query filter, body filter included, can be shared by queries on many threads.
+#[test]
+fn query_filters_are_thread_safe() {
+    copy::<QueryFilter<'static>>();
+    default::<QueryFilter<'static>>();
+    thread_safe::<QueryFilter<'static>>();
+}
+
 #[test]
 fn settings_without_required_inputs_have_defaults() {
     default::<WorldSettings>();
