@@ -4,6 +4,7 @@
 mod common;
 
 use common::controls::*;
+use common::determinism::{assert_same, child_request, digest_in_child, finish_child, Digest};
 use common::*;
 use oxijolt::*;
 
@@ -213,41 +214,129 @@ fn an_invalid_region_refuses_and_changes_nothing() {
 }
 
 #[test]
-fn region_wakes_are_the_same_with_one_and_four_workers() {
-    let run = |workers: u32| {
-        let (mut world, floor, cubes) = scene(workers);
-        let left_at = world.body(cubes[0]).unwrap().position();
+fn a_movable_body_keeps_its_own_activation_and_is_never_its_own_neighbour() {
+    let mut world = world(Vec3::ZERO, 1);
+    world.set_event_settings(EventSettings::default().body_activation(true));
+    let settings = BodySettings::new_dynamic().activation(Activation::DontActivate);
+    let small = Shape::new_box(Vec3::new(0.5, 0.5, 0.5)).unwrap();
+    let body = world.create_body(&small, &settings).unwrap();
+    let large = Shape::new_box(Vec3::new(0.6, 0.6, 0.6)).unwrap();
+    let around_itself = region_around(RVec3::ZERO);
+    let change = |world: &mut PhysicsWorld, activation, regions: &[(RVec3, RVec3)]| {
         world
-            .body_mut(floor)
+            .body_mut(body)
             .unwrap()
-            .set_shape_waking_in(
-                &row(true),
-                None,
-                Activation::DontActivate,
-                &[added_child_region(), region_around(left_at)],
-            )
+            .set_shape_waking_in(&large, None, activation, regions)
             .unwrap();
-        // Raw ids: the two runs are different worlds.
-        let mut record: Vec<String> = activations(&mut world)
-            .iter()
-            .map(|event| {
-                let activated = matches!(event, ActivationEvent::Activated(_));
-                format!("{activated} {}", event.body().to_raw())
-            })
-            .collect();
-        for _ in 0..60 {
-            step(&mut world, 1);
-            for &cube in &cubes {
-                let (p, q, v, w) = motion(&world, cube);
-                let sleeping = world.body(cube).unwrap().is_sleeping();
-                let p: [Real; 3] = p.into();
-                let bits = [q.x, q.y, q.z, q.w, v.x, v.y, v.z, w.x, w.y, w.z].map(f32::to_bits);
-                record.push(format!("{p:?} {bits:?} {sleeping}"));
-            }
-        }
-        record
+        activations(world)
     };
-    let single = run(1);
-    assert_eq!(single.len(), 2 + 60 * 3);
-    assert_eq!(single, run(4));
+    assert!(change(&mut world, Activation::DontActivate, &[]).is_empty());
+    assert!(change(&mut world, Activation::DontActivate, &[around_itself]).is_empty());
+    assert!(world.body(body).unwrap().is_sleeping());
+    assert_eq!(
+        change(&mut world, Activation::Activate, &[]),
+        [ActivationEvent::Activated(body)]
+    );
+    assert!(!world.body(body).unwrap().is_sleeping());
+}
+
+/// Whether `set_shape` (`regions == false`) or `set_shape_waking_in` with a region enclosing
+/// the old and new shape wakes a small cube asleep next to a static box that grows in y. The
+/// cube lies where widening by the speculative contact distance in `f32` and in `f64` differ.
+fn wakes_the_cube_at_the_rounding_boundary(regions: bool) -> bool {
+    let mut world = world(Vec3::ZERO, 1);
+    let old = Shape::new_box(Vec3::new(0.1, 0.5, 0.5)).unwrap();
+    let new = Shape::new_box(Vec3::new(0.1, 0.6, 0.5)).unwrap();
+    let floor = world
+        .create_body(&old, &BodySettings::new_static())
+        .unwrap();
+    let cube = Shape::new_box(Vec3::new(0.005, 0.005, 0.005)).unwrap();
+    let settings = BodySettings::new_dynamic()
+        .mass(1.0)
+        .position(RVec3::new(0.12500001, 0.0, 0.0))
+        .activation(Activation::DontActivate);
+    let cube = world.create_body(&cube, &settings).unwrap();
+    let mut floor = world.body_mut(floor).unwrap();
+    if regions {
+        let half_x = Real::from(0.1_f32);
+        let region = (
+            RVec3::new(-half_x, -0.6, -0.5),
+            RVec3::new(half_x, 0.6, 0.5),
+        );
+        floor
+            .set_shape_waking_in(&new, None, Activation::DontActivate, &[region])
+            .unwrap();
+    } else {
+        floor
+            .set_shape(&new, None, Activation::DontActivate)
+            .unwrap();
+    }
+    !world.body(cube).unwrap().is_sleeping()
+}
+
+#[test]
+fn a_region_equal_to_the_enclosing_box_wakes_what_set_shape_wakes() {
+    // Only `f64` positions put the cube between the two widenings.
+    if std::mem::size_of::<Real>() != 8 {
+        return;
+    }
+    assert!(wakes_the_cube_at_the_rounding_boundary(false));
+    assert!(wakes_the_cube_at_the_rounding_boundary(true));
+}
+
+/// Two regions on the scene of `workers` workers, then 60 ticks: the activation events (raw
+/// ids, the runs being different worlds) and every cube's pose, velocities and sleep flag.
+fn region_wakes(workers: u32) -> Digest {
+    let (mut world, floor, cubes) = scene(workers);
+    let left_at = world.body(cubes[0]).unwrap().position();
+    world
+        .body_mut(floor)
+        .unwrap()
+        .set_shape_waking_in(
+            &row(true),
+            None,
+            Activation::DontActivate,
+            &[added_child_region(), region_around(left_at)],
+        )
+        .unwrap();
+    let mut digest = Digest::new();
+    let events = &mut digest.push().state;
+    for event in activations(&mut world) {
+        events.push(u8::from(matches!(event, ActivationEvent::Activated(_))));
+        events.extend_from_slice(&event.body().to_raw().to_le_bytes());
+    }
+    for _ in 0..60 {
+        step(&mut world, 1);
+        let state = &mut digest.push().state;
+        for &cube in &cubes {
+            let (p, q, v, w) = motion(&world, cube);
+            for c in [p.x, p.y, p.z] {
+                state.extend_from_slice(&c.to_le_bytes());
+            }
+            for c in [q.x, q.y, q.z, q.w, v.x, v.y, v.z, w.x, w.y, w.z] {
+                state.extend_from_slice(&c.to_le_bytes());
+            }
+            state.push(u8::from(world.body(cube).unwrap().is_sleeping()));
+        }
+    }
+    digest
+}
+
+#[test]
+#[ignore = "child process of the region wake determinism gate"]
+fn region_wakes_child() {
+    let Some((scenario, threads, _)) = child_request() else {
+        return;
+    };
+    assert_eq!(scenario, "regions");
+    finish_child(&region_wakes(threads));
+}
+
+#[test]
+fn region_wakes_are_the_same_with_one_and_four_workers() {
+    let one = digest_in_child("region_wakes_child", "regions", 1, "");
+    let four = digest_in_child("region_wakes_child", "regions", 4, "");
+    assert_eq!(one.ticks.len(), 61);
+    assert_eq!(one.ticks[0].state.len(), 2 * 5, "two activations");
+    assert_same("1 vs 4 workers in two processes", &one, &four);
 }

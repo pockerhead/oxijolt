@@ -276,40 +276,43 @@ impl PhysicsWorld {
     /// (`QuadTree::FindCollidingPairs` widens them in `f32` the same way), so a body resting on a
     /// speculative contact need not touch the exact bounds.
     pub(crate) fn wake_bodies_near(&mut self, bounds: &JPH_AABox, except: Option<BodyId>) {
-        let margin = self.speculative_contact_distance();
-        let widen = |v: JPH_Vec3, by: f32| JPH_Vec3 {
-            x: v.x + by,
-            y: v.y + by,
-            z: v.z + by,
-        };
-        let widened = JPH_AABox {
-            min: widen(bounds.min, -margin),
-            max: widen(bounds.max, margin),
-        };
-        let (min, max) = corners(&widened);
+        let (min, max) = self.near_box(bounds);
         self.wake_bodies_overlapping(min, max, except);
     }
 
     /// Wakes every non-static body other than `except` whose world bounds come within the
     /// speculative contact distance of any of the boxes `(min, max)`, each once and in body-id
-    /// order: [`wake_bodies_near`](Self::wake_bodies_near) for boxes given in [`Real`], widened
-    /// in that precision. No boxes wake nothing.
+    /// order: [`wake_bodies_near`](Self::wake_bodies_near) for boxes given in [`Real`], each
+    /// first rounded outward to `f32`. No boxes wake nothing.
     pub(crate) fn wake_bodies_near_boxes(
         &mut self,
         boxes: &[(RVec3, RVec3)],
         except: Option<BodyId>,
     ) {
-        let margin = Real::from(self.speculative_contact_distance());
-        let widen = |v: RVec3, by: Real| RVec3::new(v.x + by, v.y + by, v.z + by);
         let mut woken = Vec::new();
         for &(min, max) in boxes {
-            let (min, max) = (widen(min, -margin), widen(max, margin));
+            let (min, max) = self.near_box(&outward_box(min, max));
             let candidates = self.broad_phase_bodies(&outward_box(min, max));
             woken.extend(self.overlapping_movable_bodies(min, max, &candidates));
         }
         woken.sort_unstable();
         woken.dedup();
         self.activate_all_except(woken, except);
+    }
+
+    /// `bounds` widened by the speculative contact distance in `f32`, as Jolt widens bounds
+    /// when it pairs bodies, with the corners in [`Real`].
+    fn near_box(&self, bounds: &JPH_AABox) -> (RVec3, RVec3) {
+        let margin = self.speculative_contact_distance();
+        let widen = |v: JPH_Vec3, by: f32| JPH_Vec3 {
+            x: v.x + by,
+            y: v.y + by,
+            z: v.z + by,
+        };
+        corners(&JPH_AABox {
+            min: widen(bounds.min, -margin),
+            max: widen(bounds.max, margin),
+        })
     }
 
     /// Wakes every non-static body other than `except` whose world bounds overlap or touch the
