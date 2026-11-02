@@ -17,13 +17,30 @@ const countInput = document.getElementById("count");
 const countValue = document.getElementById("count-value");
 
 const modulePath = new URLSearchParams(location.search).get("wasm") ?? DEFAULT_MODULE;
-const response = await fetch(modulePath);
-if (!response.ok) {
-    status.textContent = `no module at ${modulePath} (HTTP ${response.status}): build it first, see README.md`;
-    throw new Error(status.textContent);
+const physics = await loadModule(modulePath);
+
+// The module's exports, or a message in the status line and a thrown error when the module
+// cannot be fetched or is not a WebAssembly module.
+async function loadModule(path) {
+    let response;
+    try {
+        response = await fetch(path);
+    } catch (error) {
+        status.textContent = `cannot fetch ${path}: ${error.message}`;
+        throw error;
+    }
+    if (!response.ok) {
+        status.textContent = `no module at ${path} (HTTP ${response.status}): build it first, see README.md`;
+        throw new Error(status.textContent);
+    }
+    try {
+        const { instance } = await WebAssembly.instantiate(await response.arrayBuffer(), {});
+        return instance.exports;
+    } catch (error) {
+        status.textContent = `${path} is not a usable WebAssembly module: ${error.message}`;
+        throw error;
+    }
 }
-const { instance } = await WebAssembly.instantiate(await response.arrayBuffer(), {});
-const physics = instance.exports;
 
 let tick = 0;
 let stepTimes = [];
