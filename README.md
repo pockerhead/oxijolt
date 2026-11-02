@@ -109,6 +109,8 @@ Everything planned for 1.0 is done; what works today, with links to the guides, 
 - [x] Shape changes that wake only the bodies near given regions
 - [x] Shape mass and inertia readout
 - [x] Shape changes checked without making them
+- [x] Query filters that ask a closure about each body
+- [x] Every hit of a ray, sorted
 
 ## Status
 
