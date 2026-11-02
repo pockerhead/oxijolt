@@ -357,7 +357,18 @@ have; it wakes the bodies within the speculative contact distance of the box tha
 and new bounds, which includes bodies between the two shapes when they lie apart.
 `BodyMut::set_motion_type` switches a body between static, kinematic and dynamic. A body created static changes only when created with
 `BodySettings::allow_dynamic_or_kinematic(true)`. Both refuse bodies that a character, vehicle,
-ragdoll or constraint holds.
+ragdoll or constraint holds, except that `set_shape` accepts a static body that constraints use.
+
+The body origin stays where it is and the centre of mass moves with the shape. Jolt stores the
+centre of mass position and derives the origin from it, so the origin read back can move by
+rounding: a static body at about 100 m moved by 7.6e-6 m (one `f32` ulp) when its centre of mass
+moved 1 m. The constraints of a static body keep their world attachment points through its shape
+change up to the same kind of rounding: 3.8e-6 m for that change and at most 7.6e-6 m after two
+more changes that end with the first shape again, for each of the nine kinds a static body can
+join, on either side (`src/constraint/shape_change_tests.rs`, single precision). Without the
+notification the points would move with the centre of mass. A gear reads only the angles of the
+hinges it couples, so a gear over hinges on the static body keeps coupling
+(`static_shape_constraints.rs`).
 
 Jolt saves neither shapes nor motion types, so each successful change makes earlier `WorldState`s
 unrestorable ([state.md](state.md)): a rollback cannot cross it.

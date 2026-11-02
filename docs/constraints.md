@@ -93,6 +93,13 @@ frame X is the twist or hinge axis, and Y and Z are the swing axes.
   object layers that do not collide.
 - While a constraint exists, `remove_body` refuses its bodies (`BodyError::UsedByConstraint`).
   `constraints_of_body` lists the constraints that hold a body.
+- `BodyMut::set_shape` refuses a kinematic or dynamic body that a constraint uses
+  (`BodyError::UsedByConstraint`). A static body may change shape: its constraints are told how
+  far its centre of mass moved (Jolt `Constraint::NotifyShapeChanged`), so they keep their
+  attachment points in world space, also where a point no longer lies on the new shape. Points
+  given in `ConstraintSpace::LocalToBodyCom` referred to the old centre of mass; a constraint
+  created afterwards uses the new one. Measured rounding of the points is in
+  [bodies.md](bodies.md#shape-and-motion-type-changes).
 - A new constraint, every setter and `remove_constraint` wake the constraint's bodies that can move,
   so a sleeping body follows the change at the next step.
 

@@ -39,6 +39,16 @@ All notable changes to this fork. The format follows [Keep a Changelog](https://
   space. A soft body reads its body position (see the method's documentation).
   Readouts only, not part of `WorldState`. Refs #12.
 
+### Changed
+
+- `BodyMut::set_shape` accepts a static body that constraints use. Jolt moves the body's centre of
+  mass with the shape, and the constraints are told about the move (Jolt
+  `Constraint::NotifyShapeChanged`), so they keep their attachment points in world space up to
+  rounding and keep their warm start, motor states and ids. Points given in
+  `ConstraintSpace::LocalToBodyCom` referred to the old centre of mass. Kinematic and dynamic
+  bodies that constraints use are still refused (`BodyError::UsedByConstraint`), and the change
+  makes earlier `WorldState`s unrestorable as before. Refs #13.
+
 ## 1.5.0 — 2026-11-01
 
 ### Fixed
