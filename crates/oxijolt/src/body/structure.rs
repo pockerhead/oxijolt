@@ -212,7 +212,8 @@ impl BodyMut<'_> {
     /// [`CharacterRef::ground_compound_child`] and [`CharacterRef::contact_compound_child`] read
     /// them against the new shape meanwhile.
     ///
-    /// Fails, changing nothing, with:
+    /// Fails, changing nothing, with the errors of [`check_shape`](Self::check_shape), which
+    /// runs the same checks:
     /// - [`BodyError::OwnedByCharacter`], [`BodyError::UsedByVehicle`] or
     ///   [`BodyError::OwnedByRagdoll`] for a body that a character, vehicle or ragdoll holds;
     /// - [`BodyError::UsedByConstraint`] for a kinematic or dynamic body that a constraint
@@ -238,6 +239,23 @@ impl BodyMut<'_> {
         activation: Activation,
     ) -> Result<(), BodyError> {
         self.change_shape(shape, mass, activation, NeighbourWake::Enclosing)
+    }
+
+    /// Checks whether [`set_shape`](Self::set_shape) with `shape` and `mass` would succeed,
+    /// without changing anything: it returns the error `set_shape` would return, or `Ok` when
+    /// `set_shape` with the same arguments succeeds as long as the world does not change in
+    /// between. Nothing is woken and earlier [`WorldState`](crate::WorldState)s stay
+    /// restorable.
+    ///
+    /// Use it to decide before a change that cannot be undone, for example to keep the
+    /// remainder of a compound whose child splits off when that remainder could not be its new
+    /// shape. The regions of [`set_shape_waking_in`](Self::set_shape_waking_in) are not
+    /// checked here.
+    ///
+    /// It lives on `BodyMut` because some of the checks (a character, vehicle, ragdoll or
+    /// constraint holding the body) read the world beyond the body.
+    pub fn check_shape(&self, shape: &Shape, mass: Option<f32>) -> Result<(), BodyError> {
+        self.check_shape_change(shape, mass).map(|_| ())
     }
 
     /// Gives the body a new shape as [`set_shape`](Self::set_shape) does, but wakes only the
@@ -284,25 +302,7 @@ impl BodyMut<'_> {
         wake: NeighbourWake<'_>,
     ) -> Result<(), BodyError> {
         let id = self.inner.id;
-        self.check_shape_owner()?;
-        self.reject_soft_body()?;
-        if let Some(mass) = mass {
-            require(is_mass(mass), MASS_RULE)?;
-        }
-        let before = self.shape_change()?;
-        require(
-            !before.pending_load,
-            "a body with pending forces cannot change shape; reset_forces first",
-        )?;
-        let properties = check_shape_for(
-            shape,
-            ShapeUse {
-                motion_type: before.motion_type,
-                can_move: before.can_move,
-                sensor: before.sensor,
-                mass: mass.map(MassOverride::Mass),
-            },
-        )?;
+        let (before, properties) = self.check_shape_change(shape, mass)?;
 
         // Jolt does not save shapes.
         self.world.note_structure_change();
@@ -357,6 +357,35 @@ impl BodyMut<'_> {
             NeighbourWake::Regions(regions) => self.world.wake_bodies_near_boxes(regions, Some(id)),
         }
         Ok(())
+    }
+
+    /// Every check of [`set_shape`](Self::set_shape) before it changes anything; returns what it
+    /// read of the body and the mass properties to give it ([`check_shape_for`]).
+    fn check_shape_change(
+        &self,
+        shape: &Shape,
+        mass: Option<f32>,
+    ) -> Result<(ShapeChange, Option<JPH_MassProperties>), BodyError> {
+        self.check_shape_owner()?;
+        self.reject_soft_body()?;
+        if let Some(mass) = mass {
+            require(is_mass(mass), MASS_RULE)?;
+        }
+        let before = self.shape_change()?;
+        require(
+            !before.pending_load,
+            "a body with pending forces cannot change shape; reset_forces first",
+        )?;
+        let properties = check_shape_for(
+            shape,
+            ShapeUse {
+                motion_type: before.motion_type,
+                can_move: before.can_move,
+                sensor: before.sensor,
+                mass: mass.map(MassOverride::Mass),
+            },
+        )?;
+        Ok((before, properties))
     }
 
     /// Wakes the other bodies near the box enclosing the body's `old` and `new` bounds.
