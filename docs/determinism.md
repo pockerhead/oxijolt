@@ -28,7 +28,8 @@ collision step count of each call (`step_with_collision_steps(dt, 4)` is not fou
 - **Removal and waking.** `remove_body` wakes the bodies whose exact bounds come within the
   speculative contact distance of the removed one, in id order, so it adds no hidden state;
   `remove_ragdoll` does the same for each part, `BodyMut::set_shape` for the box enclosing the
-  body's old and new bounds, and `activate_bodies_in_box` for a box, without the margin.
+  body's old and new bounds, `set_shape_waking_in` for the caller's boxes, and
+  `activate_bodies_in_box` for a box, without the margin.
   The broad phase only proposes candidates; the exact bounds decide, in the caller's precision.
 - **Vehicles** run as Jolt step listeners. A fleet of 40 is spread over a different number of
   listener jobs with 1 and 4 workers.

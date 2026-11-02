@@ -244,12 +244,7 @@ impl PhysicsWorld {
     /// within [`limits::MAX_POSITION`](crate::limits::MAX_POSITION) with `min <= max` on every
     /// axis, otherwise [`BodyError::InvalidValue`] is returned and nothing wakes.
     pub fn activate_bodies_in_box(&mut self, min: RVec3, max: RVec3) -> Result<(), BodyError> {
-        let ordered = min.x <= max.x && min.y <= max.y && min.z <= max.z;
-        if !(is_in_frame(min) && is_in_frame(max) && ordered) {
-            return Err(BodyError::InvalidValue(
-                "box corners must be within limits::MAX_POSITION with min <= max",
-            ));
-        }
+        check_box(min, max)?;
         self.wake_bodies_overlapping(min, max, None);
         Ok(())
     }
@@ -295,6 +290,28 @@ impl PhysicsWorld {
         self.wake_bodies_overlapping(min, max, except);
     }
 
+    /// Wakes every non-static body other than `except` whose world bounds come within the
+    /// speculative contact distance of any of the boxes `(min, max)`, each once and in body-id
+    /// order: [`wake_bodies_near`](Self::wake_bodies_near) for boxes given in [`Real`], widened
+    /// in that precision. No boxes wake nothing.
+    pub(crate) fn wake_bodies_near_boxes(
+        &mut self,
+        boxes: &[(RVec3, RVec3)],
+        except: Option<BodyId>,
+    ) {
+        let margin = Real::from(self.speculative_contact_distance());
+        let widen = |v: RVec3, by: Real| RVec3::new(v.x + by, v.y + by, v.z + by);
+        let mut woken = Vec::new();
+        for &(min, max) in boxes {
+            let (min, max) = (widen(min, -margin), widen(max, margin));
+            let candidates = self.broad_phase_bodies(&outward_box(min, max));
+            woken.extend(self.overlapping_movable_bodies(min, max, &candidates));
+        }
+        woken.sort_unstable();
+        woken.dedup();
+        self.activate_all_except(woken, except);
+    }
+
     /// Wakes every non-static body other than `except` whose world bounds overlap or touch the
     /// box from `min` to `max`, in body-id order.
     ///
@@ -309,7 +326,12 @@ impl PhysicsWorld {
         except: Option<BodyId>,
     ) {
         let candidates = self.broad_phase_bodies(&outward_box(min, max));
-        let mut woken = self.overlapping_movable_bodies(min, max, &candidates);
+        let woken = self.overlapping_movable_bodies(min, max, &candidates);
+        self.activate_all_except(woken, except);
+    }
+
+    /// Wakes the bodies `woken`, in that order, leaving out `except`.
+    fn activate_all_except(&mut self, mut woken: Vec<JPH_BodyID>, except: Option<BodyId>) {
         if let Some(except) = except {
             woken.retain(|&raw| raw != except.raw);
         }
@@ -447,6 +469,19 @@ unsafe extern "C" fn collect_broad_phase_hit(user_data: *mut c_void, body: JPH_B
             hits.panic = Some(payload);
             STOP_COLLECTING
         }
+    }
+}
+
+/// Refuses a box whose corners lie beyond [`limits::MAX_POSITION`](crate::limits::MAX_POSITION)
+/// or are not finite, or whose `min` exceeds `max` on some axis.
+pub(crate) fn check_box(min: RVec3, max: RVec3) -> Result<(), BodyError> {
+    let ordered = min.x <= max.x && min.y <= max.y && min.z <= max.z;
+    if is_in_frame(min) && is_in_frame(max) && ordered {
+        Ok(())
+    } else {
+        Err(BodyError::InvalidValue(
+            "box corners must be within limits::MAX_POSITION with min <= max",
+        ))
     }
 }
 

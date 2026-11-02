@@ -3,6 +3,7 @@
 
 use oxijolt_sys::*;
 
+use super::access::check_box;
 use super::load::require;
 use super::{
     has_finite_inverse, mass_properties, with_locked_body, with_read_locked_body, Activation,
@@ -11,7 +12,7 @@ use super::{
 };
 use crate::limits::{is_mass, is_vertex_inverse_mass, MASS_RULE};
 use crate::shape::static_only_leaves_are_meshes_of;
-use crate::{BodyError, Shape, Vec3};
+use crate::{BodyError, RVec3, Shape, Vec3};
 
 /// How a body uses a shape: what decides which shapes and masses it may take.
 #[derive(Clone, Copy, Debug)]
@@ -72,6 +73,14 @@ struct ShapeChange {
     bounds: JPH_AABox,
     /// The old shape's centre of mass in the body's space.
     center_of_mass: Vec3,
+}
+
+/// Which other bodies a shape change wakes.
+enum NeighbourWake<'a> {
+    /// Those near the box enclosing the body's old and new bounds.
+    Enclosing,
+    /// Those near any of these boxes `(min, max)`, already checked.
+    Regions(&'a [(RVec3, RVec3)]),
 }
 
 /// An empty box for a getter to fill.
@@ -228,6 +237,51 @@ impl BodyMut<'_> {
         mass: Option<f32>,
         activation: Activation,
     ) -> Result<(), BodyError> {
+        self.change_shape(shape, mass, activation, NeighbourWake::Enclosing)
+    }
+
+    /// Gives the body a new shape as [`set_shape`](Self::set_shape) does, but wakes only the
+    /// neighbours near `regions`, boxes `(min, max)` in world space (metres).
+    ///
+    /// Every other non-static body whose current bounds come within the speculative contact
+    /// distance of any of the boxes wakes, each once, in body-id order; bodies elsewhere stay
+    /// asleep, and an empty slice wakes no neighbours. Use it when a large static body changes in
+    /// a small part, such as a compound that gains or loses a few children: `set_shape` would
+    /// wake everything near the whole body. `activation` still decides whether the body itself
+    /// wakes.
+    ///
+    /// The caller is responsible for the regions: a region that misses a changed part leaves
+    /// bodies asleep floating above removed material or embedded in added material. Cover the
+    /// old and the new bounds of every child that changed.
+    ///
+    /// Fails, changing nothing, as `set_shape` does, and with [`BodyError::InvalidValue`] when a
+    /// region's corners are not within [`limits::MAX_POSITION`] or `min` exceeds `max` on some
+    /// axis, as [`PhysicsWorld::activate_bodies_in_box`] requires.
+    ///
+    /// [`limits::MAX_POSITION`]: crate::limits::MAX_POSITION
+    /// [`PhysicsWorld::activate_bodies_in_box`]: crate::PhysicsWorld::activate_bodies_in_box
+    pub fn set_shape_waking_in(
+        &mut self,
+        shape: &Shape,
+        mass: Option<f32>,
+        activation: Activation,
+        regions: &[(RVec3, RVec3)],
+    ) -> Result<(), BodyError> {
+        for &(min, max) in regions {
+            check_box(min, max)?;
+        }
+        self.change_shape(shape, mass, activation, NeighbourWake::Regions(regions))
+    }
+
+    /// What [`set_shape`](Self::set_shape) and [`set_shape_waking_in`](Self::set_shape_waking_in)
+    /// share: everything but which neighbours wake.
+    fn change_shape(
+        &mut self,
+        shape: &Shape,
+        mass: Option<f32>,
+        activation: Activation,
+        wake: NeighbourWake<'_>,
+    ) -> Result<(), BodyError> {
         let id = self.inner.id;
         self.check_shape_owner()?;
         self.reject_soft_body()?;
@@ -297,7 +351,15 @@ impl BodyMut<'_> {
         if activation == Activation::Activate {
             self.activate();
         }
-        let (old, new) = (before.bounds, after);
+        match wake {
+            NeighbourWake::Enclosing => self.wake_around(&before.bounds, &after),
+            NeighbourWake::Regions(regions) => self.world.wake_bodies_near_boxes(regions, Some(id)),
+        }
+        Ok(())
+    }
+
+    /// Wakes the other bodies near the box enclosing the body's `old` and `new` bounds.
+    fn wake_around(&mut self, old: &JPH_AABox, new: &JPH_AABox) {
         let enclosing = JPH_AABox {
             min: JPH_Vec3 {
                 x: old.min.x.min(new.min.x),
@@ -310,8 +372,7 @@ impl BodyMut<'_> {
                 z: old.max.z.max(new.max.z),
             },
         };
-        self.world.wake_bodies_near(&enclosing, Some(id));
-        Ok(())
+        self.world.wake_bodies_near(&enclosing, Some(self.inner.id));
     }
 
     /// Refuses a body whose shape a character, vehicle, ragdoll or constraint relies on
