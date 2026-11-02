@@ -110,9 +110,10 @@ impl<'a> QueryFilter<'a> {
     /// rejected body does not hide the bodies behind it. `keep` runs on the calling thread
     /// during the query, may be called more than once for one body and in no particular order,
     /// and receives ids of the queried world. It cannot change the world, which the query
-    /// borrows, and should decide from data of its own rather than by reading the world. For
-    /// deterministic results its answer should depend only on the id. It is `Sync` so that one
-    /// filter can serve queries on many threads.
+    /// borrows, and must not run queries on it: Jolt would take the broad phase's shared lock
+    /// twice on one thread. It should decide from data of its own, and for deterministic results
+    /// its answer should depend only on the id. It is `Sync` so that one filter can serve
+    /// queries on many threads.
     ///
     /// A panic in `keep` reaches the caller of the query. While Jolt runs the query, the query
     /// rejects everything after the panic and resumes it once Jolt has returned, as for a panic
