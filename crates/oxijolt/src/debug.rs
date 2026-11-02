@@ -139,8 +139,8 @@ impl PhysicsWorld {
     /// A collider is drawn when its world bounding box lies within the radius of the center
     /// (touches the sphere): a whole body, a heightfield as a whole, and each top-level child
     /// of a compound on its own. `filter` selects bodies by object layer, skips its excluded
-    /// body, and its child groups select top-level compound children by user data; each line
-    /// carries its body and that child user data.
+    /// body and the bodies its body filter rejects, and its child groups select top-level
+    /// compound children by user data; each line carries its body and that child user data.
     ///
     /// Lines come in body-id order, then child order, then Jolt's triangle order: three lines
     /// per triangle, so edges shared by triangles repeat. Coordinates are world space, exact to

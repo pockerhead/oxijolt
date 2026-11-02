@@ -10,6 +10,7 @@
 use std::any::Any;
 use std::cell::Cell;
 use std::ffi::c_void;
+use std::fmt;
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::ptr::{null, NonNull};
 use std::sync::OnceLock;
@@ -23,14 +24,15 @@ use crate::{BodyId, ObjectLayer, PhysicsWorld, QueryError, SubShapeId};
 /// Selects the bodies and compound children a scene query considers. The default accepts
 /// everything.
 ///
-/// The three parts combine: a body or child is considered only when every part that is set
-/// accepts it.
+/// The parts combine: a body or child is considered only when every part that is set accepts
+/// it.
 ///
 /// - [`object_layers`](Self::object_layers) selects whole bodies by their
 ///   [`ObjectLayer`], compound or not.
 /// - [`child_groups`](Self::child_groups) selects children of compound bodies by the
 ///   [`CompoundChild::user_data`](crate::CompoundChild::user_data) they were created with.
 /// - [`exclude_body`](Self::exclude_body) skips one body, for example the querying actor's own.
+/// - [`body_filter`](Self::body_filter) asks a closure about each body.
 ///
 /// For collision groups that are per body, give each group its own object layer and select
 /// layers; for groups that share one body (the children of a chunk compound), store the group
@@ -38,11 +40,23 @@ use crate::{BodyId, ObjectLayer, PhysicsWorld, QueryError, SubShapeId};
 /// to groups: the caller knows which layer holds which group. These are not the bodies'
 /// [`CollisionGroup`](crate::CollisionGroup)s, which filter what the solver collides and which
 /// queries ignore.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Default)]
 pub struct QueryFilter<'a> {
     object_layers: Option<&'a [ObjectLayer]>,
     child_groups: Option<u32>,
     excluded_body: Option<BodyId>,
+    body_filter: Option<&'a (dyn Fn(BodyId) -> bool + Sync)>,
+}
+
+impl fmt::Debug for QueryFilter<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("QueryFilter")
+            .field("object_layers", &self.object_layers)
+            .field("child_groups", &self.child_groups)
+            .field("excluded_body", &self.excluded_body)
+            .field("body_filter", &self.body_filter.is_some())
+            .finish()
+    }
 }
 
 impl<'a> QueryFilter<'a> {
@@ -52,6 +66,7 @@ impl<'a> QueryFilter<'a> {
             object_layers: None,
             child_groups: None,
             excluded_body: None,
+            body_filter: None,
         }
     }
 
@@ -88,6 +103,38 @@ impl<'a> QueryFilter<'a> {
         self
     }
 
+    /// Considers only bodies for which `keep` returns `true`; it is combined with
+    /// [`exclude_body`](Self::exclude_body), which is checked first.
+    ///
+    /// The query asks `keep` about every candidate body before it tests the body's shape, so a
+    /// rejected body does not hide the bodies behind it. `keep` runs on the calling thread
+    /// during the query, may be called more than once for one body and in no particular order,
+    /// and receives ids of the queried world. It cannot change the world, which the query
+    /// borrows, and must not run queries on it: Jolt would take the broad phase's shared lock
+    /// twice on one thread. It should decide from data of its own, and for deterministic results
+    /// its answer should depend only on the id. It is `Sync` so that one filter can serve
+    /// queries on many threads.
+    ///
+    /// A panic in `keep` reaches the caller of the query. While Jolt runs the query, the query
+    /// rejects everything after the panic and resumes it once Jolt has returned, as for a panic
+    /// in any other filter callback.
+    ///
+    /// ```
+    /// # use oxijolt::{BodyId, PhysicsWorld, QueryFilter, RVec3, RayCast, Vec3, WorldSettings};
+    /// # let world = PhysicsWorld::new(WorldSettings::default()).unwrap();
+    /// let ignored: Vec<BodyId> = Vec::new();
+    /// let keep = |body: BodyId| !ignored.contains(&body);
+    /// let ray = RayCast::new(RVec3::new(0.0, 10.0, 0.0), Vec3::new(0.0, -20.0, 0.0));
+    /// let hit = world.cast_ray(&ray, &QueryFilter::new().body_filter(&keep))?;
+    /// # assert!(hit.is_none());
+    /// # Ok::<(), oxijolt::QueryError>(())
+    /// ```
+    #[must_use]
+    pub fn body_filter(mut self, keep: &'a (dyn Fn(BodyId) -> bool + Sync)) -> Self {
+        self.body_filter = Some(keep);
+        self
+    }
+
     /// Checks the parts that refer to `world`.
     pub(crate) fn validate(&self, world: &PhysicsWorld) -> Result<(), QueryError> {
         let layers = self.object_layers.unwrap_or_default();
@@ -115,10 +162,11 @@ impl<'a> QueryFilter<'a> {
             .is_none_or(|layers| layers.contains(&layer))
     }
 
-    /// Whether `body` is not the excluded body.
+    /// Whether `body` is not the excluded body and the body filter, if any, keeps it.
     pub(crate) fn keeps_body(&self, body: BodyId) -> bool {
         self.excluded_body
             .is_none_or(|excluded| excluded.to_raw() != body.to_raw())
+            && self.body_filter.is_none_or(|keep| keep(body))
     }
 }
 
@@ -340,7 +388,7 @@ pub(crate) fn with_query_filters<R>(
         // SAFETY: as above, for a body filter.
         let body = unsafe {
             create_filter(
-                filter.excluded_body.is_some(),
+                filter.excluded_body.is_some() || filter.body_filter.is_some(),
                 JPH_BodyFilter_Create,
                 user_data,
             )
@@ -400,7 +448,7 @@ unsafe extern "C" fn object_layer_should_collide(
     })
 }
 
-/// Body filter callback: skips [`QueryFilter::exclude_body`].
+/// Body filter callback: applies [`QueryFilter::exclude_body`] and [`QueryFilter::body_filter`].
 ///
 /// # Safety
 /// Called only by joltc for a filter created by [`with_query_filters`], with that query's live

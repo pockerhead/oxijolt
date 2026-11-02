@@ -9,7 +9,7 @@
 //! body that was hit) in world space: a floor below the query gives a normal pointing up, a
 //! ceiling above it a normal pointing down.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::ffi::c_void;
 use std::mem::MaybeUninit;
 use std::ptr::{null, NonNull};
@@ -69,7 +69,7 @@ impl RayCast {
     }
 }
 
-/// The closest hit of a [`PhysicsWorld::cast_ray`].
+/// A hit of a [`PhysicsWorld::cast_ray`] or [`PhysicsWorld::cast_ray_all`].
 ///
 /// Convex shapes are solid: a ray that starts inside one hits it at fraction `0.0` exactly.
 /// Triangle back faces are hit, so a heightfield is hit from below too.
@@ -128,14 +128,26 @@ impl<'s, T: Copy> ResultSlot<'s, T> {
     }
 }
 
-/// Result callback of [`PhysicsWorld::cast_ray`].
+/// Where the result callback of a ray cast collects every hit joltc reports, next to the
+/// query's filter state.
+struct RayHitsSlot<'s> {
+    state: &'s FilterState<'s>,
+    hits: RefCell<Vec<JPH_RayCastResult>>,
+}
+
+/// Result callback of [`PhysicsWorld::cast_ray`] and [`PhysicsWorld::cast_ray_all`].
 ///
 /// # Safety
-/// Called only by joltc during `cast_ray`, with that call's live
-/// `ResultSlot<JPH_RayCastResult>` as `user_data` and a live result.
-unsafe extern "C" fn store_ray_hit(user_data: *mut c_void, result: *const JPH_RayCastResult) {
-    // SAFETY: guaranteed by the caller (function contract).
-    unsafe { ResultSlot::<JPH_RayCastResult>::store(user_data, result) }
+/// Called only by joltc during a ray cast, with that call's live `RayHitsSlot` as `user_data`
+/// and a live result.
+unsafe extern "C" fn push_ray_hit(user_data: *mut c_void, result: *const JPH_RayCastResult) {
+    // SAFETY: guaranteed by the caller (function contract); only shared references to the slot
+    // exist.
+    let slot = unsafe { &*user_data.cast::<RayHitsSlot<'_>>() };
+    // SAFETY: guaranteed by the caller.
+    let result = unsafe { *result };
+    slot.state
+        .guarded((), || slot.hits.borrow_mut().push(result));
 }
 
 impl PhysicsWorld {
@@ -145,6 +157,10 @@ impl PhysicsWorld {
     /// Triangle back faces are hit, so a heightfield is hit from below. Rays see a box's sharp
     /// faces whatever its convex radius. [`RayCastHit::normal`] is the outward normal of the hit
     /// face.
+    ///
+    /// When several hits share the closest fraction, the one returned follows Jolt's traversal
+    /// and may depend on the broad phase's history; [`cast_ray_all`](Self::cast_ray_all) orders
+    /// such hits by body id and sub-shape id.
     ///
     /// The origin must be finite with every component at most [`limits::MAX_POSITION`] in
     /// absolute value and the direction finite and not zero; otherwise
@@ -156,6 +172,36 @@ impl PhysicsWorld {
         ray: &RayCast,
         filter: &QueryFilter<'_>,
     ) -> Result<Option<RayCastHit>, QueryError> {
+        let hits = self.cast_ray_with(ray, filter, JPH_CollisionCollectorType_ClosestHit)?;
+        Ok(hits.into_iter().next())
+    }
+
+    /// Every hit of `ray` on the bodies `filter` selects, sorted by fraction, then body id, then
+    /// sub-shape id, so the order does not depend on the broad phase's history.
+    ///
+    /// A body is reported once per leaf shape the ray hits: a convex shape once (where the ray
+    /// enters it, or at `0.0` when the ray starts inside it), a mesh or heightfield once per
+    /// triangle crossed. Hits follow the rules of [`cast_ray`](Self::cast_ray), and the
+    /// validation and errors are the same.
+    ///
+    /// The first hit has the fraction of `cast_ray`'s hit and is the same hit unless several
+    /// share that fraction; `cast_ray` then returns one of them.
+    pub fn cast_ray_all(
+        &self,
+        ray: &RayCast,
+        filter: &QueryFilter<'_>,
+    ) -> Result<Vec<RayCastHit>, QueryError> {
+        self.cast_ray_with(ray, filter, JPH_CollisionCollectorType_AllHit)
+    }
+
+    /// The hits of `ray` that joltc's `collector` reports, sorted as
+    /// [`cast_ray_all`](Self::cast_ray_all) promises.
+    fn cast_ray_with(
+        &self,
+        ray: &RayCast,
+        filter: &QueryFilter<'_>,
+        collector: JPH_CollisionCollectorType,
+    ) -> Result<Vec<RayCastHit>, QueryError> {
         if !limits::is_in_frame(ray.origin) {
             return Err(QueryError::InvalidValue(
                 "ray origin must be finite and within limits::MAX_POSITION",
@@ -176,33 +222,51 @@ impl PhysicsWorld {
             backFaceModeConvex: JPH_BackFaceMode_IgnoreBackFaces,
             treatConvexAsSolid: true,
         };
-        let hit = with_query_filters(self, filter, |raw, state| {
-            let slot = ResultSlot::<JPH_RayCastResult>::new(state);
+        let mut hits = with_query_filters(self, filter, |raw, state| {
+            let slot = RayHitsSlot {
+                state,
+                hits: RefCell::new(Vec::new()),
+            };
             // SAFETY: the query object lives inside this world's physics system. Jolt's locking
             // narrow-phase query takes body read locks and the broad-phase query lock, and
             // `step` needs `&mut self`, so no update runs meanwhile. `origin`, `direction`,
-            // `settings` and `slot` are live locals, `store_ray_hit` matches the slot type, and
-            // the filters are live or null (Jolt's accept-all defaults).
+            // `settings` and `slot` are live locals, `push_ray_hit` matches the slot type and
+            // copies the result, and the filters are live or null (Jolt's accept-all defaults).
             unsafe {
                 JPH_NarrowPhaseQuery_CastRay3(
                     self.narrow_phase_query.as_ptr(),
                     &origin,
                     &direction,
                     &settings,
-                    JPH_CollisionCollectorType_ClosestHit,
-                    Some(store_ray_hit),
-                    slot.as_user_data(),
+                    collector,
+                    Some(push_ray_hit),
+                    (&slot as *const RayHitsSlot<'_>).cast_mut().cast(),
                     null(),
                     raw.object_layer,
                     raw.body,
                     raw.shape,
                 )
             };
-            slot.hit.get()
+            slot.hits.into_inner()
         })?;
-        let Some(hit) = hit else {
-            return Ok(None);
-        };
+        hits.sort_unstable_by(|a, b| {
+            a.fraction
+                .total_cmp(&b.fraction)
+                .then(a.bodyID.cmp(&b.bodyID))
+                .then(a.subShapeID2.cmp(&b.subShapeID2))
+        });
+        hits.into_iter()
+            .map(|hit| self.ray_cast_hit(ray, hit))
+            .collect()
+    }
+
+    /// The [`RayCastHit`] for a hit joltc reported for `ray`, with the normal and object layer
+    /// read from the hit body.
+    fn ray_cast_hit(
+        &self,
+        ray: &RayCast,
+        hit: JPH_RayCastResult,
+    ) -> Result<RayCastHit, QueryError> {
         let body = BodyId::new(hit.bodyID, self.tag);
         let point = ray.point_at(hit.fraction).to_jph();
         let (normal, object_layer) =
@@ -224,7 +288,7 @@ impl PhysicsWorld {
             })
             .ok_or(QueryError::AllocationFailed)?;
         let sub_shape_id = SubShapeId::new(hit.subShapeID2);
-        Ok(Some(RayCastHit {
+        Ok(RayCastHit {
             body,
             fraction: hit.fraction,
             sub_shape_id,
@@ -232,7 +296,7 @@ impl PhysicsWorld {
             normal,
             object_layer,
             compound_child: self.compound_sub_shape(body, sub_shape_id).ok().flatten(),
-        }))
+        })
     }
 
     /// The compound child of `body`'s shape that `id` leads to, as

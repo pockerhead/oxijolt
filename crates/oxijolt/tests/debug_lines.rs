@@ -146,6 +146,12 @@ fn hidden_groups_vanish() {
     let lines = lines_near(&scene.world, 20.0, usize::MAX, &filter);
     assert!(lines.lines().iter().all(|line| line.body != scene.capsule));
     assert!(!lines_of(&lines, scene.terrain, None).is_empty());
+
+    let not_the_terrain = |body: BodyId| body != scene.terrain;
+    let filter = QueryFilter::new().body_filter(&not_the_terrain);
+    let lines = lines_near(&scene.world, 20.0, usize::MAX, &filter);
+    assert!(lines.lines().iter().all(|line| line.body != scene.terrain));
+    assert!(!lines_of(&lines, scene.capsule, None).is_empty());
 }
 
 #[test]

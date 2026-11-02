@@ -27,9 +27,13 @@ through. Store the group as the compound child's `user_data`. Queries read it ba
 (`compound_child`) and filter on it with `QueryFilter::child_groups`, a bit mask over the user
 data values 0 to 31.
 
-`QueryFilter` has three parts that combine: `object_layers` selects whole bodies by layer,
+`QueryFilter` has four parts that combine: `object_layers` selects whole bodies by layer,
 `child_groups` selects compound children by group, `exclude_body` skips one body (the querying
-actor's own). An unset part accepts everything.
+actor's own), and `body_filter` asks a closure about each body, for sets a layer cannot express
+(the bodies a projectile already went through). An unset part accepts everything. The closure runs
+on the querying thread for every candidate body, before its shape is tested, so a rejected body
+does not hide the ones behind it; it may be asked about a body more than once and in any order,
+so its answer should depend only on the id.
 
 Layers decide which bodies the solver collides by class. For pairs within a class, such as a
 vehicle that must not collide with its driver or a chain whose neighbouring links overlap, give the
@@ -146,6 +150,10 @@ outward surface normal of the obstacle: a floor below gives a normal pointing up
 
 - `cast_ray`: the closest hit along a ray. Convex shapes are solid (a ray that starts inside hits at
   fraction 0) and triangles are hit from both sides.
+- `cast_ray_all`: every hit along a ray under the same rules, one per convex shape and one per
+  triangle crossed, sorted by fraction, then body id, then sub-shape id. The first is `cast_ray`'s
+  hit unless several hits share the closest fraction; `cast_ray` then returns one of them, picked
+  by Jolt's traversal, which may depend on the broad phase's history.
 - `cast_shape`: the first obstacle a moving shape hits, with the distance it can move, the contact
   point and the obstacle's normal. `ShapeCast::target_distance` (spheres and capsules) stops the
   cast short of the obstacle.
