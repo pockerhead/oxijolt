@@ -74,44 +74,12 @@ oxijolt = "1"
 
 ## Roadmap
 
-Everything planned for 1.0 is done; what works today, with links to the guides, is in
-[docs/features.md](docs/features.md). Next:
+Everything planned for 1.0 is done. What works today, with links to the guides, is in
+[docs/features.md](docs/features.md); what each release added is in [CHANGELOG.md](CHANGELOG.md).
+Planned:
 
-- [x] Comparison with Rapier and Avian
-- [x] Solver step counts per world
-- [x] Contact tuning per world (penetration slop, speculative contact distance)
 - [ ] Bevy plugin, in a separate repository
-- [x] macOS (Apple silicon) in CI
-- [x] macOS (Apple silicon) in releases
 - [ ] Same results across operating systems, checked in CI
-- [x] Prebuilt native libraries downloaded by the build script
-- [x] Constraint force readout and breakable constraints
-- [x] Playground: debris that breaks again when it hits the ground
-- [x] Collision sub-steps and a single-threaded job system
-- [x] Vehicle tuning: tire impulse callback, live drivetrain, mass and inertia override
-- [x] World-space inverse inertia readout
-- [x] glam 0.33 conversions for Bevy 0.20
-- [x] Soft body skinning (cloth on an animated skeleton)
-- [x] Body properties at run time: friction, restitution, gravity factor, damping, motion quality,
-  layer, collision group, sensor
-- [x] Solver step overrides and priority per constraint
-- [x] The hinges and slider a gear or rack and pinion references, readable from its settings and
-  the created constraint
-- [x] A world's job system kind and concurrency, readable from the world and the kind from its settings
-- [x] oxijolt-sys builds for wasm32-unknown-unknown (from a release archive, or from source with wasi-sdk)
-- [x] oxijolt builds for wasm32-unknown-unknown, single-threaded
-- [x] CI checks wasm32 (Node and Chrome) against native cross-platform-deterministic results
-- [x] A world's creation limits and collision layers, readable from the world
-- [x] Prebuilt wasm32-unknown-unknown archives in releases, with wasi-sdk's runtime bundled
-- [x] A browser example: a wasm32 module stepped and drawn with plain JavaScript
-- [x] Centre of mass readouts for shapes and bodies
-- [x] Shape changes of static bodies that constraints use
-- [x] Shape changes that wake only the bodies near given regions
-- [x] Shape mass and inertia readout
-- [x] Body creation checked without making it
-- [x] Shape changes checked without making them
-- [x] Query filters that ask a closure about each body
-- [x] Every hit of a ray, sorted
 
 ## Status
 
