@@ -20,6 +20,11 @@ All notable changes to this fork. The format follows [Keep a Changelog](https://
 - `PhysicsWorld::cast_ray_all` returns every hit of a ray, with the rules, validation and errors of
   `cast_ray`, sorted by fraction, then body id, then sub-shape id. The first hit is `cast_ray`'s,
   unless several share the closest fraction: `cast_ray` then returns one of them. Refs #18.
+- `PhysicsWorld::cast_shape_all` returns every hit of a shape cast, with the rules, settings,
+  validation and errors of `cast_shape`. Hits are sorted by Jolt's closest-hit measure (the
+  fraction, and at fraction 0 the penetration depth, deepest first), then body id, then sub-shape
+  id, then the leaf of the query shape. The first hit is `cast_shape`'s unless several share that
+  measure: `cast_shape` then returns one of them. Refs #20.
 - `Shape::mass_properties` reads a shape's mass and its inertia tensor about its centre of mass
   (Jolt `Shape::GetMassProperties`, density 1000 kg/m³) as the new `MassProperties`, in rows like
   `Inertia::Tensor` and exactly symmetric, the form `BodySettings::mass_and_inertia` takes.
