@@ -243,9 +243,26 @@ impl BodyMut<'_> {
 
     /// Checks whether [`set_shape`](Self::set_shape) with `shape` and `mass` would succeed,
     /// without changing anything: it returns the error `set_shape` would return, or `Ok` when
-    /// `set_shape` with the same arguments succeeds as long as the world does not change in
-    /// between. Nothing is woken and earlier [`WorldState`](crate::WorldState)s stay
+    /// `set_shape` with the same arguments succeeds as long as nothing the verdict depends on
+    /// changes in between. Nothing is woken and earlier [`WorldState`](crate::WorldState)s stay
     /// restorable.
+    ///
+    /// The verdict depends on the arguments and on this body's:
+    /// - motion type ([`set_motion_type`](Self::set_motion_type));
+    /// - sensor flag ([`set_is_sensor`](Self::set_is_sensor));
+    /// - forces and torques added since the last step, for a dynamic body
+    ///   ([`add_force`](Self::add_force), [`add_force_at_point`](Self::add_force_at_point) and
+    ///   [`add_torque`](Self::add_torque) add them; [`reset_forces`](Self::reset_forces), a
+    ///   change to kinematic or static and a step in which the body is awake clear them;
+    ///   restoring a [`WorldState`](crate::WorldState) that holds the body brings back those of
+    ///   the saved state);
+    /// - holders: a character, vehicle, ragdoll or constraint that comes to use the body, or one
+    ///   that is removed (constraints count only for a body that is not static);
+    /// - presence in the world: once removed, the id fails with [`BodyError::NotFound`].
+    ///
+    /// Whether the body may move and whether it is a soft body are fixed at creation. Creating,
+    /// changing or removing other bodies does not change the verdict, and neither does a step,
+    /// except by clearing this body's forces.
     ///
     /// Use it to decide before a change that cannot be undone, for example to keep the
     /// remainder of a compound whose child splits off when that remainder could not be its new
