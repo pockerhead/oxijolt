@@ -9,7 +9,7 @@
 //! body that was hit) in world space: a floor below the query gives a normal pointing up, a
 //! ceiling above it a normal pointing down.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::ffi::c_void;
 use std::mem::MaybeUninit;
 use std::ptr::{null, NonNull};
@@ -97,17 +97,18 @@ pub struct RayCastHit {
     pub compound_child: Option<CompoundSubShape>,
 }
 
-/// Where a result callback stores what joltc reports, next to the query's filter state.
-pub(crate) struct ResultSlot<'s, T> {
+/// Where the result callback of a query collects every hit joltc reports, next to the query's
+/// filter state.
+pub(crate) struct HitsSlot<'s, T> {
     state: &'s FilterState<'s>,
-    pub(crate) hit: Cell<Option<T>>,
+    hits: RefCell<Vec<T>>,
 }
 
-impl<'s, T: Copy> ResultSlot<'s, T> {
+impl<'s, T: Copy> HitsSlot<'s, T> {
     pub(crate) fn new(state: &'s FilterState<'s>) -> Self {
         Self {
             state,
-            hit: Cell::new(None),
+            hits: RefCell::new(Vec::new()),
         }
     }
 
@@ -115,39 +116,32 @@ impl<'s, T: Copy> ResultSlot<'s, T> {
         (self as *const Self).cast_mut().cast()
     }
 
-    /// Stores a copy of `*result`.
+    /// Appends a copy of `*result`.
     ///
     /// # Safety
-    /// `user_data` points to a live `ResultSlot<T>` and `result` to a live `T`.
-    pub(crate) unsafe fn store(user_data: *mut c_void, result: *const T) {
+    /// `user_data` points to a live `HitsSlot<T>` and `result` to a live `T`.
+    pub(crate) unsafe fn push(user_data: *mut c_void, result: *const T) {
         // SAFETY: guaranteed by the caller; only shared references to the slot exist.
         let slot = unsafe { &*user_data.cast::<Self>() };
         // SAFETY: guaranteed by the caller.
         let result = unsafe { *result };
-        slot.state.guarded((), || slot.hit.set(Some(result)));
+        slot.state
+            .guarded((), || slot.hits.borrow_mut().push(result));
     }
-}
 
-/// Where the result callback of a ray cast collects every hit joltc reports, next to the
-/// query's filter state.
-struct RayHitsSlot<'s> {
-    state: &'s FilterState<'s>,
-    hits: RefCell<Vec<JPH_RayCastResult>>,
+    pub(crate) fn into_hits(self) -> Vec<T> {
+        self.hits.into_inner()
+    }
 }
 
 /// Result callback of [`PhysicsWorld::cast_ray`] and [`PhysicsWorld::cast_ray_all`].
 ///
 /// # Safety
-/// Called only by joltc during a ray cast, with that call's live `RayHitsSlot` as `user_data`
-/// and a live result.
+/// Called only by joltc during a ray cast, with that call's live
+/// `HitsSlot<JPH_RayCastResult>` as `user_data` and a live result.
 unsafe extern "C" fn push_ray_hit(user_data: *mut c_void, result: *const JPH_RayCastResult) {
-    // SAFETY: guaranteed by the caller (function contract); only shared references to the slot
-    // exist.
-    let slot = unsafe { &*user_data.cast::<RayHitsSlot<'_>>() };
-    // SAFETY: guaranteed by the caller.
-    let result = unsafe { *result };
-    slot.state
-        .guarded((), || slot.hits.borrow_mut().push(result));
+    // SAFETY: guaranteed by the caller (function contract).
+    unsafe { HitsSlot::<JPH_RayCastResult>::push(user_data, result) }
 }
 
 impl PhysicsWorld {
@@ -223,10 +217,7 @@ impl PhysicsWorld {
             treatConvexAsSolid: true,
         };
         let mut hits = with_query_filters(self, filter, |raw, state| {
-            let slot = RayHitsSlot {
-                state,
-                hits: RefCell::new(Vec::new()),
-            };
+            let slot = HitsSlot::<JPH_RayCastResult>::new(state);
             // SAFETY: the query object lives inside this world's physics system. Jolt's locking
             // narrow-phase query takes body read locks and the broad-phase query lock, and
             // `step` needs `&mut self`, so no update runs meanwhile. `origin`, `direction`,
@@ -240,14 +231,14 @@ impl PhysicsWorld {
                     &settings,
                     collector,
                     Some(push_ray_hit),
-                    (&slot as *const RayHitsSlot<'_>).cast_mut().cast(),
+                    slot.as_user_data(),
                     null(),
                     raw.object_layer,
                     raw.body,
                     raw.shape,
                 )
             };
-            slot.hits.into_inner()
+            slot.into_hits()
         })?;
         hits.sort_unstable_by(|a, b| {
             a.fraction

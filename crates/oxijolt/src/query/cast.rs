@@ -7,7 +7,7 @@ use std::ptr::null;
 
 use oxijolt_sys::*;
 
-use super::{offset_from, rotation_translation, validate_pose, ResultSlot};
+use super::{offset_from, rotation_translation, validate_pose, HitsSlot};
 use crate::filter::with_query_filters;
 use crate::limits;
 use crate::math::is_finite_non_negative;
@@ -16,7 +16,8 @@ use crate::{
     Shape, SubShapeId, Vec3,
 };
 
-/// A shape moved from `position` along `direction`, for [`PhysicsWorld::cast_shape`].
+/// A shape moved from `position` along `direction`, for [`PhysicsWorld::cast_shape`] and
+/// [`PhysicsWorld::cast_shape_all`].
 ///
 /// The shape's origin starts at `position` with `rotation` and moves by `direction`, whose
 /// length is the cast's length in metres. Hits report the fraction of `direction` covered.
@@ -95,7 +96,7 @@ impl<'a> ShapeCast<'a> {
     }
 }
 
-/// The closest hit of a [`PhysicsWorld::cast_shape`].
+/// A hit of a [`PhysicsWorld::cast_shape`] or [`PhysicsWorld::cast_shape_all`].
 ///
 /// `normal` is the outward surface normal of the obstacle in world space: a floor below the
 /// cast gives `normal . up > 0`, a ceiling above it `normal . up < 0`.
@@ -132,17 +133,28 @@ pub struct ShapeCastHit {
     pub penetration_depth: f32,
 }
 
-/// Result callback of [`PhysicsWorld::cast_shape`].
+/// Result callback of [`PhysicsWorld::cast_shape`] and [`PhysicsWorld::cast_shape_all`].
 ///
 /// # Safety
-/// Called only by joltc during `cast_shape`, with that call's live
-/// `ResultSlot<JPH_ShapeCastResult>` as `user_data` and a live result.
-unsafe extern "C" fn store_shape_cast_hit(
+/// Called only by joltc during a shape cast, with that call's live
+/// `HitsSlot<JPH_ShapeCastResult>` as `user_data` and a live result.
+unsafe extern "C" fn push_shape_cast_hit(
     user_data: *mut c_void,
     result: *const JPH_ShapeCastResult,
 ) {
     // SAFETY: guaranteed by the caller (function contract).
-    unsafe { ResultSlot::<JPH_ShapeCastResult>::store(user_data, result) }
+    unsafe { HitsSlot::<JPH_ShapeCastResult>::push(user_data, result) }
+}
+
+/// Jolt's measure of how close a shape cast hit is (`ShapeCastResult::GetEarlyOutFraction`):
+/// the fraction, or at fraction 0 minus the penetration depth, so deeper start overlaps come
+/// first.
+fn early_out_fraction(hit: &JPH_ShapeCastResult) -> f32 {
+    if hit.fraction > 0.0 {
+        hit.fraction
+    } else {
+        -hit.penetrationDepth
+    }
 }
 
 /// joltc's shape cast settings with Jolt's defaults.
@@ -165,6 +177,10 @@ impl PhysicsWorld {
     /// obstacle and moves out of it does not hit it; see [`ShapeCast::collide_with_back_faces`].
     /// See [`ShapeCastHit`] for the normal and depth conventions.
     ///
+    /// When several hits share the closest fraction (and at fraction 0 the depth), the one
+    /// returned follows Jolt's traversal and may depend on the broad phase's history;
+    /// [`cast_shape_all`](Self::cast_shape_all) orders such hits by body id and sub-shape id.
+    ///
     /// The position must be finite and within [`limits::MAX_POSITION`], the rotation a finite unit
     /// quaternion, the direction finite, not zero and at most `2 *` [`limits::MAX_POSITION`] per
     /// component, the target distance finite, not negative and at most
@@ -178,6 +194,42 @@ impl PhysicsWorld {
         cast: &ShapeCast<'_>,
         filter: &QueryFilter<'_>,
     ) -> Result<Option<ShapeCastHit>, QueryError> {
+        let hits = self.cast_shape_with(cast, filter, JPH_CollisionCollectorType_ClosestHit)?;
+        Ok(hits.into_iter().next())
+    }
+
+    /// Every hit of `cast`'s shape on the bodies `filter` selects, in a fixed order that does not
+    /// depend on the broad phase's history.
+    ///
+    /// Hits are sorted by fraction, then body id, then sub-shape id on the body, then the
+    /// sub-shape id of the query shape's leaf (two leaves of a compound query shape can hit the
+    /// same obstacle at the same fraction). Hits at fraction 0 (start overlaps) are ordered among
+    /// themselves by penetration depth, deepest first, as Jolt's closest-hit collector ranks them
+    /// (`ShapeCastResult::GetEarlyOutFraction`).
+    ///
+    /// A body is reported once per query-shape leaf and obstacle leaf that touch: a convex
+    /// obstacle once per leaf of the query shape that hits it, a mesh or heightfield once per
+    /// triangle the shape sweeps into. Hits follow the rules of [`cast_shape`](Self::cast_shape), and the
+    /// validation and errors are the same.
+    ///
+    /// The first hit is `cast_shape`'s hit unless several share its fraction (and at fraction 0
+    /// its depth); `cast_shape` then returns one of them.
+    pub fn cast_shape_all(
+        &self,
+        cast: &ShapeCast<'_>,
+        filter: &QueryFilter<'_>,
+    ) -> Result<Vec<ShapeCastHit>, QueryError> {
+        self.cast_shape_with(cast, filter, JPH_CollisionCollectorType_AllHit)
+    }
+
+    /// The hits of `cast` that joltc's `collector` reports, sorted as
+    /// [`cast_shape_all`](Self::cast_shape_all) promises.
+    fn cast_shape_with(
+        &self,
+        cast: &ShapeCast<'_>,
+        filter: &QueryFilter<'_>,
+        collector: JPH_CollisionCollectorType,
+    ) -> Result<Vec<ShapeCastHit>, QueryError> {
         validate_pose(cast.shape, cast.position, cast.rotation)?;
         if !(limits::is_frame_span(cast.direction) && cast.direction != Vec3::ZERO) {
             return Err(QueryError::InvalidValue(
@@ -225,12 +277,12 @@ impl PhysicsWorld {
         let direction = cast.direction.to_jph();
         let mut base_offset = cast.position.to_jph();
 
-        let hit = with_query_filters(self, filter, |raw, state| {
-            let slot = ResultSlot::<JPH_ShapeCastResult>::new(state);
+        let mut hits = with_query_filters(self, filter, |raw, state| {
+            let slot = HitsSlot::<JPH_ShapeCastResult>::new(state);
             // SAFETY: as in `cast_ray` for the query object and filters. `query_shape` is a live
             // shape kept alive by `cast` or `inflated` until after the call; `transform`,
             // `direction`, `settings`, `base_offset` and `slot` are live locals, and
-            // `store_shape_cast_hit` matches the slot type.
+            // `push_shape_cast_hit` matches the slot type and copies the result.
             unsafe {
                 JPH_NarrowPhaseQuery_CastShape2(
                     self.narrow_phase_query.as_ptr(),
@@ -239,8 +291,8 @@ impl PhysicsWorld {
                     &direction,
                     &settings,
                     &mut base_offset,
-                    JPH_CollisionCollectorType_ClosestHit,
-                    Some(store_shape_cast_hit),
+                    collector,
+                    Some(push_shape_cast_hit),
                     slot.as_user_data(),
                     null(),
                     raw.object_layer,
@@ -248,14 +300,26 @@ impl PhysicsWorld {
                     raw.shape,
                 )
             };
-            slot.hit.get()
+            slot.into_hits()
         })?;
-        let Some(hit) = hit else {
-            return Ok(None);
-        };
+        hits.sort_unstable_by(|a, b| {
+            early_out_fraction(a)
+                .total_cmp(&early_out_fraction(b))
+                .then(a.bodyID2.cmp(&b.bodyID2))
+                .then(a.subShapeID2.cmp(&b.subShapeID2))
+                .then(a.subShapeID1.cmp(&b.subShapeID1))
+        });
+        Ok(hits
+            .into_iter()
+            .map(|hit| self.shape_cast_hit(cast, hit))
+            .collect())
+    }
+
+    /// The [`ShapeCastHit`] for a hit joltc reported for `cast`.
+    fn shape_cast_hit(&self, cast: &ShapeCast<'_>, hit: JPH_ShapeCastResult) -> ShapeCastHit {
         let body = BodyId::new(hit.bodyID2, self.tag);
         let sub_shape_id = SubShapeId::new(hit.subShapeID2);
-        Ok(Some(ShapeCastHit {
+        ShapeCastHit {
             body,
             sub_shape_id,
             object_layer: self.object_layer_of(body),
@@ -266,8 +330,8 @@ impl PhysicsWorld {
             normal: Vec3::from_jph(hit.penetrationAxis)
                 .normalized_or_zero()
                 .scale(-1.0),
-            penetration_depth: hit.penetrationDepth - target_distance,
-        }))
+            penetration_depth: hit.penetrationDepth - cast.target_distance,
+        }
     }
 }
 
