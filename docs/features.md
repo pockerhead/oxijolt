@@ -19,7 +19,7 @@ what is planned next.
 - Collision groups: tables of sub groups that say which pairs collide, given to rigid and soft
   bodies at creation or later, for ragdolls, chains and vehicles that ignore their driver
   ([guide](bodies.md#collision-groups)).
-- Scene queries: ray casts (closest hit or every hit, sorted), shape casts, collide-shape and
+- Scene queries: ray casts and shape casts (closest hit or every hit, sorted), collide-shape and
   point queries (in the world and on a shape), filtered by layer, compound child group, an
   excluded body and a closure that keeps or rejects each body.
 - A character controller (Jolt's `CharacterVirtual`) with stair walking, floor sticking and an up

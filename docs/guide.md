@@ -157,6 +157,13 @@ outward surface normal of the obstacle: a floor below gives a normal pointing up
 - `cast_shape`: the first obstacle a moving shape hits, with the distance it can move, the contact
   point and the obstacle's normal. `ShapeCast::target_distance` (spheres and capsules) stops the
   cast short of the obstacle.
+- `cast_shape_all`: every hit of a moving shape under the same rules, one per query-shape leaf and
+  obstacle leaf that touch: a convex obstacle once per leaf of the query shape that hits it, a mesh
+  or heightfield once per triangle the shape sweeps into. Hits are sorted by fraction, then body
+  id, then sub-shape id on the body, then the leaf of the query shape; hits at fraction 0 (the
+  shape starts overlapping the obstacle) come deepest first, as Jolt ranks them. The first is
+  `cast_shape`'s hit unless several share it; `cast_shape` then returns one of them, picked by
+  Jolt's traversal.
 - `collide_shape`: every obstacle a shape at a pose overlaps, with penetration depth and normal.
   The hits come in no particular order; sort them when order matters.
 - `collide_point`: every body whose shape contains a point, sorted by body and sub-shape id.
