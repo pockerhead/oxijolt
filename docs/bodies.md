@@ -20,6 +20,14 @@ the sharing.
 ragdoll parts and characters' inner bodies included, for example to fold the whole world into a
 digest that compares runs.
 
+`PhysicsWorld::check_body(&shape, &settings)` runs the checks of `create_body` and returns its
+error without creating or waking anything; earlier `WorldState`s stay restorable. The checks read
+only the arguments and the world's object layer count, which is fixed, so changes to the world do
+not make an `Ok` stale: `create_body` with the same arguments succeeds unless the world is full.
+Capacity is not checked (`TooManyBodies` comes only from `create_body`); compare `body_count()`
+with `max_bodies()` for that. A game that splits a child off a compound asks it whether the child
+can become a body of its own before it changes the compound.
+
 ## Mass and inertia
 
 By default Jolt computes a body's mass and inertia from its shape at a density of 1000 kg/m³.
@@ -380,9 +388,14 @@ a changed part leaves bodies asleep floating above removed material or embedded 
 ragdoll or constraint holds, except that `set_shape` accepts a static body that constraints use.
 `BodyMut::check_shape(shape, mass)` runs the checks of `set_shape` and returns its error without
 changing, waking or invalidating anything; when it returns `Ok`, `set_shape` with the same
-arguments succeeds as long as the world does not change in between. A game that splits a child
-off a dynamic compound asks it first whether the remainder can stay the body's shape (a thin rod
-left over is refused for its inertia). The regions of `set_shape_waking_in` are not checked.
+arguments succeeds as long as nothing the verdict depends on changes in between: the body's motion
+type, sensor flag and pending forces (added by `add_force` and `add_torque`, cleared by
+`reset_forces`, a change to kinematic or static and a step in which the body is awake, brought back
+by a restore), a character, vehicle, ragdoll or constraint that comes to use the body or is removed,
+and the body's removal. Creating, changing or removing other bodies does not change it
+(`shape_check.rs`), and a step changes it only by clearing the body's forces. A game that splits
+a child off a dynamic compound asks it first whether the remainder can stay the body's shape (a
+thin rod left over is refused for its inertia). The regions of `set_shape_waking_in` are not checked.
 
 The body origin stays where it is and the centre of mass moves with the shape. Jolt stores the
 centre of mass position and derives the origin from it, so the origin read back can move by

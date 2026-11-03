@@ -6,6 +6,11 @@ All notable changes to this fork. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- `PhysicsWorld::check_body(shape, settings)` runs the checks of `create_body` without creating
+  anything and returns the same error; `Ok` means `create_body` with the same arguments succeeds
+  unless the world is full, which it does not check. Earlier states stay restorable. The rustdoc of
+  `BodyMut::check_shape` now lists what its verdict depends on: the body's motion type, sensor flag,
+  pending forces and holders, not other bodies. Refs #19.
 - `QueryFilter::body_filter` keeps or rejects bodies with a closure of their `BodyId`, in every
   query that takes a filter (rays, shape casts, collide-shape and point queries, character
   updates and refreshes, debug lines). It is asked about each candidate body before its shape is

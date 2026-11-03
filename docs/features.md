@@ -44,6 +44,8 @@ what is planned next.
   world space (`BodyRef::center_of_mass_position`) ([guide](bodies.md#mass-and-inertia)).
 - Shape changes of static bodies that constraints use: the constraints keep their world
   attachment points ([guide](constraints.md#bodies)).
+- A body checked without creating it (`PhysicsWorld::check_body`), with the error `create_body`
+  would return except for a full world ([guide](bodies.md#creating-bodies)).
 - A shape change checked without making it (`BodyMut::check_shape`), with the error
   `set_shape` would return ([guide](bodies.md#shape-and-motion-type-changes)).
 - Shape changes that wake only the bodies near caller-given regions, for a large compound that
