@@ -37,6 +37,9 @@ impl PhysicsWorld {
     /// [`limits::MIN_MASS`]`..=`[`limits::MAX_MASS`]. Kinematic bodies are exempt from this
     /// range: Jolt gives them infinite mass in the solver.
     ///
+    /// [`check_body`](Self::check_body) runs the same checks without creating the body. A full
+    /// world fails with [`BodyError::TooManyBodies`].
+    ///
     /// [docs/limits.md#rigid-body-inertia]: https://github.com/pockerhead/oxijolt/blob/main/docs/limits.md#rigid-body-inertia
     /// [`limits::MIN_MASS`]: crate::limits::MIN_MASS
     /// [`limits::MAX_MASS`]: crate::limits::MAX_MASS
@@ -45,21 +48,7 @@ impl PhysicsWorld {
         shape: &Shape,
         settings: &BodySettings,
     ) -> Result<BodyId, BodyError> {
-        settings.validate(self.object_layer_count)?;
-        if !settings.can_move() && settings.allowed_dofs != AllowedDofs::ALL {
-            return Err(BodyError::InvalidValue(STATIC_DOFS_RULE));
-        }
-        // Jolt computes mass properties for every body that can move
-        // (`BodyCreationSettings::HasMassProperties`).
-        check_shape_for(
-            shape,
-            ShapeUse {
-                motion_type: settings.motion_type,
-                can_move: settings.can_move(),
-                sensor: settings.sensor,
-                mass: settings.mass,
-            },
-        )?;
+        self.check_body(shape, settings)?;
         let creation = CreationSettings::new(shape, settings)?;
         if !self.has_room_for_bodies(1) {
             return Err(BodyError::TooManyBodies);
@@ -78,6 +67,50 @@ impl PhysicsWorld {
             return Err(BodyError::TooManyBodies);
         }
         Ok(BodyId::new(raw, self.tag))
+    }
+
+    /// Checks whether [`create_body`](Self::create_body) with `shape` and `settings` would
+    /// succeed, without creating, adding or waking anything: it returns the error `create_body`
+    /// would return for these arguments, or `Ok` when `create_body` with them succeeds unless the
+    /// world is full. Earlier [`WorldState`](crate::WorldState)s stay restorable.
+    ///
+    /// `create_body` runs exactly these checks before it creates the body. They read only the
+    /// arguments and the world's number of object layers, which is fixed when the world is
+    /// created, so creating, removing, changing or stepping bodies does not change the verdict.
+    ///
+    /// Capacity is not checked: this never returns [`BodyError::TooManyBodies`]. Compare
+    /// [`body_count`](Self::body_count) with [`max_bodies`](Self::max_bodies) for that.
+    ///
+    /// ```
+    /// use oxijolt::*;
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut world = PhysicsWorld::new(WorldSettings::default())?;
+    /// let ball = Shape::new_sphere(0.5)?;
+    /// let settings = BodySettings::new_dynamic();
+    /// world.check_body(&ball, &settings)?;
+    /// assert_eq!(world.body_count(), 0);
+    /// world.create_body(&ball, &settings)?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn check_body(&self, shape: &Shape, settings: &BodySettings) -> Result<(), BodyError> {
+        settings.validate(self.object_layer_count)?;
+        if !settings.can_move() && settings.allowed_dofs != AllowedDofs::ALL {
+            return Err(BodyError::InvalidValue(STATIC_DOFS_RULE));
+        }
+        // Jolt computes mass properties for every body that can move
+        // (`BodyCreationSettings::HasMassProperties`).
+        check_shape_for(
+            shape,
+            ShapeUse {
+                motion_type: settings.motion_type,
+                can_move: settings.can_move(),
+                sensor: settings.sensor,
+                mass: settings.mass,
+            },
+        )?;
+        Ok(())
     }
 
     /// `Ok` if `id` names a body that is in this world now.
