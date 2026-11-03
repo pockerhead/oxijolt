@@ -281,3 +281,25 @@ fn accepted_shapes_are_taken_by_set_shape_on_every_motion_type() {
     assert!(world.body(neighbour).unwrap().is_active());
     step(&mut world, 5);
 }
+
+#[test]
+fn creating_other_bodies_keeps_the_verdict() {
+    let (mut world, cube, _) = sleeping_cubes();
+    let ball = Shape::new_sphere(0.6).unwrap();
+    let rod = thin_rotated_rod();
+    let verdicts = |world: &mut PhysicsWorld| {
+        let body = world.body_mut(cube).unwrap();
+        (body.check_shape(&ball, None), body.check_shape(&rod, None))
+    };
+    let before = verdicts(&mut world);
+    assert!(before.0.is_ok() && before.1.is_err(), "{before:?}");
+    world
+        .create_body(
+            &cube_shape(),
+            &BodySettings::new_static().position(RVec3::new(0.0, -1.05, 0.0)),
+        )
+        .unwrap();
+    add_cube(&mut world, RVec3::new(-1.05, 0.0, 0.0));
+    assert_eq!(verdicts(&mut world), before);
+    assert_accepted(&mut world, cube, &ball, None);
+}
