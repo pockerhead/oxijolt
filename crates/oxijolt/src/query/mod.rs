@@ -97,6 +97,14 @@ pub struct RayCastHit {
     pub compound_child: Option<CompoundSubShape>,
 }
 
+/// The distance a hit at `fraction` of `direction` lies from the start, in metres. The length
+/// is taken in `f64`, so a direction whose `f32` length overflows still gives the finite distance
+/// of a near hit.
+fn hit_distance(fraction: f32, direction: Vec3) -> f32 {
+    let [x, y, z] = [direction.x, direction.y, direction.z].map(f64::from);
+    ((x * x + y * y + z * z).sqrt() * f64::from(fraction)) as f32
+}
+
 /// Where the result callback of a query collects every hit joltc reports, next to the query's
 /// filter state.
 pub(crate) struct HitsSlot<'s, T> {
@@ -283,7 +291,7 @@ impl PhysicsWorld {
             body,
             fraction: hit.fraction,
             sub_shape_id,
-            distance: hit.fraction * ray.direction.length(),
+            distance: hit_distance(hit.fraction, ray.direction),
             normal,
             object_layer,
             compound_child: self.compound_sub_shape(body, sub_shape_id).ok().flatten(),

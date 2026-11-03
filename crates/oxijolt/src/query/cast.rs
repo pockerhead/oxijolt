@@ -7,7 +7,7 @@ use std::ptr::null;
 
 use oxijolt_sys::*;
 
-use super::{offset_from, rotation_translation, validate_pose, HitsSlot};
+use super::{hit_distance, offset_from, rotation_translation, validate_pose, HitsSlot};
 use crate::filter::with_query_filters;
 use crate::limits;
 use crate::math::is_finite_non_negative;
@@ -325,7 +325,7 @@ impl PhysicsWorld {
             object_layer: self.object_layer_of(body),
             compound_child: self.compound_sub_shape(body, sub_shape_id).ok().flatten(),
             fraction: hit.fraction,
-            distance: hit.fraction * cast.direction.length(),
+            distance: hit_distance(hit.fraction, cast.direction),
             point: offset_from(cast.position, hit.contactPointOn2),
             normal: Vec3::from_jph(hit.penetrationAxis)
                 .normalized_or_zero()

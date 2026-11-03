@@ -351,6 +351,50 @@ fn ray_normals_point_out_of_the_hit_surface() {
     assert!(dot(hit.normal, up) > 0.0, "heightfield underside: {hit:?}");
 }
 
+/// Unit boxes whose centres lie 3 m from the origin, on +x and on the diagonal (1, 1, 1).
+fn boxes_three_metres_out(world: &mut PhysicsWorld) {
+    let diagonal = Real::from(3.0 / 3.0_f32.sqrt());
+    for centre in [
+        RVec3::new(3.0, 0.0, 0.0),
+        RVec3::new(diagonal, diagonal, diagonal),
+    ] {
+        world
+            .create_body(&cube_shape(), &BodySettings::new_static().position(centre))
+            .unwrap();
+    }
+}
+
+/// Directions along +x and along the diagonal with `component` on the axes they use.
+fn along_x_and_diagonal(component: f32) -> [Vec3; 2] {
+    [
+        Vec3::new(component, 0.0, 0.0),
+        Vec3::new(component, component, component),
+    ]
+}
+
+#[test]
+fn rays_too_long_for_an_f32_length_report_a_near_hits_distance() {
+    let mut world = world(Vec3::ZERO, 1);
+    boxes_three_metres_out(&mut world);
+    let distance = |direction| {
+        let ray = RayCast::new(RVec3::ZERO, direction);
+        let hit = world.cast_ray(&ray, &ALL).unwrap().expect("a box");
+        assert_eq!(world.cast_ray_all(&ray, &ALL).unwrap(), [hit]);
+        hit.distance
+    };
+    let short = along_x_and_diagonal(10.0).map(distance);
+    assert!((short[0] - 2.5).abs() < 1e-5, "{short:?}");
+    for component in [1.0e20, 1.0e30, f32::MAX] {
+        let long = along_x_and_diagonal(component).map(distance);
+        for (long, short) in long.iter().zip(short) {
+            assert!(
+                (long - short).abs() < 1e-5,
+                "{component}: {long} vs {short}"
+            );
+        }
+    }
+}
+
 #[test]
 fn queries_see_created_moved_and_removed_bodies_without_a_step() {
     let mut world = world(Vec3::ZERO, 1);
@@ -495,6 +539,28 @@ fn target_distance_at_the_bound_gives_a_finite_depth() {
     assert!(hit.penetration_depth.is_finite(), "{hit:?}");
     assert!((hit.penetration_depth + gap).abs() < 1e-3, "{hit:?}");
     assert!(hit.normal.y > 0.99, "{hit:?}");
+}
+
+#[test]
+fn the_longest_accepted_cast_reports_a_near_hits_distance() {
+    let mut world = world(Vec3::ZERO, 1);
+    boxes_three_metres_out(&mut world);
+    let ball = Shape::new_sphere(0.5).unwrap();
+    let distance = |direction| {
+        let cast = ShapeCast::new(&ball, RVec3::ZERO, Quat::IDENTITY, direction);
+        let hit = world.cast_shape(&cast, &ALL).unwrap().expect("a box");
+        assert_eq!(world.cast_shape_all(&cast, &ALL).unwrap(), [hit]);
+        hit.distance
+    };
+    let short = along_x_and_diagonal(10.0).map(distance);
+    assert!((short[0] - 2.0).abs() < 1e-3, "{short:?}");
+    // `Real` is `f32` without the `double-precision` feature, so the cast is a no-op there.
+    #[allow(clippy::unnecessary_cast)]
+    let span = (2.0 * limits::MAX_POSITION) as f32;
+    let long = along_x_and_diagonal(span).map(distance);
+    for (long, short) in long.iter().zip(short) {
+        assert!((long - short).abs() < 1e-3, "{long} vs {short}");
+    }
 }
 
 #[test]
