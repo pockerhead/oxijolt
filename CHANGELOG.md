@@ -82,6 +82,12 @@ All notable changes to this fork. The format follows [Keep a Changelog](https://
   bodies that constraints use are still refused (`BodyError::UsedByConstraint`), and the change
   makes earlier `WorldState`s unrestorable as before. Refs #13.
 
+### Fixed
+
+- `RayCastHit::distance` and `ShapeCastHit::distance` take the direction's length in `f64`. A
+  ray whose direction is longer than about 1.8e19 m reported `distance = inf` for a near hit,
+  because the `f32` length overflowed; it now reports the hit's distance. Refs #21.
+
 ## 1.5.0 — 2026-11-01
 
 ### Fixed
