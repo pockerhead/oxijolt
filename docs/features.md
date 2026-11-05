@@ -8,7 +8,8 @@ what is planned next.
   the triangles too thin to collide with, for static and kinematic bodies), heightfield, plane
   (static ground cut to a square), compound and scaled shapes, compound edits at run time
   (`MutableCompound`); physics materials with user data;
-  forces, sleeping, continuous collision; impulses, kinematic moves, waking and sleeping on demand,
+  forces, sleeping, continuous collision; impulses, kinematic moves, waking and sleeping on demand
+  (also for a list of bodies at once, `deactivate_bodies`),
   sensors, per-body user data, locked axes (allowed degrees of freedom), shape and motion type
   changes, contact-cache invalidation, buoyancy and drag in a fluid, and the list of every body
   of a world (`PhysicsWorld::body_ids`) ([guide](bodies.md)).

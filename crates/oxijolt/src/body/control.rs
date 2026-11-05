@@ -1,8 +1,11 @@
-//! Momentary inputs to one body: impulses, kinematic moves and activation.
+//! Momentary inputs to bodies: impulses, kinematic moves and activation.
+
+use std::ptr::NonNull;
 
 use oxijolt_sys::*;
 
 use super::load::{point_torque, read_load, require, Load, LoadState};
+use super::lock::for_each_locked_body;
 use super::{kinematic_velocities, with_locked_body, with_read_locked_body, MotionType};
 use crate::limits::{
     is_angular_velocity, is_angular_velocity_change, is_in_frame, is_linear_velocity,
@@ -10,7 +13,7 @@ use crate::limits::{
 };
 use crate::math::ROTATION_RULE;
 use crate::world::DELTA_TIME_RULE;
-use crate::{BodyError, BodyMut, PhysicsWorld, Quat, RVec3, Vec3};
+use crate::{BodyError, BodyId, BodyMut, PhysicsWorld, Quat, RVec3, Vec3};
 
 /// What [`BodyMut::move_kinematic`] must satisfy: the velocities Jolt derives are within the
 /// speed bounds.
@@ -25,6 +28,93 @@ fn wide(v: Vec3) -> [f64; 3] {
 /// The largest component of `v`.
 fn largest(v: Vec3) -> f32 {
     v.x.max(v.y).max(v.z)
+}
+
+/// Zeroes the linear and angular velocity of `body` unless it is static. Jolt zeroes the
+/// velocities of an awake body it deactivates and leaves those of a sleeping one, which a body
+/// created asleep may still have; the clamped setters used here never wake the body.
+///
+/// # Safety
+/// `body` is locked for writing for the duration of the call.
+unsafe fn stop_unless_static(body: NonNull<JPH_Body>) {
+    let zero = Vec3::ZERO.to_jph();
+    // SAFETY: `body` is locked for writing (function contract), and the clamped setters run only
+    // on a body that is not static, as they assert. `zero` is a live local.
+    unsafe {
+        if !JPH_Body_IsStatic(body.as_ptr()) {
+            JPH_Body_SetLinearVelocityClamped(body.as_ptr(), &zero);
+            JPH_Body_SetAngularVelocityClamped(body.as_ptr(), &zero);
+        }
+    }
+}
+
+impl PhysicsWorld {
+    /// Puts the bodies `ids` to sleep now, in the order given, and zeroes the linear and angular
+    /// velocity of each, also of those asleep already (Jolt `BodyInterface::DeactivateBodies`):
+    /// the same result, bit for bit, as [`BodyMut::deactivate`] called for each id in the same
+    /// order. Jolt's deactivation and the velocity writes each take one multi-body lock for the
+    /// whole slice; the checks still go id by id.
+    ///
+    /// Every id is checked before anything changes: an id of another world
+    /// ([`BodyError::WrongWorld`]), of no body ([`BodyError::NotFound`]), of a detached body
+    /// ([`BodyError::Detached`]), of a soft body ([`BodyError::NotRigidBody`]) or listed twice
+    /// ([`BodyError::DuplicateId`]) fails the call and puts nothing to sleep. Static bodies are
+    /// ignored, as `deactivate` ignores them. An empty slice does nothing.
+    ///
+    /// The order of `ids` is part of the simulation state: Jolt takes each body out of its list of
+    /// awake bodies by moving the last one into its place, so the same bodies in another order
+    /// can leave that list, and the steps after it, different. `ids` is not reordered. Each body that
+    /// was awake records [`ActivationEvent::Deactivated`], in the order of `ids`.
+    ///
+    /// ```
+    /// use oxijolt::*;
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut world = PhysicsWorld::new(WorldSettings::default())?;
+    /// let cube = Shape::new_box(Vec3::new(0.5, 0.5, 0.5))?;
+    /// let mut pile = Vec::new();
+    /// for y in 0..3 {
+    ///     let at = RVec3::new(0.0, 2.0 * y as Real, 0.0);
+    ///     pile.push(world.create_body(&cube, &BodySettings::new_dynamic().position(at))?);
+    /// }
+    /// world.deactivate_bodies(&pile)?;
+    /// assert!(world.body(pile[0])?.is_sleeping());
+    /// assert_eq!(world.body(pile[2])?.linear_velocity(), Vec3::ZERO);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`ActivationEvent::Deactivated`]: crate::ActivationEvent::Deactivated
+    pub fn deactivate_bodies(&mut self, ids: &[BodyId]) -> Result<(), BodyError> {
+        for &id in ids {
+            if self.body(id)?.is_soft_body() {
+                return Err(BodyError::NotRigidBody(id));
+            }
+        }
+        self.sorted_unique(ids)?;
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let raw: Vec<JPH_BodyID> = ids.iter().map(|id| id.raw).collect();
+        // SAFETY: the body interface belongs to this live world, borrowed mutably; `raw` holds
+        // `raw.len()` ids, which joltc copies. The checks above confirmed that they are distinct
+        // rigid bodies added to the world (Jolt asserts that each is in the broad phase), so the
+        // count fits `u32` (a world holds at most `1 << 23` bodies). This thread holds no body
+        // lock.
+        unsafe {
+            JPH_BodyInterface_DeactivateBodies(
+                self.body_interface.as_ptr(),
+                raw.as_ptr(),
+                raw.len() as u32,
+            )
+        };
+        let stopped = for_each_locked_body(self.body_lock_interface, &raw, |body| {
+            // SAFETY: `for_each_locked_body` passes a body locked for writing for this call.
+            unsafe { stop_unless_static(body) }
+        });
+        assert!(stopped, "checked bodies were not found");
+        Ok(())
+    }
 }
 
 impl BodyMut<'_> {
@@ -241,27 +331,18 @@ impl BodyMut<'_> {
     /// itself, but awake bodies still produce sensor contacts with it, so this does not turn a
     /// sensor off. [`PhysicsWorld::restore_state`] puts bodies back to sleep or wakes them without
     /// activation events. Static bodies ignore it; fails with [`BodyError::NotRigidBody`] for a
-    /// soft body.
+    /// soft body. [`PhysicsWorld::deactivate_bodies`] does the same for a list of bodies.
     ///
     /// [`ActivationEvent::Deactivated`]: crate::ActivationEvent::Deactivated
     /// [`PhysicsWorld::restore_state`]: crate::PhysicsWorld::restore_state
+    /// [`PhysicsWorld::deactivate_bodies`]: crate::PhysicsWorld::deactivate_bodies
     pub fn deactivate(&mut self) -> Result<(), BodyError> {
         self.reject_soft_body()?;
         // SAFETY: as in `activate`.
         unsafe { JPH_BodyInterface_DeactivateBody(self.interface(), self.id.raw) };
-        // Jolt zeroes the velocities of an awake body it deactivates and leaves those of a
-        // sleeping one, which a body created asleep may still have.
-        let zero = Vec3::ZERO.to_jph();
         with_locked_body(self.inner.body_lock_interface, self.id, |body| {
-            // SAFETY: `body` is locked for writing for the duration of the closure, and the
-            // clamped setters, which never wake the body, run only on a body that is not static,
-            // as they assert. `zero` is a live local.
-            unsafe {
-                if !JPH_Body_IsStatic(body.as_ptr()) {
-                    JPH_Body_SetLinearVelocityClamped(body.as_ptr(), &zero);
-                    JPH_Body_SetAngularVelocityClamped(body.as_ptr(), &zero);
-                }
-            }
+            // SAFETY: `body` is locked for writing for the duration of the closure.
+            unsafe { stop_unless_static(body) }
         })
         .ok_or(BodyError::NotFound(self.id))
     }
