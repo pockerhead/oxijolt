@@ -27,8 +27,9 @@ use crate::{CharacterState, PhysicsWorld, StateError};
 /// for every body too.
 ///
 /// A state restores only into the world that saved it, and only while that world's structure is
-/// unchanged: creating or removing a body, character, vehicle, ragdoll or constraint, setting a
-/// body's or a ragdoll's motion type, setting a body's shape or sensor flag, changing a
+/// unchanged: creating or removing a body, character, vehicle, ragdoll or constraint, adding or
+/// destroying a detached body ([`PhysicsWorld::add_bodies`], [`PhysicsWorld::destroy_body`]),
+/// setting a body's or a ragdoll's motion type, setting a body's shape or sensor flag, changing a
 /// character's or its inner body's shape
 /// ([`CharacterMut::set_shape`](crate::CharacterMut::set_shape),
 /// [`set_inner_body_shape`](crate::CharacterMut::set_inner_body_shape)), or a

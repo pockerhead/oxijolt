@@ -459,6 +459,16 @@ impl std::error::Error for StepError {}
 pub enum BodyError {
     /// The id names no body in this world: it was removed, or its index was reused.
     NotFound(BodyId),
+    /// The body was created without being added
+    /// ([`PhysicsWorld::create_body_detached`](crate::PhysicsWorld::create_body_detached)) and is
+    /// not in the world yet; add it with [`add_body`](crate::PhysicsWorld::add_body) or
+    /// [`add_bodies`](crate::PhysicsWorld::add_bodies), or destroy it with
+    /// [`destroy_body`](crate::PhysicsWorld::destroy_body).
+    Detached(BodyId),
+    /// The body is in the world already; only a detached body can be added or destroyed.
+    AlreadyAdded(BodyId),
+    /// The id appears more than once in a list of bodies.
+    DuplicateId(BodyId),
     /// The id belongs to another world.
     WrongWorld(BodyId),
     /// The object layer does not exist in this world's collision layers.
@@ -497,6 +507,9 @@ impl fmt::Display for BodyError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NotFound(id) => write!(f, "no body {id:?} in this world"),
+            Self::Detached(id) => write!(f, "body {id:?} is created but not added"),
+            Self::AlreadyAdded(id) => write!(f, "body {id:?} is added already"),
+            Self::DuplicateId(id) => write!(f, "body {id:?} is listed more than once"),
             Self::WrongWorld(id) => write!(f, "body {id:?} belongs to another world"),
             Self::UnknownObjectLayer(layer) => {
                 write!(

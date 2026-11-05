@@ -6,6 +6,19 @@ All notable changes to this fork. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- Bodies in batches. `PhysicsWorld::create_body_detached` creates a body with the checks of
+  `create_body` without adding it: it gets its id in call order and takes a place in the world
+  (`body_count`, `body_ids`), but `contains_body` is false and calls that take a body refuse it with
+  the new `BodyError::Detached`. `add_body` adds one, `destroy_body` destroys one never added, and
+  `add_bodies` adds many in one batch that builds one broad-phase subtree (Jolt `AddBodiesPrepare`
+  and `AddBodiesFinalize`), in ascending id order, waking them in that order. `remove_bodies`
+  removes and destroys several bodies, frees their ids in the order given and wakes the neighbours
+  once, each in id order. Both batch calls check every id first and change nothing on an error
+  (`BodyError::AlreadyAdded`, `DuplicateId` and the checks of `remove_body`), and never reorder the
+  caller's slice. The C extension adds `JPH_BodyInterface_AddBodiesPrepare`, `_AddBodiesFinalize`,
+  `_AddBodiesAbort`, `_RemoveBodies` and `_DestroyBodies`, which work on copies of the ids and check
+  them first. `JOLTC_EXT_REVISION` is 30: a `JOLTC_LIB_DIR` prefix built before this change is
+  refused until it is rebuilt. Refs #23.
 - `CharacterMut` changes the settings Jolt can change on a live character, so tuning one no longer
   means recreating it with new ids and lost contacts: `set_mass`, `set_max_strength`,
   `set_max_slope_angle`, `set_supporting_volume`, `set_shape_offset` (also moves the inner body),

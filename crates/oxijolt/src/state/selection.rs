@@ -63,9 +63,9 @@ impl PhysicsWorld {
             // without clamping them to the bodies it lists (joltc.cpp:5759-5772), so `count` must
             // be at most that number: it is `GetNumBodies`, which Jolt's list matches
             // (`BodyManager::GetBodyIDs` asserts it), and no body is added or removed meanwhile,
-            // because every call that adds or removes one (`create_body`, `create_soft_body`,
-            // `create_character`, `create_ragdoll`, their removals) takes `&mut self` and this
-            // borrow is shared. Jolt copies the list under its bodies mutex.
+            // because every call that creates or destroys one (`create_body`, `create_body_detached`,
+            // `create_soft_body`, `create_character`, `create_ragdoll`, their removals,
+            // `destroy_body`) takes `&mut self` and this borrow is shared. Jolt copies the list under its bodies mutex.
             unsafe { JPH_PhysicsSystem_GetBodies(self.system.as_ptr(), ids.as_mut_ptr(), count) };
         }
         ids.sort_unstable();

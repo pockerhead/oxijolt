@@ -12,6 +12,10 @@ what is planned next.
   sensors, per-body user data, locked axes (allowed degrees of freedom), shape and motion type
   changes, contact-cache invalidation, buoyancy and drag in a fluid, and the list of every body
   of a world (`PhysicsWorld::body_ids`) ([guide](bodies.md)).
+- Bodies created without being added (`create_body_detached`), then added one by one (`add_body`)
+  or in one batch that builds one broad-phase subtree (`add_bodies`), or destroyed
+  (`destroy_body`); several bodies removed at once with one neighbour wake (`remove_bodies`)
+  ([guide](bodies.md#batches-of-bodies)).
 - Body properties changed on a live body: friction, restitution, gravity factor, linear and
   angular damping, motion quality, object layer, collision group and the sensor flag, each with
   its getter and the checks of its creation setting

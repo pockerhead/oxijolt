@@ -10,8 +10,8 @@ use oxijolt_sys::*;
 
 use super::structure::{check_shape_for, ShapeUse};
 use super::{
-    with_locked_body, AllowedDofs, BodyId, BodyMut, BodyRef, BodySettings, CreationSettings,
-    INVALID_BODY_ID, STATIC_DOFS_RULE,
+    with_locked_body, with_read_locked_body, AllowedDofs, BodyId, BodyMut, BodyRef, BodySettings,
+    CreationSettings, INVALID_BODY_ID, STATIC_DOFS_RULE,
 };
 use crate::limits::is_in_frame;
 use crate::owned::Owned;
@@ -113,7 +113,8 @@ impl PhysicsWorld {
         Ok(())
     }
 
-    /// `Ok` if `id` names a body that is in this world now.
+    /// `Ok` if `id` names a body that is in this world now; [`BodyError::Detached`] for a body
+    /// created by [`create_body_detached`](Self::create_body_detached) and not added.
     pub(crate) fn check(&self, id: BodyId) -> Result<(), BodyError> {
         if id.world != self.tag {
             return Err(BodyError::WrongWorld(id));
@@ -122,18 +123,24 @@ impl PhysicsWorld {
         // compares index and sequence number, so any id value is safe to pass.
         if unsafe { JPH_BodyInterface_IsAdded(self.body_interface.as_ptr(), id.raw) } {
             Ok(())
+        } else if with_read_locked_body(self.body_lock_interface, id, |_| ()).is_some() {
+            Err(BodyError::Detached(id))
         } else {
             Err(BodyError::NotFound(id))
         }
     }
 
-    /// Whether `id` names a body that is in this world now (Jolt `BodyInterface::IsAdded`).
+    /// Whether `id` names a body that is in this world now (Jolt `BodyInterface::IsAdded`);
+    /// `false` for a detached body ([`create_body_detached`](Self::create_body_detached)).
     pub fn contains_body(&self, id: BodyId) -> bool {
         self.check(id).is_ok()
     }
 
     /// Every body in the world in ascending id order ([`BodyId::to_raw`]), including soft
     /// bodies, ragdoll parts and characters' inner bodies (Jolt `PhysicsSystem::GetBodies`).
+    /// Detached bodies ([`create_body_detached`](Self::create_body_detached)) are listed too, as
+    /// [`body_count`](Self::body_count) counts them; [`contains_body`](Self::contains_body) tells
+    /// them apart.
     ///
     /// It borrows the world mutably although it changes nothing: joltc copies as many ids as it
     /// is asked for, so the body count must not change between counting and copying. The ids
@@ -170,7 +177,7 @@ impl PhysicsWorld {
         raw.into_iter().map(move |raw| BodyId::new(raw, tag))
     }
 
-    /// Read access to a body.
+    /// Read access to a body. Fails with [`BodyError::Detached`] for a body that is not added.
     pub fn body(&self, id: BodyId) -> Result<BodyRef<'_>, BodyError> {
         self.check(id)?;
         Ok(BodyRef {
@@ -181,7 +188,8 @@ impl PhysicsWorld {
         })
     }
 
-    /// Read and write access to a body.
+    /// Read and write access to a body. Fails with [`BodyError::Detached`] for a body that is not
+    /// added.
     pub fn body_mut(&mut self, id: BodyId) -> Result<BodyMut<'_>, BodyError> {
         self.check(id)?;
         Ok(BodyMut {
@@ -210,7 +218,9 @@ impl PhysicsWorld {
     /// ([`BodyError::OwnedByRagdoll`], [`remove_ragdoll`](Self::remove_ragdoll)). A body that a
     /// constraint uses cannot be removed while the constraint exists
     /// ([`BodyError::UsedByConstraint`]); remove the constraint first with
-    /// [`remove_constraint`](Self::remove_constraint).
+    /// [`remove_constraint`](Self::remove_constraint). A detached body is refused
+    /// ([`BodyError::Detached`]); it goes with [`destroy_body`](Self::destroy_body).
+    /// [`remove_bodies`](Self::remove_bodies) removes several bodies at once.
     ///
     /// [speculative contact distance]: crate::WorldSettings::speculative_contact_distance
     pub fn remove_body(&mut self, id: BodyId) -> Result<(), BodyError> {
@@ -367,7 +377,11 @@ impl PhysicsWorld {
     }
 
     /// Wakes the bodies `woken`, in that order, leaving out `except`.
-    fn activate_all_except(&mut self, mut woken: Vec<JPH_BodyID>, except: Option<BodyId>) {
+    pub(super) fn activate_all_except(
+        &mut self,
+        mut woken: Vec<JPH_BodyID>,
+        except: Option<BodyId>,
+    ) {
         if let Some(except) = except {
             woken.retain(|&raw| raw != except.raw);
         }

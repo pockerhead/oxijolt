@@ -40,6 +40,17 @@ collision step count of each call (`step_with_collision_steps(dt, 4)` is not fou
 - **Events.** The world sorts each step's events into a canonical order before it queues them
   ([events.md](events.md#canonical-order)).
 
+### Batches of bodies
+
+`create_body_detached` assigns ids at creation in call order, like `create_body`, and
+`remove_bodies` frees them in the order of its slice, like the same `remove_body` calls. `add_bodies`
+adds its bodies in ascending id order whatever the order of the slice and wakes them in that order.
+A batch builds a different broad-phase tree than adding the same bodies one by one, so the two
+histories may simulate differently; equal histories give equal results
+(`batch_bodies_determinism.rs` compares 1 and 4 workers, in one process and in two). The neighbour
+wake of `remove_bodies` is the union of the per-body wakes of `remove_body`, each body once in id
+order, so its `Activated` events come in id order rather than in the order of the slice.
+
 ## What the caller keeps deterministic
 
 - Code that drives the world must not feed hash-map iteration order, time or thread identity into

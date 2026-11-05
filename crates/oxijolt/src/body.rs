@@ -14,6 +14,7 @@ use crate::world::WorldTag;
 use crate::{BodyError, CollisionGroup, ObjectLayer, Quat, RVec3, Shape, Vec3};
 
 mod access;
+mod batch;
 mod buoyancy;
 mod control;
 mod dofs;
