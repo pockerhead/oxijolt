@@ -104,7 +104,7 @@ All notable changes to this fork. The format follows [Keep a Changelog](https://
   because the `f32` length overflowed; it now reports the hit's distance. Refs #21.
 - `CharacterSettings::max_num_hits` (and the new `CharacterMut::set_max_num_hits`) accept at most
   the new `limits::MAX_CHARACTER_HITS` (4096). Jolt truncates the byte size of its contact list to
-  32 bits, so a count from `2^25` on (about 2.7e7 in double precision) let a character query write
+  32 bits, so a count from `2^25 - 1` on (about 2.7e7 in double precision) let a character query write
   past the list from safe code. Refs #22.
 
 ## 1.5.0 — 2026-11-01

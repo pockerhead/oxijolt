@@ -919,7 +919,7 @@ reserves `max_num_hits` contacts, `max_num_hits + 1` when it moves to a contact,
 temp allocator (`CharacterVirtual.cpp:1280, 1490, 1523, 1565`), and `STLTempAllocator::allocate`
 passes the byte size on as a 32-bit `uint` (`STLTempAllocator.h:43`) while the list keeps the
 requested capacity (`Array.h:175-176`). A `CharacterContact` is 128 bytes (160 in double
-precision), so from `2^25` hits (about 2.7e7 in double precision) the block is smaller than the
+precision), so from `2^25 - 1` hits (about 2.7e7 in double precision) the block is smaller than the
 list believes. At `2^28 + 1` hits it holds one contact and the second one Jolt writes lands past
 it: in a probe a capsule touching a floor and two walls was thrown 1.9e7 m in one update, and the
 same count at creation read garbage contacts. A native compile-time check pins the contact at most
