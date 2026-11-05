@@ -48,6 +48,8 @@ what is planned next.
   form `BodySettings::mass_and_inertia` takes ([guide](bodies.md#mass-and-inertia)).
 - Centre of mass readouts: a shape's in its own space (`Shape::center_of_mass`) and a body's in
   world space (`BodyRef::center_of_mass_position`) ([guide](bodies.md#mass-and-inertia)).
+- A shape's local bounding box about its centre of mass, convex radius included
+  (`Shape::local_bounds`).
 - Shape changes of static bodies that constraints use: the constraints keep their world
   attachment points ([guide](constraints.md#bodies)).
 - A body checked without creating it (`PhysicsWorld::check_body`), with the error `create_body`

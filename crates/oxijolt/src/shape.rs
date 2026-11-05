@@ -393,6 +393,21 @@ fn within_extent(dimension: f32) -> bool {
     dimension <= limits::MAX_SHAPE_EXTENT
 }
 
+/// Jolt's local bounds of `shape` as `(min, max)`, relative to its centre of mass.
+///
+/// # Safety
+/// `shape` is a live shape for the call.
+pub(crate) unsafe fn local_bounds_of(shape: *const JPH_Shape) -> (Vec3, Vec3) {
+    let mut bounds = JPH_AABox {
+        min: Vec3::ZERO.to_jph(),
+        max: Vec3::ZERO.to_jph(),
+    };
+    // SAFETY: the caller keeps `shape` live; the getter only reads it, and `bounds` is a live
+    // local.
+    unsafe { JPH_Shape_GetLocalBounds(shape, &mut bounds) };
+    (Vec3::from_jph(bounds.min), Vec3::from_jph(bounds.max))
+}
+
 /// `sample_count` rounded up to a multiple of `block_size`, as Jolt stores it.
 fn padded_sample_count(sample_count: u32, block_size: u32) -> u64 {
     u64::from(sample_count).div_ceil(u64::from(block_size)) * u64::from(block_size)
@@ -661,8 +676,8 @@ impl Shape {
     ///
     /// # Extent
     /// The shape's local bounds must lie within [`limits::MAX_SHAPE_EXTENT`] on every axis;
-    /// otherwise [`ShapeError::InvalidValue`] is returned. A field of holes only has empty
-    /// bounds and passes.
+    /// otherwise [`ShapeError::InvalidValue`] is returned. A field of holes only has a zero-size
+    /// box at the centre of the grid, which must lie within the limit as well.
     pub fn new_height_field(
         sample_count: u32,
         samples: &[f32],
@@ -803,16 +818,9 @@ impl Shape {
     }
 
     /// `self` when its local bounds lie within [`limits::MAX_SHAPE_EXTENT`] on every axis or are
-    /// empty (a field of holes); otherwise an error, and the shape is released.
+    /// empty; otherwise an error, and the shape is released.
     pub(crate) fn within_extent_bounds(self) -> Result<Self, ShapeError> {
-        let mut bounds = JPH_AABox {
-            min: Vec3::ZERO.to_jph(),
-            max: Vec3::ZERO.to_jph(),
-        };
-        // SAFETY: the shape is live for the call; the getter only reads it, and `bounds` is a
-        // live local.
-        unsafe { JPH_Shape_GetLocalBounds(self.as_ptr(), &mut bounds) };
-        let (min, max) = (Vec3::from_jph(bounds.min), Vec3::from_jph(bounds.max));
+        let (min, max) = self.local_bounds();
         let empty = min.x > max.x || min.y > max.y || min.z > max.z;
         if empty || (limits::is_local_offset(min) && limits::is_local_offset(max)) {
             Ok(self)
@@ -873,6 +881,28 @@ impl Shape {
         // live local.
         unsafe { JPH_Shape_GetCenterOfMass(self.as_ptr(), &mut center) };
         Vec3::from_jph(center)
+    }
+
+    /// The shape's bounding box as `(min, max)` in its own space, in metres, relative to its
+    /// centre of mass (Jolt `Shape::GetLocalBounds`), convex radius included.
+    ///
+    /// Add [`center_of_mass`](Self::center_of_mass) to both corners for the box relative to the
+    /// shape's origin, the point a body's position places. The two differ whenever the centre of
+    /// mass is not at the origin: compounds, convex hulls, tapered shapes and
+    /// [`new_offset_center_of_mass`](Self::new_offset_center_of_mass). A scaled shape's box is
+    /// its inner shape's box scaled; a compound's encloses its children's boxes. A heightfield
+    /// whose samples are all holes has a box of zero size at the centre of its stored grid.
+    ///
+    /// ```
+    /// # use oxijolt::{Shape, Vec3};
+    /// let shape = Shape::new_box(Vec3::new(0.5, 1.0, 1.5))?;
+    /// let (min, max) = shape.local_bounds();
+    /// assert_eq!((min, max), (Vec3::new(-0.5, -1.0, -1.5), Vec3::new(0.5, 1.0, 1.5)));
+    /// # Ok::<(), oxijolt::ShapeError>(())
+    /// ```
+    pub fn local_bounds(&self) -> (Vec3, Vec3) {
+        // SAFETY: `self` keeps the shape alive for the call.
+        unsafe { local_bounds_of(self.as_ptr()) }
     }
 
     /// This sphere or capsule with its radius grown by `by` metres; `Ok(None)` for every other

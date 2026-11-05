@@ -6,6 +6,9 @@ All notable changes to this fork. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- `Shape::local_bounds` returns a shape's bounding box as `(min, max)` in its own space, relative to
+  its centre of mass, convex radius included (Jolt `Shape::GetLocalBounds`); add
+  `Shape::center_of_mass` for the box about the shape's origin. Refs #14.
 - `PhysicsWorld::active_body_states` and `active_body_states_into` return a `BodyMotionState` (id,
   position, rotation, linear and angular velocity) for every awake body, in ascending `BodyId`
   order, under the one multi-body read lock `active_body_poses` takes, instead of a body lock per
