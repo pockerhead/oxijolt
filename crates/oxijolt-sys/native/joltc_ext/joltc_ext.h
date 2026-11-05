@@ -54,6 +54,20 @@ JPH_CAPI void JPH_CharacterVirtual_ExtendedUpdate2(JPH_CharacterVirtual* charact
 JPH_CAPI void JPH_CharacterVirtual_RefreshContacts2(JPH_CharacterVirtual* character,
 	const JPH_BroadPhaseLayerFilter* broadPhaseLayerFilter, const JPH_ObjectLayerFilter* objectLayerFilter,
 	const JPH_BodyFilter* bodyFilter, const JPH_ShapeFilter* shapeFilter, JPH_TempAllocator* tempAllocator);
+/* Like JPH_CharacterVirtual_SetShape, with explicit filters (null accepts everything) and temp allocator.
+   Returns whether the character has shape afterwards. A maxPenetrationDepth below FLT_MAX first collects
+   the contacts of shape at the character's position: when one that is not a sensor is deeper than
+   maxPenetrationDepth, the old shape stays and false is returned; otherwise those contacts replace the
+   active contacts. The character keeps its own reference to shape. */
+JPH_CAPI bool JPH_CharacterVirtual_SetShape2(JPH_CharacterVirtual* character, const JPH_Shape* shape,
+	float maxPenetrationDepth,
+	const JPH_BroadPhaseLayerFilter* broadPhaseLayerFilter, const JPH_ObjectLayerFilter* objectLayerFilter,
+	const JPH_BodyFilter* bodyFilter, const JPH_ShapeFilter* shapeFilter, JPH_TempAllocator* tempAllocator);
+
+/* CharacterBase */
+/* The plane, in the character's local space, below which contacts can support the character. */
+JPH_CAPI void JPH_CharacterBase_GetSupportingVolume(JPH_CharacterBase* character, JPH_Plane* result);
+JPH_CAPI void JPH_CharacterBase_SetSupportingVolume(JPH_CharacterBase* character, const JPH_Plane* value);
 
 /* VehicleConstraint */
 /* The Constraint base of the vehicle constraint, for JPH_PhysicsSystem_AddConstraint, _RemoveConstraint

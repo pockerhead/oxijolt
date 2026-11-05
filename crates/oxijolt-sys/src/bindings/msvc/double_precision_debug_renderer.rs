@@ -10875,6 +10875,30 @@ unsafe extern "C" {
     );
 }
 unsafe extern "C" {
+    pub fn JPH_CharacterVirtual_SetShape2(
+        character: *mut JPH_CharacterVirtual,
+        shape: *const JPH_Shape,
+        maxPenetrationDepth: f32,
+        broadPhaseLayerFilter: *const JPH_BroadPhaseLayerFilter,
+        objectLayerFilter: *const JPH_ObjectLayerFilter,
+        bodyFilter: *const JPH_BodyFilter,
+        shapeFilter: *const JPH_ShapeFilter,
+        tempAllocator: *mut JPH_TempAllocator,
+    ) -> bool;
+}
+unsafe extern "C" {
+    pub fn JPH_CharacterBase_GetSupportingVolume(
+        character: *mut JPH_CharacterBase,
+        result: *mut JPH_Plane,
+    );
+}
+unsafe extern "C" {
+    pub fn JPH_CharacterBase_SetSupportingVolume(
+        character: *mut JPH_CharacterBase,
+        value: *const JPH_Plane,
+    );
+}
+unsafe extern "C" {
     pub fn JPH_VehicleConstraint_AsConstraint(
         constraint: *mut JPH_VehicleConstraint,
     ) -> *mut JPH_Constraint;

@@ -149,8 +149,9 @@ world's structure is unchanged (`StateError::WorldChanged`). The structure chang
 character, vehicle, ragdoll or constraint is created or removed, when a body's or a ragdoll's
 motion type is changed (`BodyMut::set_motion_type`, `RagdollMut::set_motion_type`), when a body's
 shape is set (`BodyMut::set_shape`, also with the body's current shape), when a body's sensor
-flag changes (`BodyMut::set_is_sensor`, which discards the body's cached contacts), and when a
-rebase moves anything. Calls that fail their checks change nothing and keep states
+flag changes (`BodyMut::set_is_sensor`, which discards the body's cached contacts), when a
+character's shape changes (`CharacterMut::set_shape` when it replaced the shape) or its inner
+body's shape is set (`CharacterMut::set_inner_body_shape`), and when a rebase moves anything. Calls that fail their checks change nothing and keep states
 restorable. In both refusals the world is unchanged.
 
 Jolt saves neither which objects exist nor its body id allocator, so rolling back across a creation
@@ -185,7 +186,11 @@ documentation asks for body friction. These setters change such configuration:
   `set_skinned_max_distance_multiplier`;
 - body: `set_friction`, `set_restitution`, `set_gravity_factor`, `set_linear_damping`,
   `set_angular_damping`, `set_motion_quality`, `set_object_layer` and `set_collision_group` of
-  `BodyMut`.
+  `BodyMut`;
+- character: `set_penetration_recovery_speed`, `set_mass`, `set_max_strength`,
+  `set_max_slope_angle`, `set_supporting_volume`, `set_shape_offset`,
+  `set_hit_reduction_cos_max_angle`, `set_enhanced_internal_edge_removal`, `set_max_num_hits`
+  and `set_user_data` of `CharacterMut` (the user data also of the inner body).
 
 Body properties set at creation (shape, mass, friction, layers) are not saved either. The body
 property setters in the list above change such configuration, the pose and velocity setters

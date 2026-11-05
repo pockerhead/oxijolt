@@ -6,6 +6,21 @@ All notable changes to this fork. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- `CharacterMut` changes the settings Jolt can change on a live character, so tuning one no longer
+  means recreating it with new ids and lost contacts: `set_mass`, `set_max_strength`,
+  `set_max_slope_angle`, `set_supporting_volume`, `set_shape_offset` (also moves the inner body),
+  `set_hit_reduction_cos_max_angle`, `set_enhanced_internal_edge_removal`, `set_max_num_hits`,
+  `set_user_data` (also the inner body's), `update_ground_velocity`, `set_inner_body_shape` and
+  `set_shape`. Each checks its value as `CharacterSettings` does at creation and changes nothing
+  when it refuses it. `set_shape` tests the new shape's contacts with the caller's `QueryFilter`
+  and returns whether it fit; on `false` the old shape stays and earlier `WorldState`s stay
+  restorable. `update_ground_velocity` calls the character contact listener's
+  `adjust_body_velocity`, as an update does. `CharacterRef` reads the values back
+  (`mass`, `max_strength`, `cos_max_slope_angle`, `supporting_volume`, `shape_offset`,
+  `hit_reduction_cos_max_angle`, `enhanced_internal_edge_removal`, `max_num_hits`, `user_data`),
+  and `CharacterError::NoInnerBody` refuses an inner body shape for a character without one. The
+  C extension adds `JPH_CharacterVirtual_SetShape2` with explicit filters and temp allocator and
+  `JPH_CharacterBase_SetSupportingVolume`/`_GetSupportingVolume`. Refs #22.
 - `PhysicsWorld::check_body(shape, settings)` runs the checks of `create_body` without creating
   anything and returns the same error; `Ok` means `create_body` with the same arguments succeeds
   unless the world is full, which it does not check. Earlier states stay restorable. The rustdoc of
@@ -87,6 +102,10 @@ All notable changes to this fork. The format follows [Keep a Changelog](https://
 - `RayCastHit::distance` and `ShapeCastHit::distance` take the direction's length in `f64`. A
   ray whose direction is longer than about 1.8e19 m reported `distance = inf` for a near hit,
   because the `f32` length overflowed; it now reports the hit's distance. Refs #21.
+- `CharacterSettings::max_num_hits` (and the new `CharacterMut::set_max_num_hits`) accept at most
+  the new `limits::MAX_CHARACTER_HITS` (4096). Jolt truncates the byte size of its contact list to
+  32 bits, so a count from `2^25 - 1` on (about 2.7e7 in double precision) let a character query write
+  past the list from safe code. Refs #22.
 
 ## 1.5.0 — 2026-11-01
 

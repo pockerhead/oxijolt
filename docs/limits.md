@@ -911,6 +911,22 @@ default and in the asserts build. Without the setters' check a NaN reaches the c
 velocity (an asserts-build probe with the check removed reported `ground_velocity` x = NaN), so the
 refusal guards the character's state rather than a Jolt assertion.
 
+## Character contact count
+
+`limits::MAX_CHARACTER_HITS` (4096, 16 times Jolt's default of 256) bounds
+`CharacterSettings::max_num_hits` and `CharacterMut::set_max_num_hits`. Every character query
+reserves `max_num_hits` contacts, `max_num_hits + 1` when it moves to a contact, in a list from the
+temp allocator (`CharacterVirtual.cpp:1280, 1490, 1523, 1565`), and `STLTempAllocator::allocate`
+passes the byte size on as a 32-bit `uint` (`STLTempAllocator.h:43`) while the list keeps the
+requested capacity (`Array.h:175-176`). A `CharacterContact` is 128 bytes (160 in double
+precision), so from `2^25 - 1` hits (about 2.7e7 in double precision) the block is smaller than the
+list believes. At `2^28 + 1` hits it holds one contact and the second one Jolt writes lands past
+it: in a probe a capsule touching a floor and two walls was thrown 1.9e7 m in one update, and the
+same count at creation read garbage contacts. A native compile-time check pins the contact at most
+256 bytes, so the largest reservation, 4097 contacts, takes at most about 1 MiB and fits in the
+default temp allocator. The constraint list built from the contacts holds two smaller entries per
+contact.
+
 ## Group filter table size
 
 `GroupFilterTable::MAX_SUB_GROUPS` (4096) is an oxijolt bound. Jolt's table stores one bit per pair

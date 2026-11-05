@@ -166,6 +166,17 @@ pub const MAX_SPRING_COEFFICIENT: f32 = 1.0e30;
 /// [docs/limits.md#character-weight-and-push]: https://github.com/pockerhead/oxijolt/blob/main/docs/limits.md#character-weight-and-push
 pub const MAX_WEIGHT_IMPULSE: f32 = 1.0e9;
 
+/// Most contacts a character may collect per query
+/// ([`CharacterSettings::max_num_hits`](crate::CharacterSettings::max_num_hits),
+/// [`CharacterMut::set_max_num_hits`](crate::CharacterMut::set_max_num_hits)), 16 times Jolt's
+/// default. Jolt reserves room for that many contacts in a temporary list whose byte size it
+/// truncates to 32 bits, so a far larger count overruns the list.
+///
+/// See [docs/limits.md#character-contact-count].
+///
+/// [docs/limits.md#character-contact-count]: https://github.com/pockerhead/oxijolt/blob/main/docs/limits.md#character-contact-count
+pub const MAX_CHARACTER_HITS: u32 = 4096;
+
 /// Largest magnitude of a rack-and-pinion or pulley ratio; the smallest is its inverse. Gears
 /// have their own, tighter range (see [`MAX_GEAR_RATIO`]).
 ///
@@ -716,6 +727,15 @@ pub(crate) fn is_lean_spring(constant: f32, damping: f32, largest_inverse_inerti
         + f64::from(damping) * f64::from(MAX_ANGULAR_VELOCITY_CHANGE);
     let headroom = 1.0 + 4.0 * f64::from(crate::math::UNIT_TOLERANCE);
     torque * f64::from(largest_inverse_inertia) * headroom <= f64::from(MAX_ANGULAR_ACCELERATION)
+}
+
+/// What a character's maximum number of hits must satisfy ([`is_max_num_hits`]).
+pub(crate) const MAX_NUM_HITS_RULE: &str =
+    "max num hits must be between 1 and limits::MAX_CHARACTER_HITS";
+
+/// Whether `hits` is within `1..=MAX_CHARACTER_HITS`.
+pub(crate) fn is_max_num_hits(hits: u32) -> bool {
+    (1..=MAX_CHARACTER_HITS).contains(&hits)
 }
 
 /// What a dynamic body's mass must satisfy ([`is_mass`]).

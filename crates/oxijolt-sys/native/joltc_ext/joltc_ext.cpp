@@ -62,38 +62,16 @@ void JPH_SixDOFConstraintSettings_ToJolt(JPH::SixDOFConstraintSettings* joltSett
 void JPH_ConstraintSettings_Init(const JPH::ConstraintSettings& joltSettings, JPH_ConstraintSettings* settings);
 void JPH_ConstraintSettings_ToJolt(JPH::ConstraintSettings* joltSettings, const JPH_ConstraintSettings* settings);
 
+using joltc_ext::AsCharacterVirtual;
 using joltc_ext::AsJoltPhysicsSystem;
 using joltc_ext::AsSoftBodyMotionProperties;
 using joltc_ext::AsSoftBodySharedSettings;
+using joltc_ext::AsTempAllocator;
+using joltc_ext::ToJolt;
 using joltc_ext::ToVec3;
 
 namespace
 {
-	// A null filter accepts everything, as in joltc.
-	const JPH::BroadPhaseLayerFilter& ToJolt(const JPH_BroadPhaseLayerFilter* filter)
-	{
-		static const JPH::BroadPhaseLayerFilter accept_all{};
-		return filter ? *reinterpret_cast<const JPH::BroadPhaseLayerFilter*>(filter) : accept_all;
-	}
-
-	const JPH::ObjectLayerFilter& ToJolt(const JPH_ObjectLayerFilter* filter)
-	{
-		static const JPH::ObjectLayerFilter accept_all{};
-		return filter ? *reinterpret_cast<const JPH::ObjectLayerFilter*>(filter) : accept_all;
-	}
-
-	const JPH::BodyFilter& ToJolt(const JPH_BodyFilter* filter)
-	{
-		static const JPH::BodyFilter accept_all{};
-		return filter ? *reinterpret_cast<const JPH::BodyFilter*>(filter) : accept_all;
-	}
-
-	const JPH::ShapeFilter& ToJolt(const JPH_ShapeFilter* filter)
-	{
-		static const JPH::ShapeFilter accept_all{};
-		return filter ? *reinterpret_cast<const JPH::ShapeFilter*>(filter) : accept_all;
-	}
-
 	// The handle is always the most derived object. StateRecorderImpl inherits StreamIn and
 	// StreamOut through StateRecorder, so it is passed on as *impl through the implicit upcast and
 	// never cast to a base directly.
@@ -131,21 +109,6 @@ namespace
 	private:
 		std::vector<JPH::uint32> mBodies;
 	};
-
-	JPH::CharacterVirtual* AsCharacterVirtual(JPH_CharacterVirtual* character)
-	{
-		return reinterpret_cast<JPH::CharacterVirtual*>(character);
-	}
-
-	const JPH::CharacterVirtual* AsCharacterVirtual(const JPH_CharacterVirtual* character)
-	{
-		return reinterpret_cast<const JPH::CharacterVirtual*>(character);
-	}
-
-	JPH::TempAllocator& AsTempAllocator(JPH_TempAllocator* allocator)
-	{
-		return *reinterpret_cast<JPH::TempAllocator*>(allocator);
-	}
 
 	JPH::RagdollSettings* AsRagdollSettings(JPH_RagdollSettings* settings)
 	{

@@ -556,6 +556,8 @@ pub enum CharacterError {
     /// Jolt could not read a saved [`CharacterState`](crate::CharacterState). A state saved by
     /// this build should never cause it; if it does, the character may be partly restored.
     RestoreFailed,
+    /// The character has no inner body.
+    NoInnerBody(CharacterId),
 }
 
 impl fmt::Display for CharacterError {
@@ -568,6 +570,7 @@ impl fmt::Display for CharacterError {
             Self::TooManyCharacters => f.write_str("the world has no character ids left"),
             Self::Query(error) => write!(f, "unusable character query filter: {error}"),
             Self::RestoreFailed => f.write_str("the character state could not be restored"),
+            Self::NoInnerBody(id) => write!(f, "character {id:?} has no inner body"),
         }
     }
 }

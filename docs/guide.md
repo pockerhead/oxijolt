@@ -264,6 +264,14 @@ of the update and is not added to the velocity; the caller feeds the vertical sp
   bit for bit. Values the caller carries between ticks, such as its vertical speed, belong in the
   replay too. Every world numbers its characters from 1 in creation order, so a rebuilt world gives
   the same ids.
+- **Live settings.** `CharacterMut` changes what Jolt can change on a live character, with the
+  checks of creation: mass, strength, slope limit, supporting volume, shape offset, user data and
+  the contact settings. `set_shape(shape, max_penetration_depth, filter)` swaps the shape only when
+  the new one penetrates nothing deeper than the depth, for standing up from a crouch, and returns
+  whether it did; `set_inner_body_shape` gives the inner body a matching shape. After a step,
+  `update_ground_velocity` reads a moving platform's new velocity before the next update. Padding,
+  predictive contact distance, collision tolerance, back-face collision, iteration counts and the
+  minimum time remaining are fixed at creation.
 - **Rebase.** `PhysicsWorld::rebase` moves the characters with the bodies; after a rotating rebase,
   call `refresh_character_contacts` for each character before its next update.
 - **Contact callbacks.** `set_character_contact_listener` installs a `CharacterContactListener` for
