@@ -677,7 +677,7 @@ impl Shape {
     /// # Extent
     /// The shape's local bounds must lie within [`limits::MAX_SHAPE_EXTENT`] on every axis;
     /// otherwise [`ShapeError::InvalidValue`] is returned. A field of holes only has a zero-size
-    /// box at the centre of the grid and passes.
+    /// box at the centre of the grid, which must lie within the limit as well.
     pub fn new_height_field(
         sample_count: u32,
         samples: &[f32],
@@ -887,7 +887,8 @@ impl Shape {
     /// centre of mass (Jolt `Shape::GetLocalBounds`), convex radius included.
     ///
     /// Add [`center_of_mass`](Self::center_of_mass) to both corners for the box relative to the
-    /// shape's origin, the point a body's position places. The two differ for compounds and for
+    /// shape's origin, the point a body's position places. The two differ whenever the centre of
+    /// mass is not at the origin: compounds, convex hulls, tapered shapes and
     /// [`new_offset_center_of_mass`](Self::new_offset_center_of_mass). A scaled shape's box is
     /// its inner shape's box scaled; a compound's encloses its children's boxes. A heightfield
     /// whose samples are all holes has a box of zero size at the centre of its stored grid.

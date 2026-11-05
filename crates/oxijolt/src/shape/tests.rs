@@ -212,6 +212,21 @@ fn local_bounds_are_about_the_center_of_mass() {
     assert_eq!(pair.center_of_mass(), v(1.0, 0.0, 0.0));
     assert_eq!(pair.local_bounds(), (v(-2.5, -0.5, -0.5), v(2.5, 0.5, 0.5)));
 
+    let corners: Vec<Vec3> = (0..8)
+        .map(|i| v((i & 1) as f32, ((i >> 1) & 1) as f32, ((i >> 2) & 1) as f32))
+        .collect();
+    let hull = Shape::new_convex_hull(&corners).unwrap();
+    let (min, max) = hull.local_bounds();
+    let com = hull.center_of_mass();
+    for (corner, expected) in [(min, 0.0), (max, 1.0)] {
+        for (a, c) in [(corner.x, com.x), (corner.y, com.y), (corner.z, com.z)] {
+            assert!(
+                (a + c - expected).abs() < 1.0e-5,
+                "{min:?} {max:?} + {com:?}"
+            );
+        }
+    }
+
     let holes = Shape::new_height_field(3, &[f32::MAX; 9], &HeightFieldSettings::default());
     let center_of_padded_grid = v(1.5, 0.0, 1.5);
     assert_eq!(
