@@ -418,7 +418,8 @@ typedef struct JPH_AddBodiesState JPH_AddBodiesState; /* the ids of a prepared b
    the returned state keeps; the caller's array is not changed. Returns null and changes nothing when an
    id repeats or does not name a body of the system that is not added (JPH_BodyInterface_CreateBody).
    The state goes to exactly one of JPH_BodyInterface_AddBodiesFinalize and _AddBodiesAbort, which free
-   it; until then none of its bodies may be added, removed or destroyed. bodies may be null for count 0. */
+   it; until then none of its bodies may be added, removed, destroyed, moved, re-shaped or moved to
+   another object layer: the state holds their bounds and layers. bodies may be null for count 0. */
 JPH_CAPI JPH_AddBodiesState* JPH_BodyInterface_AddBodiesPrepare(JPH_BodyInterface* bodyInterface, const JPH_BodyID* bodies, uint32_t count);
 /* Jolt's BodyInterface::AddBodiesFinalize: adds the prepared bodies to the broad phase and, with
    JPH_Activation_Activate, activates those that are not static, in the order Jolt grouped them by
@@ -433,7 +434,8 @@ JPH_CAPI void JPH_BodyInterface_AddBodiesAbort(JPH_BodyInterface* bodyInterface,
 JPH_CAPI bool JPH_BodyInterface_RemoveBodies(JPH_BodyInterface* bodyInterface, const JPH_BodyID* bodies, uint32_t count);
 /* Jolt's BodyInterface::DestroyBodies: destroys the count bodies at bodies, freeing their ids in that
    order (the free list decides the ids of later bodies). Returns false and changes nothing when an id
-   repeats or does not name a body of the system that is not added. bodies may be null for count 0. */
+   repeats or does not name a body of the system that is not added. The caller makes sure no constraint,
+   ragdoll or character still uses them. bodies may be null for count 0. */
 JPH_CAPI bool JPH_BodyInterface_DestroyBodies(JPH_BodyInterface* bodyInterface, const JPH_BodyID* bodies, uint32_t count);
 
 /* MotionProperties */

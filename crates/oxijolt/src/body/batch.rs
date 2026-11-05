@@ -164,7 +164,11 @@ impl PhysicsWorld {
     /// `ids` is not reordered. The bodies around the removed ones wake as `remove_body` wakes
     /// them, once for the whole batch: every non-static body within the
     /// [speculative contact distance] of a removed body's bounds, each once, in ascending id
-    /// order. Removing changes the world's structure: earlier
+    /// order. The activation events differ from those of one-by-one removal: the removed bodies
+    /// that are awake report [`ActivationEvent::Deactivated`](crate::ActivationEvent::Deactivated)
+    /// in ascending id order, all before the neighbours' `Activated` events, and a sleeping body
+    /// of the batch reports nothing, also where `remove_body` of an earlier id would have woken
+    /// it first. Removing changes the world's structure: earlier
     /// [`WorldState`](crate::WorldState)s are no longer restorable.
     ///
     /// [speculative contact distance]: crate::WorldSettings::speculative_contact_distance

@@ -21,7 +21,8 @@ pub enum BodySelection<'a> {
     /// state is restored.
     Movable,
     /// The listed bodies, in any order, duplicates allowed; no body for an empty slice. Every id
-    /// must name a body of this world, or the call fails with [`StateError::Body`].
+    /// must name a body of this world that is not detached, or the call fails with
+    /// [`StateError::Body`].
     Only(&'a [BodyId]),
 }
 

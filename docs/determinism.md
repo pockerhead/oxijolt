@@ -49,7 +49,10 @@ A batch builds a different broad-phase tree than adding the same bodies one by o
 histories may simulate differently; equal histories give equal results
 (`batch_bodies_determinism.rs` compares 1 and 4 workers, in one process and in two). The neighbour
 wake of `remove_bodies` is the union of the per-body wakes of `remove_body`, each body once in id
-order, so its `Activated` events come in id order rather than in the order of the slice.
+order, so its `Activated` events come in id order rather than in the order of the slice. The
+removed bodies that are awake report `Deactivated` in id order, before those `Activated` events;
+a sleeping body of the batch reports nothing, where one-by-one removal may first wake it through
+the removal of a body below it and then report `Deactivated`.
 
 ## What the caller keeps deterministic
 

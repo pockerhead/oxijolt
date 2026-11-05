@@ -179,6 +179,8 @@ outward surface normal of the obstacle: a floor below gives a normal pointing up
 one rigid change of coordinates: positions, rotations, velocities and gravity. No body wakes up or
 falls asleep, and resting bodies keep their contacts, because Jolt caches contacts relative to the
 bodies. The list must name every body of the world once, in a stable order of the caller's choice.
+A detached body (`create_body_detached`) counts as a body of the world but cannot be rebased
+(`BodyError::Detached`): add or destroy detached bodies before a rebase.
 Rebase between steps, before adding the tick's forces: forces added since the last step are not
 rotated. Queries see the new poses at once; `optimize_broad_phase` afterwards is optional and only
 makes queries faster until the next step.

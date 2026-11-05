@@ -119,7 +119,9 @@ impl PhysicsWorld {
     /// `bodies_in_key_order` must name every body of the world exactly once, in the caller's
     /// stable key order, which is the order the poses are written in; otherwise
     /// [`BodyError::InvalidValue`], [`BodyError::WrongWorld`] or [`BodyError::NotFound`] is
-    /// returned. `rotation` must be a finite unit quaternion and `translation` finite with every
+    /// returned. A detached body ([`create_body_detached`](Self::create_body_detached)) counts as
+    /// a body of the world and fails with [`BodyError::Detached`], so add or destroy detached
+    /// bodies before a rebase. `rotation` must be a finite unit quaternion and `translation` finite with every
     /// component at most `2 *` [`limits::MAX_POSITION`] in absolute value, and no new pose or
     /// velocity may overflow; otherwise [`BodyError::InvalidValue`] is returned. The new positions
     /// are only checked to be finite. A rotating rebase fails with [`BodyError::RestrictedDofs`]

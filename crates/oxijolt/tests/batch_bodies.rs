@@ -4,6 +4,8 @@
 
 mod common;
 
+use common::ragdoll::{humanoid_settings, ragdoll_world};
+use common::vehicle::{add_car, car_settings, car_world, chassis_settings, chassis_shape};
 use common::*;
 use oxijolt::*;
 
@@ -288,6 +290,150 @@ fn remove_bodies_checks_every_id_first_and_removes_nothing_on_an_error() {
     assert_eq!(ids, [b, a], "the caller's slice is not reordered");
     assert_eq!(world.body_count(), count - 2);
     assert_eq!(world.body(a).err(), Some(BodyError::NotFound(a)));
+}
+
+#[test]
+fn a_detached_body_is_refused_as_a_chassis_and_as_a_soft_body() {
+    let (mut world, layers) = car_world(GRAVITY, 1);
+    let settings = chassis_settings(&layers, RVec3::new(0.0, 2.0, 0.0), Quat::IDENTITY);
+    let chassis = world
+        .create_body_detached(&chassis_shape(), &settings)
+        .unwrap();
+    let vehicle_settings = car_settings(VehicleCollisionTester::ray(layers.probe));
+    assert_eq!(
+        world
+            .create_wheeled_vehicle(chassis, &vehicle_settings)
+            .err(),
+        Some(VehicleError::Body(BodyError::Detached(chassis)))
+    );
+    assert_eq!(
+        world.soft_body(chassis).err(),
+        Some(BodyError::Detached(chassis))
+    );
+    assert_eq!(
+        world.soft_body_mut(chassis).err(),
+        Some(BodyError::Detached(chassis))
+    );
+    world.add_body(chassis, Activation::Activate).unwrap();
+    world
+        .create_wheeled_vehicle(chassis, &vehicle_settings)
+        .unwrap();
+}
+
+#[test]
+fn remove_bodies_refuses_ragdoll_parts_and_vehicle_chassis() {
+    let (mut world, layers) = ragdoll_world(1);
+    let ragdoll = world
+        .create_ragdoll(
+            &humanoid_settings(layers.ragdoll),
+            None,
+            Activation::Activate,
+        )
+        .unwrap();
+    let part = world.ragdoll(ragdoll).unwrap().body_ids()[0];
+    let cube = world
+        .create_body(
+            &cube_shape(),
+            &BodySettings::new_dynamic()
+                .position(RVec3::new(10.0, 0.0, 0.0))
+                .object_layer(layers.ragdoll),
+        )
+        .unwrap();
+    let count = world.body_count();
+    assert_eq!(
+        world.remove_bodies(&[cube, part]),
+        Err(BodyError::OwnedByRagdoll(part))
+    );
+    assert!(world.contains_body(cube) && world.contains_body(part));
+    assert_eq!(world.body_count(), count);
+
+    let (mut world, layers) = car_world(GRAVITY, 1);
+    let (chassis, _) = add_car(
+        &mut world,
+        &layers,
+        RVec3::new(0.0, 2.0, 0.0),
+        Quat::IDENTITY,
+    );
+    let cube = world
+        .create_body(
+            &cube_shape(),
+            &BodySettings::new_dynamic()
+                .position(RVec3::new(10.0, 2.0, 0.0))
+                .object_layer(layers.moving),
+        )
+        .unwrap();
+    let count = world.body_count();
+    assert_eq!(
+        world.remove_bodies(&[cube, chassis]),
+        Err(BodyError::UsedByVehicle(chassis))
+    );
+    assert!(world.contains_body(cube) && world.contains_body(chassis));
+    assert_eq!(world.body_count(), count);
+}
+
+/// The activation events of removing a platform with a cube asleep on it and two awake cubes
+/// far away, listed as `[platform, resting, high, low]` where `high` has the larger id, in one
+/// batch or one by one.
+fn removal_activations(batched: bool) -> (Vec<ActivationEvent>, [BodyId; 3]) {
+    let mut world = world(GRAVITY, 1);
+    let platform = static_box(
+        &mut world,
+        Vec3::new(1.0, 0.25, 1.0),
+        RVec3::new(0.0, -0.25, 0.0),
+    );
+    let resting = add_cube(&mut world, RVec3::new(0.0, 0.5, 0.0));
+    common::controls::fall_asleep(&mut world, resting);
+    let low = add_cube(&mut world, RVec3::new(30.0, 5.0, 0.0));
+    let high = add_cube(&mut world, RVec3::new(40.0, 5.0, 0.0));
+    assert!(low.to_raw() < high.to_raw());
+    world.set_event_settings(EventSettings::default().body_activation(true));
+    world.take_events();
+
+    let ids = [platform, resting, high, low];
+    if batched {
+        world.remove_bodies(&ids).unwrap();
+    } else {
+        for id in ids {
+            world.remove_body(id).unwrap();
+        }
+    }
+    (world.take_events().activations, [resting, low, high])
+}
+
+/// A batch reports `Deactivated` for its awake bodies in ascending id order, and nothing for a
+/// sleeping body that one-by-one removal first wakes through the removal of its platform.
+#[test]
+fn remove_bodies_reports_deactivations_in_body_id_order() {
+    let (batched, [_, low, high]) = removal_activations(true);
+    assert_eq!(
+        batched,
+        vec![
+            ActivationEvent::Deactivated(low),
+            ActivationEvent::Deactivated(high),
+        ]
+    );
+    let (one_by_one, [resting, low, high]) = removal_activations(false);
+    assert_eq!(
+        one_by_one,
+        vec![
+            ActivationEvent::Activated(resting),
+            ActivationEvent::Deactivated(resting),
+            ActivationEvent::Deactivated(high),
+            ActivationEvent::Deactivated(low),
+        ]
+    );
+}
+
+#[test]
+fn a_world_with_detached_bodies_drops() {
+    let mut world = world(GRAVITY, 1);
+    add_cube(&mut world, RVec3::ZERO);
+    let ids: Vec<BodyId> = (0..3)
+        .map(|i| detached_cube(&mut world, RVec3::new(3.0 * i as Real, 5.0, 0.0)))
+        .collect();
+    world.add_bodies(&ids[..1], Activation::Activate).unwrap();
+    step(&mut world, 2);
+    drop(world);
 }
 
 /// Two platforms side by side with a sleeping cube on each and one across both, and a sleeping
