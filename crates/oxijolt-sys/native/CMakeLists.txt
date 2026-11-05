@@ -82,6 +82,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${joltc_cpp}")
 target_sources(${JOLTC_TARGET} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/joltc_ext/joltc_ext.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/joltc_ext/joltc_ext_body.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/joltc_ext/joltc_ext_body_interface.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/joltc_ext/joltc_ext_character.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/joltc_ext/joltc_ext_job_system.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/joltc_ext/joltc_ext_listener.cpp
