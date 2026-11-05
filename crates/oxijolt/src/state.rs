@@ -27,8 +27,9 @@ use crate::{CharacterState, PhysicsWorld, StateError};
 /// for every body too.
 ///
 /// A state restores only into the world that saved it, and only while that world's structure is
-/// unchanged: creating or removing a body, character, vehicle, ragdoll or constraint, setting a
-/// body's or a ragdoll's motion type, setting a body's shape or sensor flag, changing a
+/// unchanged: creating or removing a body, character, vehicle, ragdoll or constraint, adding or
+/// destroying a detached body ([`PhysicsWorld::add_bodies`], [`PhysicsWorld::destroy_body`]),
+/// setting a body's or a ragdoll's motion type, setting a body's shape or sensor flag, changing a
 /// character's or its inner body's shape
 /// ([`CharacterMut::set_shape`](crate::CharacterMut::set_shape),
 /// [`set_inner_body_shape`](crate::CharacterMut::set_inner_body_shape)), or a
@@ -156,8 +157,9 @@ impl PhysicsWorld {
     /// Restoring it leaves every other body in its current state, except that a character's
     /// inner body moves to the restored character's pose, so a replay from it is exact
     /// only when those bodies did not change since the save, for example static bodies the caller
-    /// never moved. Fails with [`StateError::Body`] for an id of another world or a removed body,
-    /// before anything is saved.
+    /// never moved. Fails with [`StateError::Body`] for an id of another world, a removed body or
+    /// a detached one ([`BodyError::Detached`](crate::BodyError::Detached)), before anything is
+    /// saved.
     pub fn save_state_of(&self, bodies: BodySelection<'_>) -> Result<WorldState, StateError> {
         let mut state = WorldState::new();
         self.save_state_into(bodies, &mut state)?;
@@ -239,8 +241,9 @@ impl PhysicsWorld {
     /// made at the saved poses, also for bodies that now stay where they are.
     /// [`BodySelection::All`] is [`restore_state`](Self::restore_state).
     ///
-    /// Fails like `restore_state`, and with [`StateError::Body`] for an id of another world or a
-    /// removed body; the world is unchanged then.
+    /// Fails like `restore_state`, and with [`StateError::Body`] for an id of another world, a
+    /// removed body or a detached one ([`BodyError::Detached`](crate::BodyError::Detached)); the
+    /// world is unchanged then.
     ///
     /// ```
     /// use oxijolt::*;

@@ -11452,6 +11452,45 @@ unsafe extern "C" {
         deltaTime: f32,
     ) -> bool;
 }
+#[repr(C)]
+#[derive(Debug)]
+pub struct JPH_AddBodiesState {
+    _unused: [u8; 0],
+}
+unsafe extern "C" {
+    pub fn JPH_BodyInterface_AddBodiesPrepare(
+        bodyInterface: *mut JPH_BodyInterface,
+        bodies: *const JPH_BodyID,
+        count: u32,
+    ) -> *mut JPH_AddBodiesState;
+}
+unsafe extern "C" {
+    pub fn JPH_BodyInterface_AddBodiesFinalize(
+        bodyInterface: *mut JPH_BodyInterface,
+        state: *mut JPH_AddBodiesState,
+        activationMode: JPH_Activation,
+    );
+}
+unsafe extern "C" {
+    pub fn JPH_BodyInterface_AddBodiesAbort(
+        bodyInterface: *mut JPH_BodyInterface,
+        state: *mut JPH_AddBodiesState,
+    );
+}
+unsafe extern "C" {
+    pub fn JPH_BodyInterface_RemoveBodies(
+        bodyInterface: *mut JPH_BodyInterface,
+        bodies: *const JPH_BodyID,
+        count: u32,
+    ) -> bool;
+}
+unsafe extern "C" {
+    pub fn JPH_BodyInterface_DestroyBodies(
+        bodyInterface: *mut JPH_BodyInterface,
+        bodies: *const JPH_BodyID,
+        count: u32,
+    ) -> bool;
+}
 unsafe extern "C" {
     pub fn JPH_MotionProperties_GetMotionQuality(
         properties: *const JPH_MotionProperties,

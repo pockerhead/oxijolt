@@ -411,6 +411,33 @@ JPH_CAPI bool JPH_Body_ApplyBuoyancyImpulse2(JPH_Body* body, float totalVolume, 
 	const JPH_Vec3* relativeCenterOfBuoyancy, float buoyancy, float linearDrag, float angularDrag,
 	const JPH_Vec3* fluidVelocity, const JPH_Vec3* gravity, float deltaTime);
 
+/* BodyInterface (batch add and remove) */
+typedef struct JPH_AddBodiesState JPH_AddBodiesState; /* the ids of a prepared batch and Jolt's BodyInterface::AddState */
+
+/* Jolt's BodyInterface::AddBodiesPrepare for a copy of the count ids at bodies, sorted ascending, which
+   the returned state keeps; the caller's array is not changed. Returns null and changes nothing when an
+   id repeats or does not name a body of the system that is not added (JPH_BodyInterface_CreateBody).
+   The state goes to exactly one of JPH_BodyInterface_AddBodiesFinalize and _AddBodiesAbort, which free
+   it; until then none of its bodies may be added, removed, destroyed, moved, re-shaped or moved to
+   another object layer: the state holds their bounds and layers. bodies may be null for count 0. */
+JPH_CAPI JPH_AddBodiesState* JPH_BodyInterface_AddBodiesPrepare(JPH_BodyInterface* bodyInterface, const JPH_BodyID* bodies, uint32_t count);
+/* Jolt's BodyInterface::AddBodiesFinalize: adds the prepared bodies to the broad phase and, with
+   JPH_Activation_Activate, activates those that are not static, in the order Jolt grouped them by
+   broad-phase layer. Frees state. */
+JPH_CAPI void JPH_BodyInterface_AddBodiesFinalize(JPH_BodyInterface* bodyInterface, JPH_AddBodiesState* state, JPH_Activation activationMode);
+/* Jolt's BodyInterface::AddBodiesAbort: undoes the prepare, leaving the bodies created and not added.
+   Frees state. */
+JPH_CAPI void JPH_BodyInterface_AddBodiesAbort(JPH_BodyInterface* bodyInterface, JPH_AddBodiesState* state);
+/* Jolt's BodyInterface::RemoveBodies for a copy of the count ids at bodies: deactivates them and takes
+   them out of the broad phase; they stay created. Returns false and changes nothing when an id repeats
+   or does not name a body that is added. bodies may be null for count 0. */
+JPH_CAPI bool JPH_BodyInterface_RemoveBodies(JPH_BodyInterface* bodyInterface, const JPH_BodyID* bodies, uint32_t count);
+/* Jolt's BodyInterface::DestroyBodies: destroys the count bodies at bodies, freeing their ids in that
+   order (the free list decides the ids of later bodies). Returns false and changes nothing when an id
+   repeats or does not name a body of the system that is not added. The caller makes sure no constraint,
+   ragdoll or character still uses them. bodies may be null for count 0. */
+JPH_CAPI bool JPH_BodyInterface_DestroyBodies(JPH_BodyInterface* bodyInterface, const JPH_BodyID* bodies, uint32_t count);
+
 /* MotionProperties */
 /* Jolt's MotionProperties::GetMotionQuality: the stored quality, also of a static body created with
    mAllowDynamicOrKinematic, for which JPH_BodyInterface_GetMotionQuality reports Discrete. properties

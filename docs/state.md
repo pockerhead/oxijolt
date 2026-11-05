@@ -146,7 +146,8 @@ removed body; the world is unchanged then.
 
 A state restores only into the world that saved it (`StateError::WrongWorld`), and only while that
 world's structure is unchanged (`StateError::WorldChanged`). The structure changes when a body,
-character, vehicle, ragdoll or constraint is created or removed, when a body's or a ragdoll's
+character, vehicle, ragdoll or constraint is created or removed, when a detached body is added or
+destroyed (`add_body`, `add_bodies`, `destroy_body`), when a body's or a ragdoll's
 motion type is changed (`BodyMut::set_motion_type`, `RagdollMut::set_motion_type`), when a body's
 shape is set (`BodyMut::set_shape`, also with the body's current shape), when a body's sensor
 flag changes (`BodyMut::set_is_sensor`, which discards the body's cached contacts), when a

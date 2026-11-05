@@ -28,6 +28,53 @@ Capacity is not checked (`TooManyBodies` comes only from `create_body`); compare
 with `max_bodies()` for that. A game that splits a child off a compound asks it whether the child
 can become a body of its own before it changes the compound.
 
+## Batches of bodies
+
+Bodies added one by one leave Jolt's broad phase unbalanced until `optimize_broad_phase` or later
+steps rebuild it, which makes the first steps after a large burst slow. For a burst, create the
+bodies with `create_body_detached` and add them with one `add_bodies`, which builds one broad-phase
+subtree for the batch (Jolt `AddBodiesPrepare` and `AddBodiesFinalize`). `remove_bodies` removes and
+destroys several bodies and wakes their neighbours once for the whole batch.
+
+```rust
+use oxijolt::*;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut world = PhysicsWorld::new(WorldSettings::default())?;
+    world.create_body(&Shape::new_box(Vec3::new(50.0, 0.5, 50.0))?, &BodySettings::new_static())?;
+    let brick = Shape::new_box(Vec3::new(0.5, 0.25, 0.25))?;
+    let mut wall = Vec::new();
+    for row in 0..10 {
+        for column in 0..10 {
+            let at = RVec3::new(1.05 * column as Real, 0.75 + 0.5 * row as Real, 0.0);
+            wall.push(world.create_body_detached(&brick, &BodySettings::new_dynamic().position(at))?);
+        }
+    }
+    world.add_bodies(&wall, Activation::DontActivate)?;
+    assert!(world.step(1.0 / 60.0)?.is_complete());
+    world.remove_bodies(&wall[..10])?; // the bottom row; the row above wakes and falls
+    assert_eq!(world.body_count(), 91);
+    Ok(())
+}
+```
+
+A detached body, created and not added, takes a place in the world: `body_count` counts it,
+`body_ids` lists it and a full world refuses more bodies. It is not in the simulation:
+`contains_body` is false, steps and queries do not see it, and `body`, `body_mut`, `remove_body`,
+constraints, vehicles, state selections and `rebase` refuse it with `BodyError::Detached`. Add it
+with `add_body` or `add_bodies`, or destroy it with `destroy_body`. The world destroys detached
+bodies left when it is dropped.
+
+Both batch calls check every id before they change anything and refuse the whole call for one bad
+id: another world's, a body that does not exist, an id listed twice (`DuplicateId`), a body in the
+wrong state (`AlreadyAdded` for `add_bodies`, `Detached` for `remove_bodies`), and for
+`remove_bodies` a body that a character, vehicle, ragdoll or constraint holds. They never reorder
+the caller's slice. Ids are assigned at creation in call order, the same as with `create_body`, and
+`remove_bodies` frees them in the order of the slice, as the same `remove_body` calls would. A
+batch builds a different broad-phase tree than one-by-one adds
+([determinism](determinism.md#batches-of-bodies)). Each call changes the world's structure, so
+earlier `WorldState`s no longer restore.
+
 ## Mass and inertia
 
 By default Jolt computes a body's mass and inertia from its shape at a density of 1000 kg/m³.
