@@ -99,7 +99,8 @@ impl BodyRef<'_> {
     }
 
     /// Angular velocity in rad/s. For a soft body, Jolt reports the average of `p × v` over its
-    /// vertices (in m²/s, relative to the body origin), not a rigid rotation.
+    /// vertices (in m²/s, relative to the body origin before the last step moved it), not a
+    /// rigid rotation.
     pub fn angular_velocity(&self) -> Vec3 {
         let mut value = Vec3::ZERO.to_jph();
         // SAFETY: as in `position`.

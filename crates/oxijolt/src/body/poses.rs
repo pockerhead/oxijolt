@@ -53,7 +53,8 @@ pub struct BodyMotionState {
     /// [`BodyRef::linear_velocity`]: crate::BodyRef::linear_velocity
     pub linear_velocity: Vec3,
     /// The angular velocity in rad/s, as [`BodyRef::angular_velocity`]; for a soft body the
-    /// average of `p × v` over its vertices (in m²/s, relative to the body origin).
+    /// average of `p × v` over its vertices (in m²/s, relative to the body origin before the last
+    /// step moved it).
     ///
     /// [`BodyRef::angular_velocity`]: crate::BodyRef::angular_velocity
     pub angular_velocity: Vec3,
