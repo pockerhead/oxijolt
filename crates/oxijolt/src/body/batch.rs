@@ -114,7 +114,7 @@ impl PhysicsWorld {
 
     /// Adds detached bodies ([`create_body_detached`](Self::create_body_detached)) to the world
     /// in one batch (Jolt `BodyInterface::AddBodiesPrepare` and `AddBodiesFinalize`). Jolt builds
-    /// one broad-phase subtree for the batch, which keeps queries and the next step fast where
+    /// one broad-phase subtree per broad-phase layer for the batch, which keeps queries and the next step fast where
     /// adding the bodies one by one would leave the broad phase unbalanced until
     /// [`optimize_broad_phase`](Self::optimize_broad_phase) or later steps rebuild it.
     ///

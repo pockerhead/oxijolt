@@ -821,7 +821,8 @@ pub enum StateError {
     /// cause it; if it does, the world may be partly restored and should be discarded.
     RestoreFailed,
     /// A [`BodySelection::Only`](crate::BodySelection::Only) names a body of another world
-    /// ([`BodyError::WrongWorld`]) or a removed body ([`BodyError::NotFound`]).
+    /// ([`BodyError::WrongWorld`]), a removed body ([`BodyError::NotFound`]) or a body
+    /// created but not added ([`BodyError::Detached`]).
     Body(BodyError),
 }
 
