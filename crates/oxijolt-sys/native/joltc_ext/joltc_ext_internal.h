@@ -7,7 +7,13 @@
 
 #include <Jolt/Jolt.h>
 
+#include <Jolt/Core/TempAllocator.h>
 #include <Jolt/Physics/Body/Body.h>
+#include <Jolt/Physics/Body/BodyFilter.h>
+#include <Jolt/Physics/Character/CharacterVirtual.h>
+#include <Jolt/Physics/Collision/BroadPhase/BroadPhaseLayer.h>
+#include <Jolt/Physics/Collision/ObjectLayer.h>
+#include <Jolt/Physics/Collision/ShapeFilter.h>
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/Physics/SoftBody/SoftBodyMotionProperties.h>
 #include <Jolt/Physics/SoftBody/SoftBodySharedSettings.h>
@@ -21,6 +27,46 @@ namespace joltc_ext
 	inline JPH::Vec3 ToVec3(const JPH_Vec3& vec)
 	{
 		return JPH::Vec3(vec.x, vec.y, vec.z);
+	}
+
+	// A null filter accepts everything, as in joltc.
+	inline const JPH::BroadPhaseLayerFilter& ToJolt(const JPH_BroadPhaseLayerFilter* filter)
+	{
+		static const JPH::BroadPhaseLayerFilter accept_all{};
+		return filter ? *reinterpret_cast<const JPH::BroadPhaseLayerFilter*>(filter) : accept_all;
+	}
+
+	inline const JPH::ObjectLayerFilter& ToJolt(const JPH_ObjectLayerFilter* filter)
+	{
+		static const JPH::ObjectLayerFilter accept_all{};
+		return filter ? *reinterpret_cast<const JPH::ObjectLayerFilter*>(filter) : accept_all;
+	}
+
+	inline const JPH::BodyFilter& ToJolt(const JPH_BodyFilter* filter)
+	{
+		static const JPH::BodyFilter accept_all{};
+		return filter ? *reinterpret_cast<const JPH::BodyFilter*>(filter) : accept_all;
+	}
+
+	inline const JPH::ShapeFilter& ToJolt(const JPH_ShapeFilter* filter)
+	{
+		static const JPH::ShapeFilter accept_all{};
+		return filter ? *reinterpret_cast<const JPH::ShapeFilter*>(filter) : accept_all;
+	}
+
+	inline JPH::CharacterVirtual* AsCharacterVirtual(JPH_CharacterVirtual* character)
+	{
+		return reinterpret_cast<JPH::CharacterVirtual*>(character);
+	}
+
+	inline const JPH::CharacterVirtual* AsCharacterVirtual(const JPH_CharacterVirtual* character)
+	{
+		return reinterpret_cast<const JPH::CharacterVirtual*>(character);
+	}
+
+	inline JPH::TempAllocator& AsTempAllocator(JPH_TempAllocator* allocator)
+	{
+		return *reinterpret_cast<JPH::TempAllocator*>(allocator);
 	}
 
 	inline JPH::PhysicsSystem& AsJoltPhysicsSystem(JPH_PhysicsSystem* system)

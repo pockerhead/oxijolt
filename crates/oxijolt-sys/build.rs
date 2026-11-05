@@ -66,7 +66,7 @@ const JOLT_COMMIT: &str = "e77f175595e64cb44218cc9d9d56fc365ad0e36a";
 const JOLT_VERSION: &str = "5.6.0";
 /// Revision of the fork's joltc additions in `native/joltc_ext/`. Bump it whenever
 /// anything there changes, so prebuilt prefixes built before the change are refused.
-const JOLTC_EXT_REVISION: &str = "28";
+const JOLTC_EXT_REVISION: &str = "29";
 /// Name of the manifest file in an install prefix.
 const MANIFEST_FILE: &str = "oxijolt-sys-manifest.txt";
 /// Manifest key of a wasm prefix: the wasi-sdk that built it and whose runtime it bundles.

@@ -9,7 +9,9 @@
 //! extension adds functions in joltc's naming that are compiled into the joltc
 //! archive: a `JPH_StateRecorder`, `JPH_CharacterVirtual_SaveState` and
 //! `RestoreState`, `JPH_CharacterVirtual_ExtendedUpdate2` and
-//! `RefreshContacts2` with explicit gravity, filters and temp allocator,
+//! `RefreshContacts2` with explicit gravity, filters and temp allocator, a
+//! filter-explicit `JPH_CharacterVirtual_SetShape2`, a character's supporting volume
+//! (`JPH_CharacterBase_SetSupportingVolume`, `_GetSupportingVolume`),
 //! `JPH_VehicleConstraint_AsConstraint`, the `Constraint` base of a vehicle
 //! constraint, and for ragdolls `JPH_RagdollSettings_SetPart`, the typed
 //! `JPH_RagdollSettings_SetPartToParentSwingTwist`, `_SetPartToParentHinge` and
