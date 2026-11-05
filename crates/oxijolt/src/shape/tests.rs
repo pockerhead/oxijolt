@@ -183,6 +183,44 @@ fn static_only_and_center_of_mass_are_read_from_jolt() {
 }
 
 #[test]
+fn local_bounds_are_about_the_center_of_mass() {
+    let v = Vec3::new;
+    let half = v(0.5, 1.0, 1.5);
+    let rounded = Shape::new_box_with_convex_radius(half, 0.1).unwrap();
+    assert_eq!(rounded.local_bounds(), (v(-0.5, -1.0, -1.5), half));
+    let sphere = Shape::new_sphere(0.7).unwrap();
+    assert_eq!(
+        sphere.local_bounds(),
+        (v(-0.7, -0.7, -0.7), v(0.7, 0.7, 0.7))
+    );
+
+    let offset = Shape::new_offset_center_of_mass(&unit_box(), v(0.25, 0.0, -0.5)).unwrap();
+    assert_eq!(
+        offset.local_bounds(),
+        (v(-0.75, -0.5, 0.0), v(0.25, 0.5, 1.0))
+    );
+
+    let box_shape = Shape::new_box(half).unwrap();
+    let scaled = Shape::new_scaled(&box_shape, v(2.0, -1.0, 3.0)).unwrap();
+    assert_eq!(
+        scaled.local_bounds(),
+        (v(-1.0, -1.0, -4.5), v(1.0, 1.0, 4.5))
+    );
+
+    let unit_box = unit_box();
+    let pair = Shape::new_compound(&[child(&unit_box, -1.0, 1), child(&unit_box, 3.0, 2)]).unwrap();
+    assert_eq!(pair.center_of_mass(), v(1.0, 0.0, 0.0));
+    assert_eq!(pair.local_bounds(), (v(-2.5, -0.5, -0.5), v(2.5, 0.5, 0.5)));
+
+    let holes = Shape::new_height_field(3, &[f32::MAX; 9], &HeightFieldSettings::default());
+    let center_of_padded_grid = v(1.5, 0.0, 1.5);
+    assert_eq!(
+        holes.unwrap().local_bounds(),
+        (center_of_padded_grid, center_of_padded_grid)
+    );
+}
+
+#[test]
 fn new_shapes_have_jolt_subtypes() {
     let unit = Vec3::new(1.0, 1.0, 1.0);
     assert_eq!(

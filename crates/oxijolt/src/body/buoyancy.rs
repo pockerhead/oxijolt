@@ -12,6 +12,7 @@ use crate::limits::{
     POSITION_RULE,
 };
 use crate::math::is_unit;
+use crate::shape::local_bounds_of;
 use crate::world::DELTA_TIME_RULE;
 use crate::{BodyError, BodyMut, PhysicsWorld, RVec3, Vec3};
 
@@ -309,22 +310,19 @@ struct BodyState {
 unsafe fn read_body(body: *mut JPH_Body) -> BodyState {
     let mut inverse_inertia = Vec3::ZERO.to_jph();
     let (mut linear, mut angular) = (Vec3::ZERO.to_jph(), Vec3::ZERO.to_jph());
-    let mut bounds = JPH_AABox {
-        min: Vec3::ZERO.to_jph(),
-        max: Vec3::ZERO.to_jph(),
-    };
     // SAFETY: `body` is locked and dynamic (contract), so it has motion properties and a shape,
     // which the body keeps alive; the getters only read, into live locals.
-    let inverse_mass = unsafe {
+    let (inverse_mass, (min, max)) = unsafe {
         let motion = JPH_Body_GetMotionProperties(body);
         JPH_MotionProperties_GetInverseInertiaDiagonal(motion, &mut inverse_inertia);
         JPH_Body_GetLinearVelocity(body, &mut linear);
         JPH_Body_GetAngularVelocity(body, &mut angular);
-        JPH_Shape_GetLocalBounds(JPH_Body_GetShape(body), &mut bounds);
-        JPH_MotionProperties_GetInverseMassUnchecked(motion)
+        (
+            JPH_MotionProperties_GetInverseMassUnchecked(motion),
+            local_bounds_of(JPH_Body_GetShape(body)),
+        )
     };
     let inverse_inertia = Vec3::from_jph(inverse_inertia);
-    let (min, max) = (Vec3::from_jph(bounds.min), Vec3::from_jph(bounds.max));
     BodyState {
         inverse_mass,
         largest_inverse_inertia: inverse_inertia

@@ -105,21 +105,10 @@ impl Shape {
 mod tests {
     use super::*;
 
-    /// Jolt's local bounds of `shape` as `[min, max]`.
-    fn bounds(shape: &Shape) -> [Vec3; 2] {
-        let mut bounds = JPH_AABox {
-            min: Vec3::ZERO.to_jph(),
-            max: Vec3::ZERO.to_jph(),
-        };
-        // SAFETY: the shape is live for the call and `bounds` is a live local.
-        unsafe { JPH_Shape_GetLocalBounds(shape.as_ptr(), &mut bounds) };
-        [Vec3::from_jph(bounds.min), Vec3::from_jph(bounds.max)]
-    }
-
     #[test]
     fn bounds_reach_half_extent_around_the_plane_and_behind_it() {
         let up = Vec3::new(0.0, 1.0, 0.0);
-        let [min, max] = bounds(&Shape::new_plane(up, -1.0, 2000.0).unwrap());
+        let (min, max) = Shape::new_plane(up, -1.0, 2000.0).unwrap().local_bounds();
         assert_eq!(
             (min, max),
             (
@@ -128,12 +117,14 @@ mod tests {
             )
         );
         let down = Vec3::new(0.0, -1.0, 0.0);
-        let [min, max] = bounds(&Shape::new_plane(down, 1.0, 1999.0).unwrap());
+        let (min, max) = Shape::new_plane(down, 1.0, 1999.0).unwrap().local_bounds();
         assert_eq!((min.y, max.y), (1.0, 2000.0));
 
         let s = std::f32::consts::FRAC_1_SQRT_2;
         let half_extent = 2000.0 * s * (1.0 - 1.0e-5);
-        let [min, max] = bounds(&Shape::new_plane(Vec3::new(s, s, 0.0), 0.0, half_extent).unwrap());
+        let (min, max) = Shape::new_plane(Vec3::new(s, s, 0.0), 0.0, half_extent)
+            .unwrap()
+            .local_bounds();
         assert!(min.x < -1999.9 && min.y < -1999.9, "{min:?}");
         assert!(max.x <= 2000.0 && max.y <= 2000.0, "{max:?}");
         assert!((max.z - half_extent).abs() < 1.0e-3 && (min.z + half_extent).abs() < 1.0e-3);

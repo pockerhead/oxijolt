@@ -20,19 +20,14 @@ fn fingerprint(shape: &Shape) -> Vec<u64> {
     let mut push = |values: &[f32]| bits.extend(values.iter().map(|v| u64::from(v.to_bits())));
     let center = shape.center_of_mass();
     push(&[center.x, center.y, center.z]);
-    let mut bounds = JPH_AABox {
-        min: Vec3::ZERO.to_jph(),
-        max: Vec3::ZERO.to_jph(),
-    };
-    // SAFETY: the shape is live; the getters only read it, into live locals.
+    let (min, max) = shape.local_bounds();
+    // SAFETY: the shape is live; the getters only read it.
     let (radius, width) = unsafe {
-        JPH_Shape_GetLocalBounds(ptr, &mut bounds);
         (
             JPH_Shape_GetInnerRadius(ptr),
             JPH_Shape_GetSubShapeIDBitsRecursive(ptr),
         )
     };
-    let (min, max) = (bounds.min, bounds.max);
     push(&[min.x, min.y, min.z, max.x, max.y, max.z, radius]);
     let properties = mass_properties(shape, None);
     push(&[properties.mass]);

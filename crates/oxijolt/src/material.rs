@@ -244,16 +244,8 @@ mod tests {
 
     /// The shape's local bounds as `[min, max]`.
     fn bounds(shape: &Shape) -> [[f32; 3]; 2] {
-        let mut bounds = JPH_AABox {
-            min: Vec3::ZERO.to_jph(),
-            max: Vec3::ZERO.to_jph(),
-        };
-        // SAFETY: the shape is live; `bounds` is a live local.
-        unsafe { JPH_Shape_GetLocalBounds(shape.as_ptr(), &mut bounds) };
-        [
-            Vec3::from_jph(bounds.min).into(),
-            Vec3::from_jph(bounds.max).into(),
-        ]
+        let (min, max) = shape.local_bounds();
+        [min.into(), max.into()]
     }
 
     const ROOT: u32 = u32::MAX;
