@@ -52,7 +52,8 @@ impl PhysicsWorld {
     /// Puts the bodies `ids` to sleep now, in the order given, and zeroes the linear and angular
     /// velocity of each, also of those asleep already (Jolt `BodyInterface::DeactivateBodies`):
     /// the same result, bit for bit, as [`BodyMut::deactivate`] called for each id in the same
-    /// order, with the body locks taken once for the whole slice instead of for each body.
+    /// order. Jolt's deactivation and the velocity writes each take one multi-body lock for the
+    /// whole slice; the checks still go id by id.
     ///
     /// Every id is checked before anything changes: an id of another world
     /// ([`BodyError::WrongWorld`]), of no body ([`BodyError::NotFound`]), of a detached body
@@ -97,8 +98,9 @@ impl PhysicsWorld {
         let raw: Vec<JPH_BodyID> = ids.iter().map(|id| id.raw).collect();
         // SAFETY: the body interface belongs to this live world, borrowed mutably; `raw` holds
         // `raw.len()` ids, which joltc copies. The checks above confirmed that they are distinct
-        // rigid bodies in the world, as Jolt asserts, so the count fits `u32` (a world holds at
-        // most `1 << 23` bodies). This thread holds no body lock.
+        // rigid bodies added to the world (Jolt asserts that each is in the broad phase), so the
+        // count fits `u32` (a world holds at most `1 << 23` bodies). This thread holds no body
+        // lock.
         unsafe {
             JPH_BodyInterface_DeactivateBodies(
                 self.body_interface.as_ptr(),
@@ -329,10 +331,11 @@ impl BodyMut<'_> {
     /// itself, but awake bodies still produce sensor contacts with it, so this does not turn a
     /// sensor off. [`PhysicsWorld::restore_state`] puts bodies back to sleep or wakes them without
     /// activation events. Static bodies ignore it; fails with [`BodyError::NotRigidBody`] for a
-    /// soft body.
+    /// soft body. [`PhysicsWorld::deactivate_bodies`] does the same for a list of bodies.
     ///
     /// [`ActivationEvent::Deactivated`]: crate::ActivationEvent::Deactivated
     /// [`PhysicsWorld::restore_state`]: crate::PhysicsWorld::restore_state
+    /// [`PhysicsWorld::deactivate_bodies`]: crate::PhysicsWorld::deactivate_bodies
     pub fn deactivate(&mut self) -> Result<(), BodyError> {
         self.reject_soft_body()?;
         // SAFETY: as in `activate`.

@@ -9,7 +9,8 @@ All notable changes to this fork. The format follows [Keep a Changelog](https://
 - `PhysicsWorld::deactivate_bodies` puts a list of bodies to sleep in one call (Jolt
   `BodyInterface::DeactivateBodies`) and zeroes the velocities of each, also of those asleep already:
   the same result as `BodyMut::deactivate` for each id in the list's order, which is simulation state
-  and is kept, with the body locks taken once for the list. Every id is checked first (the checks of
+  and is kept; Jolt's deactivation and the velocity writes each take one multi-body lock for the list.
+  Every id is checked first (the checks of
   `deactivate`, plus `BodyError::DuplicateId`) and a refused call changes nothing; static bodies are
   ignored. Refs #25.
 - `Shape::local_bounds` returns a shape's bounding box as `(min, max)` in its own space, relative to
