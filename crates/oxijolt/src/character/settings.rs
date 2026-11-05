@@ -234,8 +234,8 @@ impl<'a> CharacterSettings<'a> {
         self
     }
 
-    /// Most contacts collected per query, at least 1. Default 256. Jolt sorts contacts
-    /// deterministically only while fewer than this many are found; see
+    /// Most contacts collected per query, from 1 to [`limits::MAX_CHARACTER_HITS`]. Default
+    /// 256. Jolt sorts contacts deterministically only while fewer than this many are found; see
     /// [`CharacterRef::max_hits_exceeded`](crate::CharacterRef::max_hits_exceeded).
     #[must_use]
     pub fn max_num_hits(mut self, value: u32) -> Self {
@@ -329,8 +329,8 @@ impl<'a> CharacterSettings<'a> {
         if !limits::is_local_distance(self.character_padding) {
             return invalid("character padding must be between 0 and limits::MAX_SHAPE_EXTENT");
         }
-        if self.max_num_hits == 0 {
-            return invalid(MAX_NUM_HITS_RULE);
+        if !limits::is_max_num_hits(self.max_num_hits) {
+            return invalid(limits::MAX_NUM_HITS_RULE);
         }
         if !self.hit_reduction_cos_max_angle.is_finite() {
             return invalid(HIT_REDUCTION_RULE);
@@ -460,9 +460,6 @@ pub(super) const MAX_STRENGTH_RULE: &str = "max strength must be finite and not 
 /// What a shape offset must satisfy ([`limits::is_local_offset`]).
 pub(super) const SHAPE_OFFSET_RULE: &str =
     "shape offset must be finite and within limits::MAX_SHAPE_EXTENT";
-
-/// What a maximum number of hits must satisfy.
-pub(super) const MAX_NUM_HITS_RULE: &str = "max num hits must be at least 1";
 
 /// What a hit reduction cosine must satisfy.
 pub(super) const HIT_REDUCTION_RULE: &str = "hit reduction cos max angle must be finite";

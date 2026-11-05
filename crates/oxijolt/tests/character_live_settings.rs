@@ -4,7 +4,10 @@
 
 mod common;
 
+use std::sync::Arc;
+
 use common::math::{bits, v3};
+use common::meshes::grid;
 use common::*;
 use oxijolt::*;
 
@@ -173,8 +176,16 @@ fn invalid_live_values_are_rejected_without_change() {
 
     let inner_shape = capsule();
     let (mut world, id) = standing(&shape, Some(&inner_shape));
+    let state = world.save_state();
+    let (vertices, triangles) = grid(2, 1.0, |_, _| 0.0);
+    let (mesh, _) = Shape::new_mesh(&vertices, &triangles).unwrap();
     let mut character = world.character_mut(id).unwrap();
     invalid(character.set_inner_body_shape(&plane));
+    // A mesh has no mass, so a kinematic body has no inverse inertia.
+    invalid(character.set_inner_body_shape(&mesh));
+    // Nothing changed: the state saved before is still restorable.
+    world.restore_state(&state).unwrap();
+    let mut character = world.character_mut(id).unwrap();
     // The bounds themselves are accepted.
     character.set_mass(limits::MAX_MASS).unwrap();
     character
@@ -357,6 +368,54 @@ fn update_ground_velocity_reads_the_platform_after_the_step() {
     assert!((ground_x(&world) - 3.0).abs() < 1e-5);
 }
 
+/// Reports the body with user data 1 as a belt moving at 2 m/s along x.
+struct Conveyor;
+
+impl CharacterContactListener for Conveyor {
+    fn adjust_body_velocity(
+        &self,
+        _: CharacterId,
+        _: BodyId,
+        user_data: u64,
+        velocity: &mut BodyVelocity,
+    ) {
+        if user_data == 1 {
+            velocity
+                .set_linear_velocity(Vec3::new(2.0, 0.0, 0.0))
+                .unwrap();
+        }
+    }
+}
+
+#[test]
+fn update_ground_velocity_asks_the_listener_as_an_update_does() {
+    let mut world = world(GRAVITY, 1);
+    world.set_character_contact_listener(Some(Arc::new(Conveyor)));
+    let belt = Shape::new_box(Vec3::new(5.0, 0.5, 5.0)).unwrap();
+    world
+        .create_body(
+            &belt,
+            &BodySettings::new_static()
+                .position(RVec3::new(0.0, -0.5, 0.0))
+                .user_data(1),
+        )
+        .unwrap();
+    let shape = capsule();
+    let id = world
+        .create_character(
+            &CharacterSettings::new(&shape).shape_offset(FOOT_OFFSET),
+            RVec3::ZERO,
+            Quat::IDENTITY,
+        )
+        .unwrap();
+    still_update(&mut world, id, GRAVITY, DT);
+    let ground = |world: &PhysicsWorld| bits(world.character(id).unwrap().ground_velocity());
+    assert_eq!(ground(&world), bits(Vec3::new(2.0, 0.0, 0.0)));
+    assert!(world.step(DT).unwrap().is_complete());
+    world.character_mut(id).unwrap().update_ground_velocity();
+    assert_eq!(ground(&world), bits(Vec3::new(2.0, 0.0, 0.0)));
+}
+
 #[test]
 fn max_num_hits_set_live_bounds_the_contacts() {
     let shape = capsule();
@@ -517,6 +576,37 @@ fn a_shape_swap_makes_earlier_world_states_unrestorable() {
         .unwrap()
         .set_shape(&stand, 0.0, &QueryFilter::new())
         .unwrap());
+    assert_eq!(world.restore_state(&state), Err(StateError::WorldChanged));
+}
+
+#[test]
+fn a_refused_or_repeated_shape_swap_keeps_earlier_world_states_restorable() {
+    let crouch = Shape::new_capsule(CROUCH_HALF_HEIGHT, RADIUS).unwrap();
+    let (mut world, id, _) = under_a_ceiling(&crouch, 1.5);
+    let state = world.save_state();
+    let stand = Shape::new_capsule(STAND_HALF_HEIGHT, RADIUS).unwrap();
+    let mut character = world.character_mut(id).unwrap();
+    assert!(!character
+        .set_shape(&stand, 0.05, &QueryFilter::new())
+        .unwrap());
+    assert!(character
+        .set_shape(&crouch, 0.05, &QueryFilter::new())
+        .unwrap());
+    world.restore_state(&state).unwrap();
+}
+
+#[test]
+fn an_inner_body_shape_change_makes_earlier_world_states_unrestorable() {
+    let shape = capsule();
+    let inner_shape = capsule();
+    let (mut world, id) = standing(&shape, Some(&inner_shape));
+    let state = world.save_state();
+    let wide = Shape::new_box(Vec3::new(0.4, 1.0, 1.0)).unwrap();
+    world
+        .character_mut(id)
+        .unwrap()
+        .set_inner_body_shape(&wide)
+        .unwrap();
     assert_eq!(world.restore_state(&state), Err(StateError::WorldChanged));
 }
 

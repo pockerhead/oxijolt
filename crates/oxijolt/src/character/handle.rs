@@ -1,5 +1,6 @@
 //! Read and write access to one character.
 
+use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::ptr::{null, NonNull};
 
 use oxijolt_sys::*;
@@ -7,14 +8,13 @@ use oxijolt_sys::*;
 use super::settings::{
     check_character_shape, check_inner_body_shape, check_supporting_volume, is_mass,
     is_max_slope_angle, is_recovery_speed, is_unit, HIT_REDUCTION_RULE, MASS_RULE,
-    MAX_NUM_HITS_RULE, MAX_SLOPE_ANGLE_RULE, MAX_STRENGTH_RULE, RECOVERY_SPEED_RULE,
-    SHAPE_OFFSET_RULE, UP_RULE,
+    MAX_SLOPE_ANGLE_RULE, MAX_STRENGTH_RULE, RECOVERY_SPEED_RULE, SHAPE_OFFSET_RULE, UP_RULE,
 };
 use super::update::query_error;
 use super::{
     CharacterContact, CharacterEntry, CharacterId, CharacterState, GroundState, INVALID_ID,
 };
-use crate::limits::{self, LINEAR_VELOCITY_RULE, POSITION_RULE};
+use crate::limits::{self, LINEAR_VELOCITY_RULE, MAX_NUM_HITS_RULE, POSITION_RULE};
 use crate::math::{is_finite_non_negative, ROTATION_RULE};
 use crate::owned::Owned;
 use crate::{
@@ -140,7 +140,8 @@ impl CharacterRef<'_> {
             .flatten()
     }
 
-    /// The contacts after the last update or refresh, in Jolt's order (sorted, which is
+    /// The contacts after the last update, refresh or fitting
+    /// [`set_shape`](CharacterMut::set_shape), in Jolt's order (sorted, which is
     /// deterministic while [`max_hits_exceeded`](Self::max_hits_exceeded) is false).
     pub fn active_contacts(&self) -> Vec<CharacterContact> {
         // SAFETY: as in `position`.
@@ -303,11 +304,12 @@ impl CharacterRef<'_> {
 ///
 /// Read the character through [`PhysicsWorld::character`] once this borrow ends.
 ///
-/// Every setting Jolt can change on a live character has a setter here, which checks the value
-/// as [`CharacterSettings`](crate::CharacterSettings) does at creation and changes nothing when
-/// it refuses it. The character padding, predictive contact distance, collision tolerance,
-/// back-face collision, the collision and constraint iteration counts and the minimum time
-/// remaining are fixed at creation: Jolt reads them from the settings only.
+/// Each setter checks the value as [`CharacterSettings`](crate::CharacterSettings) does at
+/// creation and changes nothing when it refuses it. The character padding, predictive contact
+/// distance, collision tolerance, back-face collision, the collision and constraint iteration
+/// counts and the minimum time remaining are fixed at creation: Jolt reads them from the
+/// settings only. Whether the character collides with other characters is fixed at creation
+/// too.
 pub struct CharacterMut<'w> {
     pub(super) world: &'w mut PhysicsWorld,
     pub(super) id: CharacterId,
@@ -510,10 +512,10 @@ impl CharacterMut<'_> {
         unsafe { JPH_CharacterVirtual_SetEnhancedInternalEdgeRemoval(self.ptr(), value) };
     }
 
-    /// Sets the most contacts collected per query, at least 1, from the next update or refresh
-    /// on (see [`CharacterRef::max_hits_exceeded`]).
+    /// Sets the most contacts collected per query, from 1 to [`limits::MAX_CHARACTER_HITS`],
+    /// from the next update or refresh on (see [`CharacterRef::max_hits_exceeded`]).
     pub fn set_max_num_hits(&mut self, value: u32) -> Result<(), CharacterError> {
-        if value == 0 {
+        if !limits::is_max_num_hits(value) {
             return Err(CharacterError::InvalidValue(MAX_NUM_HITS_RULE));
         }
         // SAFETY: as in `set_up`; the setter writes a member.
@@ -535,11 +537,21 @@ impl CharacterMut<'_> {
     /// after the step and before computing the next velocity. Without a ground body, or when it
     /// has left the world, the ground velocity stays.
     ///
+    /// The character contact listener's
+    /// [`adjust_body_velocity`](crate::CharacterContactListener::adjust_body_velocity) is called
+    /// for the ground body as in an update, and a panic in it resumes the same way.
+    ///
     /// [`PhysicsWorld::step`]: crate::PhysicsWorld::step
     pub fn update_ground_velocity(&mut self) {
-        // SAFETY: as in `set_position`; Jolt reads the ground body under a read lock it takes
-        // itself and skips an id that no longer resolves.
-        unsafe { JPH_CharacterVirtual_UpdateGroundVelocity(self.ptr()) };
+        let character = self.character;
+        self.world
+            .with_character_filters(self.id, character, &QueryFilter::new(), |_| {
+                // SAFETY: as in `set_position`; Jolt reads the ground body under a read lock it
+                // takes itself and skips an id that no longer resolves. It calls the attached
+                // listener only, and changes no contact.
+                unsafe { JPH_CharacterVirtual_UpdateGroundVelocity(character.as_ptr()) };
+            })
+            .unwrap_or_else(|_| unreachable!("an empty filter creates no native filter"));
     }
 
     /// Replaces the character's shape with `shape`, which must be convex as at creation, and
@@ -547,16 +559,16 @@ impl CharacterMut<'_> {
     ///
     /// Jolt first collects the contacts of `shape` at the character's position, colliding with
     /// what `filter` selects. When one of them that is not a sensor penetrates deeper than
-    /// `max_penetration_depth` metres (not negative; `f32::INFINITY` skips the test and keeps
-    /// the contacts), the old shape stays and this returns `Ok(false)`; otherwise the collected
-    /// contacts become the character's contacts, with the ground they give. Use it to stand up
-    /// from a crouch only where there is room. The inner body keeps its shape; give it the new
+    /// `max_penetration_depth` metres (not negative; `f32::MAX` and `f32::INFINITY` skip the
+    /// test and keep the contacts), the old shape stays and this returns `Ok(false)`; otherwise
+    /// the collected contacts become the character's contacts, with the ground they give. Use it
+    /// to stand up from a crouch only where there is room. The inner body keeps its shape; give it the new
     /// one with [`set_inner_body_shape`](Self::set_inner_body_shape).
     ///
-    /// The character takes its own reference to `shape`. Earlier
+    /// The character takes its own reference to `shape`. When the shape changed, earlier
     /// [`WorldState`](crate::WorldState)s become unrestorable
-    /// ([`StateError::WorldChanged`](crate::StateError::WorldChanged)), also when the shape did
-    /// not fit: Jolt does not save shapes.
+    /// ([`StateError::WorldChanged`](crate::StateError::WorldChanged)): Jolt does not save shapes.
+    /// A shape that did not fit, or the current shape again, keeps them restorable.
     ///
     /// Fails as [`PhysicsWorld::refresh_character_contacts`] does for the filter; the character
     /// contact listener is called, and panics in filter and listener callbacks resume, the same
@@ -579,26 +591,40 @@ impl CharacterMut<'_> {
         filter.validate(self.world).map_err(query_error)?;
         let character = self.character;
         let allocator = self.world.temp_allocator.as_ptr();
-        self.world.note_structure_change();
+        let base = self.base();
+        // SAFETY: as in `set_up`; the getter reads a member.
+        let old_shape = unsafe { JPH_CharacterBase_GetShape(base) };
         let mut fits = false;
-        self.world
-            .with_character_filters(self.id, character, filter, |raw| {
-                // SAFETY: as in `PhysicsWorld::refresh_character_contacts`; `shape` is live for
-                // the call and the character takes its own reference to it.
-                fits = unsafe {
-                    JPH_CharacterVirtual_SetShape2(
-                        character.as_ptr(),
-                        shape.as_ptr(),
-                        max_penetration_depth,
-                        null(),
-                        raw.object_layer,
-                        raw.body,
-                        raw.shape,
-                        allocator,
-                    )
-                };
-            })?;
-        Ok(fits)
+        // Only Rust frames unwind here (see `with_character_filters`), after the native call.
+        let outcome = catch_unwind(AssertUnwindSafe(|| {
+            self.world
+                .with_character_filters(self.id, character, filter, |raw| {
+                    // SAFETY: as in `PhysicsWorld::refresh_character_contacts`, except that the
+                    // character's own shape is replaced: only after its query, and the shape filter
+                    // caches body root shapes only. `shape` is live for the call and the character
+                    // takes its own reference to it.
+                    fits = unsafe {
+                        JPH_CharacterVirtual_SetShape2(
+                            character.as_ptr(),
+                            shape.as_ptr(),
+                            max_penetration_depth,
+                            null(),
+                            raw.object_layer,
+                            raw.body,
+                            raw.shape,
+                            allocator,
+                        )
+                    };
+                })
+        }));
+        // SAFETY: as above.
+        if unsafe { JPH_CharacterBase_GetShape(base) } != old_shape {
+            self.world.note_structure_change();
+        }
+        match outcome {
+            Ok(result) => result.map(|()| fits),
+            Err(payload) => resume_unwind(payload),
+        }
     }
 
     /// Gives the character's inner body `shape`, which must suit a kinematic body as

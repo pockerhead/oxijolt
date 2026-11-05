@@ -545,6 +545,40 @@ fn character_settings_and_setters_are_bounded() {
 }
 
 #[test]
+fn character_max_num_hits_is_bounded() {
+    let mut world = empty_world();
+    let capsule = Shape::new_capsule(0.5, 0.3).unwrap();
+    let base = || CharacterSettings::new(&capsule);
+    let largest = limits::MAX_CHARACTER_HITS;
+    for hits in [largest + 1, (1 << 28) + 1, u32::MAX] {
+        assert!(character_invalid(world.create_character(
+            &base().max_num_hits(hits),
+            RVec3::ZERO,
+            Quat::IDENTITY
+        )));
+    }
+    let id = world
+        .create_character(&base().max_num_hits(largest), RVec3::ZERO, Quat::IDENTITY)
+        .unwrap();
+    // A query reserves the largest contact list.
+    world
+        .refresh_character_contacts(id, &QueryFilter::new())
+        .unwrap();
+    let mut character = world.character_mut(id).unwrap();
+    character.set_max_num_hits(1).unwrap();
+    for hits in [largest + 1, (1 << 28) + 1, u32::MAX] {
+        assert!(character_invalid(character.set_max_num_hits(hits)));
+    }
+    assert_eq!(world.character(id).unwrap().max_num_hits(), 1);
+    world
+        .character_mut(id)
+        .unwrap()
+        .set_max_num_hits(largest)
+        .unwrap();
+    assert_eq!(world.character(id).unwrap().max_num_hits(), largest);
+}
+
+#[test]
 fn character_update_gravity_and_steps_are_bounded() {
     let mut world = empty_world();
     let capsule = Shape::new_capsule(0.5, 0.3).unwrap();

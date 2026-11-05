@@ -371,10 +371,10 @@ impl PhysicsWorld {
         })
     }
 
-    /// Runs `run`, a joltc update, refresh or shape change of `character` (the native character
-    /// of `id`), with the joltc filters of `filter` and the world's character contact listener
-    /// attached, retains the materials of the contacts it left, then delivers the removals the listener
-    /// collected. The materials are retained also when a callback panic is resumed.
+    /// Runs `run`, a joltc update, refresh, shape change or ground velocity update of
+    /// `character` (the native character of `id`), with the joltc filters of `filter` and the
+    /// world's character contact listener attached, retains the materials of the contacts it
+    /// left, then delivers the removals the listener collected. The materials are retained also when a callback panic is resumed.
     pub(super) fn with_character_filters(
         &mut self,
         id: CharacterId,
@@ -393,8 +393,8 @@ impl PhysicsWorld {
                     return Vec::<Removal>::new();
                 };
                 // SAFETY: `character` is a live character of this world, which the caller
-                // holds mutably for the whole call, and `run` updates, refreshes or reshapes
-                // only that character.
+                // holds mutably for the whole call, and `run` calls Jolt on that character
+                // only.
                 let ((), removed) = unsafe {
                     with_character_listener(state, &**listener, world, character, || run(raw))
                 };

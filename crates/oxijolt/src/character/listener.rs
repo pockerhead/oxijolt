@@ -27,9 +27,11 @@ use crate::{BodyId, CharacterError, PhysicsWorld, SubShapeId, Vec3};
 /// [`PhysicsWorld::set_character_contact_listener`].
 ///
 /// Jolt calls the methods on the thread that calls
-/// [`update_character`](PhysicsWorld::update_character) or
-/// [`refresh_character_contacts`](PhysicsWorld::refresh_character_contacts), during that call,
-/// for the character it updates. A method must not touch the world; one that locks a value which
+/// [`update_character`](PhysicsWorld::update_character),
+/// [`refresh_character_contacts`](PhysicsWorld::refresh_character_contacts),
+/// [`CharacterMut::set_shape`](crate::CharacterMut::set_shape) or
+/// [`CharacterMut::update_ground_velocity`](crate::CharacterMut::update_ground_velocity), during
+/// that call, for the character it updates. A method must not touch the world; one that locks a value which
 /// also guards the world can deadlock. For a replayable run its decisions must depend only on its
 /// arguments and on data fixed for the update.
 ///
@@ -233,13 +235,13 @@ impl Drop for Attached {
     }
 }
 
-/// Runs `run` (a joltc update, refresh or shape change of `character`) with `listener`
-/// attached to the character, and returns its result with the removals the update reported,
-/// sorted.
+/// Runs `run` (a joltc update, refresh, shape change or ground velocity update of `character`)
+/// with `listener` attached to the character, and returns its result with the removals the
+/// call reported, sorted.
 ///
 /// # Safety
 /// `character` is a live character of the world `state` belongs to, which the caller holds
-/// mutably for the whole call, and `run` updates, refreshes or reshapes only that character.
+/// mutably for the whole call, and `run` calls Jolt on that character only.
 pub(super) unsafe fn with_character_listener<R>(
     state: &FilterState<'_>,
     listener: &dyn CharacterContactListener,
@@ -261,8 +263,8 @@ pub(super) unsafe fn with_character_listener<R>(
     // `call` outlives it: the listener is destroyed before this function returns.
     let native = unsafe { Owned::from_raw(JPH_CharacterContactListener_Create(user_data)) }
         .unwrap_or_else(|| unreachable!("joltc `new`s the listener"));
-    // SAFETY: the character is live (contract). Jolt reads the listener only inside the
-    // character's update and refresh (`CharacterVirtual.cpp:193, 486, 497, 1393, 1412`).
+    // SAFETY: the character is live (contract). Jolt reads the listener only inside calls on
+    // the character, which `run` makes (`CharacterVirtual.cpp:193, 486, 497, 1393, 1412`).
     unsafe { JPH_CharacterVirtual_SetListener(character.as_ptr(), native.as_ptr()) };
     // Declared after `native`, so it drops first: the listener is detached before it is
     // destroyed, also during an unwind.

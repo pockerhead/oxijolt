@@ -17,6 +17,7 @@
 #include <Jolt/Physics/Body/MotionQuality.h>
 #include <Jolt/Physics/Body/MotionType.h>
 #include <Jolt/Physics/Character/CharacterBase.h>
+#include <Jolt/Physics/Character/CharacterVirtual.h>
 #include <Jolt/Physics/Collision/ActiveEdgeMode.h>
 #include <Jolt/Physics/Collision/BackFaceMode.h>
 #include <Jolt/Physics/Collision/BroadPhase/BroadPhaseLayer.h>
@@ -830,3 +831,8 @@ static_assert(int(_JPH_SixDOFConstraintAxis_Num) == int(JPH::SixDOFConstraintSet
 // MAX_CONTACT_CONSTRAINTS (2^20), which must stay within the count above which
 // ContactConstraintManager::Init asserts.
 static_assert(JPH::ContactConstraintManager::cMaxContactConstraintsLimit >= (1u << 20), "oxijolt WorldSettings::MAX_CONTACT_CONSTRAINTS must stay within Jolt's limit; change both together");
+
+// Not a layout: oxijolt bounds a character's max num hits by MAX_CHARACTER_HITS (4096). Jolt
+// reserves that many contacts (plus one) in a temp list whose byte size it truncates to 32 bits
+// (STLTempAllocator::allocate); docs/limits.md#character-contact-count counts on this size.
+static_assert(sizeof(JPH::CharacterContact) <= 256, "oxijolt limits::MAX_CHARACTER_HITS assumes a CharacterContact of at most 256 bytes");
