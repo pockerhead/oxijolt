@@ -34,7 +34,7 @@ pub(crate) use kinematic::kinematic_velocities;
 pub(crate) use lock::{with_locked_bodies, with_locked_body, with_read_locked_body};
 pub use mass::Inertia;
 pub(crate) use mass::MassOverride;
-pub use poses::BodyPose;
+pub use poses::{BodyMotionState, BodyPose};
 
 /// Identifies a body in the world that created it.
 ///

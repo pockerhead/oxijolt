@@ -104,6 +104,9 @@ After a step, a game copies body poses into its own entities.
 `PhysicsWorld::active_body_poses_into` fills a buffer with the id, position and rotation of every
 body that is awake when it is called, in ascending `BodyId` order, under one lock; sleeping and
 static bodies are absent. The poses are copies, so the world is free again once the call returns.
+`PhysicsWorld::active_body_states_into` reads the same bodies with their linear and angular
+velocities too (`BodyMotionState`), under the same single lock, so a game that also needs the
+velocities does not read them body by body.
 
 The awake set is not the set of bodies that moved. A body that falls asleep at the end of a step
 still moved in that step and is absent from the readout after it; with

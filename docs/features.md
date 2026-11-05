@@ -104,7 +104,8 @@ what is planned next.
 - Optional `glam032`, `glam033` (glam 0.33, Bevy 0.20) and `mint` features with exact conversions
   for `Vec3`, `RVec3` and `Quat`.
 - The poses of every awake body in one call, in a deterministic order
-  (`PhysicsWorld::active_body_poses`).
+  (`PhysicsWorld::active_body_poses`), or the poses with both velocities
+  (`PhysicsWorld::active_body_states`).
 - `oxijolt::prelude` for the common types, and `oxijolt::error::{Error, Result}` that wraps the
   error of every area.
 - Prebuilt native libraries on x86_64 Windows (MSVC), x86_64 Linux (GNU), macOS on Apple

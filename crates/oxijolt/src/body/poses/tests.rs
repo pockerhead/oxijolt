@@ -1,6 +1,6 @@
 use oxijolt_sys::*;
 
-use super::BodyPose;
+use super::{BodyMotionState, BodyPose};
 use crate::*;
 
 fn world() -> PhysicsWorld {
@@ -144,15 +144,15 @@ fn cloth(world: &mut PhysicsWorld, position: RVec3) -> BodyId {
         .unwrap()
 }
 
-#[test]
-fn poses_match_the_per_body_readout_bit_for_bit() {
-    let mut world = world();
-    let floor = add_floor(&mut world);
+/// A floor, a cube in a reused slot, a compound with an offset centre of mass, a moving kinematic
+/// body, a character's inner body, a cloth and a sleeping cube, in that order.
+fn mixed_scene(world: &mut PhysicsWorld) -> [BodyId; 7] {
+    let floor = add_floor(world);
 
     // A slot removed and filled again, so that one raw id carries a bumped sequence number.
-    let removed = add_cube(&mut world, RVec3::new(4.0, 1.0, 0.0), Activation::Activate);
+    let removed = add_cube(world, RVec3::new(4.0, 1.0, 0.0), Activation::Activate);
     world.remove_body(removed).unwrap();
-    let reused = add_cube(&mut world, RVec3::new(4.0, 1.0, 0.0), Activation::Activate);
+    let reused = add_cube(world, RVec3::new(4.0, 1.0, 0.0), Activation::Activate);
     assert_eq!(reused.index(), removed.index());
     assert!(reused.sequence() > removed.sequence());
 
@@ -178,7 +178,8 @@ fn poses_match_the_per_body_readout_bit_for_bit() {
             &cube,
             &BodySettings::new_kinematic()
                 .position(RVec3::new(0.0, 3.0, -4.0))
-                .linear_velocity(Vec3::new(0.5, 0.0, 0.0)),
+                .linear_velocity(Vec3::new(0.5, 0.0, 0.0))
+                .angular_velocity(Vec3::new(0.0, 0.4, 0.0)),
         )
         .unwrap();
     let capsule = Shape::new_capsule(0.5, 0.3).unwrap();
@@ -193,14 +194,17 @@ fn poses_match_the_per_body_readout_bit_for_bit() {
         )
         .unwrap();
     let inner = world.character(character).unwrap().inner_body().unwrap();
-    let soft = cloth(&mut world, RVec3::new(-6.0, 2.0, -6.0));
-    let asleep = add_cube(
-        &mut world,
-        RVec3::new(8.0, 1.0, 0.0),
-        Activation::DontActivate,
-    );
+    let soft = cloth(world, RVec3::new(-6.0, 2.0, -6.0));
+    let asleep = add_cube(world, RVec3::new(8.0, 1.0, 0.0), Activation::DontActivate);
 
-    let created = [floor, reused, offset, kinematic, inner, soft, asleep];
+    [floor, reused, offset, kinematic, inner, soft, asleep]
+}
+
+#[test]
+fn poses_match_the_per_body_readout_bit_for_bit() {
+    let mut world = world();
+    let created = mixed_scene(&mut world);
+    let [floor, reused, offset, kinematic, inner, soft, asleep] = created;
     for step in [false, true] {
         if step {
             assert!(world.step(1.0 / 60.0).unwrap().is_complete());
@@ -216,6 +220,63 @@ fn poses_match_the_per_body_readout_bit_for_bit() {
         }
         for pose in &poses {
             assert_bit_equal_to_body(&world, pose);
+        }
+    }
+}
+
+fn vec3_bits(v: Vec3) -> [u32; 3] {
+    [v.x.to_bits(), v.y.to_bits(), v.z.to_bits()]
+}
+
+fn assert_state_bit_equal_to_body(world: &PhysicsWorld, state: &BodyMotionState) {
+    let pose = BodyPose {
+        id: state.id,
+        position: state.position,
+        rotation: state.rotation,
+    };
+    assert_bit_equal_to_body(world, &pose);
+    let body = world.body(state.id).unwrap();
+    assert_eq!(
+        vec3_bits(state.linear_velocity),
+        vec3_bits(body.linear_velocity()),
+        "{state:?}"
+    );
+    assert_eq!(
+        vec3_bits(state.angular_velocity),
+        vec3_bits(body.angular_velocity()),
+        "{state:?}"
+    );
+}
+
+#[test]
+fn states_match_the_per_body_readout_and_the_poses_bit_for_bit() {
+    let mut world = world();
+    let created = mixed_scene(&mut world);
+    let [floor, _, offset, kinematic, _, soft, asleep] = created;
+    for step in [false, true] {
+        if step {
+            assert!(world.step(1.0 / 60.0).unwrap().is_complete());
+        }
+        let states = world.active_body_states();
+        let ids: Vec<BodyId> = states.iter().map(|state| state.id).collect();
+        assert_eq!(ids, awake_by_body(&world, &created));
+        assert_eq!(ids, pose_ids(&world));
+        for absent in [floor, asleep] {
+            assert!(!ids.contains(&absent), "{absent:?}");
+        }
+        for (state, pose) in states.iter().zip(world.active_body_poses()) {
+            assert_eq!(
+                (state.position, state.rotation),
+                (pose.position, pose.rotation)
+            );
+            assert_state_bit_equal_to_body(&world, state);
+        }
+        let state = |id| *states.iter().find(|state| state.id == id).unwrap();
+        assert_eq!(state(kinematic).linear_velocity, Vec3::new(0.5, 0.0, 0.0));
+        assert_eq!(state(kinematic).angular_velocity, Vec3::new(0.0, 0.4, 0.0));
+        if step {
+            assert!(state(offset).linear_velocity.y < 0.0);
+            assert!(state(soft).linear_velocity.y < 0.0);
         }
     }
 }
@@ -380,4 +441,93 @@ fn bodies_that_fall_asleep_are_synced_through_their_deactivation_event() {
         .unwrap();
     assert!(world.active_body_poses().is_empty());
     assert_eq!(world.body(cube).unwrap().position(), moved);
+}
+
+#[test]
+fn states_into_clears_and_reuses_the_buffer() {
+    let mut world = world();
+    add_floor(&mut world);
+    for x in 0..3 {
+        add_cube(
+            &mut world,
+            RVec3::new(x as Real, 2.0, 0.0),
+            Activation::Activate,
+        );
+    }
+    let mut out = world.active_body_states();
+    out.extend_from_within(..);
+    assert_eq!(out.len(), 6);
+    world.active_body_states_into(&mut out);
+    assert_eq!(out, world.active_body_states());
+    let (capacity, pointer) = (out.capacity(), out.as_ptr());
+    world.active_body_states_into(&mut out);
+    assert_eq!(out.len(), 3);
+    assert_eq!((out.capacity(), out.as_ptr()), (capacity, pointer));
+
+    let empty = self::world();
+    empty.active_body_states_into(&mut out);
+    assert!(out.is_empty());
+
+    world.active_body_states_into(&mut out);
+    assert_eq!(out.len(), 3);
+    let mut static_only = self::world();
+    add_floor(&mut static_only);
+    static_only.active_body_states_into(&mut out);
+    assert!(out.is_empty());
+}
+
+#[test]
+fn detached_bodies_are_absent_until_added() {
+    let mut world = world();
+    let shape = Shape::new_box(Vec3::new(0.25, 0.25, 0.25)).unwrap();
+    let settings = BodySettings::new_dynamic().linear_velocity(Vec3::new(1.0, 0.0, 0.0));
+    let detached = world.create_body_detached(&shape, &settings).unwrap();
+    assert!(world.active_body_states().is_empty());
+    assert!(world.active_body_poses().is_empty());
+    assert!(world.step(1.0 / 60.0).unwrap().is_complete());
+    assert!(world.active_body_states().is_empty());
+
+    world.add_body(detached, Activation::Activate).unwrap();
+    let states = world.active_body_states();
+    assert_eq!(states.len(), 1);
+    assert_eq!(states[0].id, detached);
+    assert_state_bit_equal_to_body(&world, &states[0]);
+}
+
+#[test]
+fn a_soft_body_reads_its_own_velocities() {
+    let mut world = world();
+    let soft = cloth(&mut world, RVec3::new(0.0, 2.0, 0.0));
+    for _ in 0..5 {
+        assert!(world.step(1.0 / 60.0).unwrap().is_complete());
+    }
+    let states = world.active_body_states();
+    assert_eq!(states.len(), 1);
+    let state = states[0];
+    assert_eq!(state.id, soft);
+    assert_state_bit_equal_to_body(&world, &state);
+
+    // The linear velocity is the vertices' mean (Jolt averages them in the body's own space and
+    // rotates the mean, so it matches up to rounding).
+    let vertices = world.soft_body(soft).unwrap().vertices();
+    let mean = vertices
+        .iter()
+        .fold(Vec3::ZERO, |sum, vertex| {
+            Vec3::new(
+                sum.x + vertex.velocity.x,
+                sum.y + vertex.velocity.y,
+                sum.z + vertex.velocity.z,
+            )
+        })
+        .scale(1.0 / vertices.len() as f32);
+    let difference = Vec3::new(
+        state.linear_velocity.x - mean.x,
+        state.linear_velocity.y - mean.y,
+        state.linear_velocity.z - mean.z,
+    );
+    assert!(state.linear_velocity.y < -0.5, "{state:?}");
+    assert!(
+        difference.length() <= 1e-5 * mean.length(),
+        "{state:?} {mean:?}"
+    );
 }

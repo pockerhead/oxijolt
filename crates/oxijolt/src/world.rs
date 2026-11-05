@@ -327,9 +327,9 @@ unsafe impl Send for PhysicsWorld {}
 // contact cache it reads is written only by `step` and `restore_state`, both behind `&mut self`.
 // The characters' `SaveState` is const as well. Soft body reads through `&self` copy the vertices
 // under Jolt's body read lock; vertices are written only by `step` and the `&mut` soft body and
-// body setters. `active_body_poses` copies the active body lists under Jolt's active-list mutex,
-// releases it, and then reads the poses under one multi-body read lock, which takes body mutexes
-// shared in mutex-array order. A concurrent `save_state` takes them exclusively in the same order,
+// body setters. `active_body_poses` and `active_body_states` copy the active body lists under
+// Jolt's active-list mutex, release it, and then read the bodies under one multi-body read lock,
+// which takes body mutexes shared in mutex-array order. A concurrent `save_state` takes them exclusively in the same order,
 // so the two may wait for each other but cannot deadlock. Event callbacks write the listener context only while Jolt steps, activates,
 // deactivates or removes bodies, which happens only in `&mut self` methods: no `&self` method
 // steps, adds, removes or wakes a body, and `event_settings` only reads the context's immutable
