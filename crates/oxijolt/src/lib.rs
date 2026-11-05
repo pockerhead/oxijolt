@@ -206,8 +206,8 @@ mod vehicle;
 mod world;
 
 pub use body::{
-    Activation, AllowedDofs, BodyId, BodyMut, BodyPose, BodyRef, BodySettings, BuoyancySettings,
-    Inertia, MotionQuality, MotionType,
+    Activation, AllowedDofs, BodyId, BodyMotionState, BodyMut, BodyPose, BodyRef, BodySettings,
+    BuoyancySettings, Inertia, MotionQuality, MotionType,
 };
 pub use character::{
     BodyVelocity, CharacterContact, CharacterContactKey, CharacterContactListener,

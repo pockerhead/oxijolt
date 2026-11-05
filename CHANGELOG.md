@@ -6,6 +6,11 @@ All notable changes to this fork. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- `PhysicsWorld::active_body_states` and `active_body_states_into` return a `BodyMotionState` (id,
+  position, rotation, linear and angular velocity) for every awake body, in ascending `BodyId`
+  order, under the one multi-body read lock `active_body_poses` takes, instead of a body lock per
+  velocity getter. The values are bit for bit those of the `BodyRef` getters; for a soft body the
+  velocities are the body's own, not its vertices'. Refs #24.
 - Bodies in batches. `PhysicsWorld::create_body_detached` creates a body with the checks of
   `create_body` without adding it: it gets its id in call order and takes a place in the world
   (`body_count`, `body_ids`), but `contains_body` is false and calls that take a body refuse it with

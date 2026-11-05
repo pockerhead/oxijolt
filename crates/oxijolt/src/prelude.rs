@@ -67,8 +67,8 @@
 
 pub use crate::MutableCompound;
 pub use crate::{
-    Activation, AllowedDofs, BodyId, BodyMut, BodyPose, BodyRef, BodySettings, Inertia,
-    MotionQuality, MotionType,
+    Activation, AllowedDofs, BodyId, BodyMotionState, BodyMut, BodyPose, BodyRef, BodySettings,
+    Inertia, MotionQuality, MotionType,
 };
 pub use crate::{ActivationEvent, ContactEvent, ContactListener, EventSettings, WorldEvents};
 pub use crate::{AnyConstraintId, ConstraintId};
