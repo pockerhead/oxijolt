@@ -230,7 +230,7 @@ impl PhysicsWorld {
 
     /// The raw ids of `ids`, ascending; [`BodyError::DuplicateId`] for the smallest id listed
     /// more than once.
-    fn sorted_unique(&self, ids: &[BodyId]) -> Result<Vec<JPH_BodyID>, BodyError> {
+    pub(super) fn sorted_unique(&self, ids: &[BodyId]) -> Result<Vec<JPH_BodyID>, BodyError> {
         let mut sorted: Vec<JPH_BodyID> = ids.iter().map(|id| id.raw).collect();
         sorted.sort_unstable();
         match sorted.windows(2).find(|pair| pair[0] == pair[1]) {

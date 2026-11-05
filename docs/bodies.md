@@ -259,6 +259,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 `activate` wakes a body and `deactivate` puts it to sleep now, zeroing its velocities. With
 `EventSettings::body_activation` both report `ActivationEvent`s for bodies that change state.
+`PhysicsWorld::deactivate_bodies` puts a list of bodies to sleep in one call, with the same result as
+`deactivate` for each in the list's order. The order matters: Jolt takes a body out of its list of
+awake bodies by moving the last one into its place, so another order can leave another list and
+different later steps. The call checks every id first and changes nothing when one fails, also for an id
+listed twice; static bodies in the list are ignored.
 `PhysicsWorld::activate_bodies_in_box` wakes every body whose exact bounds overlap a box, in body-id
 order, so the result does not depend on the broad phase's history. A restore puts bodies to sleep or
 wakes them without events.

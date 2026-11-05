@@ -556,3 +556,51 @@ fn provided_tensor_inertia_reaches_the_motion_properties() {
     let tensor = [[2.0, 0.5, 0.0], [0.5, 3.0, 0.0], [0.0, 0.0, 4.0]];
     check_provided_inertia_reaches_jolt(Inertia::Tensor(tensor), 1.0e-5);
 }
+
+/// The rigid bodies in Jolt's list of awake bodies, in the list's own order.
+fn active_list(world: &PhysicsWorld) -> Vec<JPH_BodyID> {
+    let system = world.system.as_ptr();
+    // SAFETY: the system is this live world's and nothing changes it under the shared borrow;
+    // the count is read first, so joltc fills exactly `ids`.
+    unsafe {
+        let count = JPH_PhysicsSystem_GetNumActiveBodies(system, JPH_BodyType_Rigid);
+        let mut ids = vec![0; count as usize];
+        JPH_PhysicsSystem_GetActiveBodies(system, JPH_BodyType_Rigid, ids.as_mut_ptr(), count);
+        ids
+    }
+}
+
+/// Six awake spheres, then the spheres at `order` deactivated in one batch or one by one; Jolt's
+/// list of awake bodies afterwards.
+fn active_list_after_deactivating(order: &[usize], batched: bool) -> Vec<JPH_BodyID> {
+    let mut world = PhysicsWorld::new(crate::WorldSettings::default()).unwrap();
+    let shape = Shape::new_sphere(0.5).unwrap();
+    let ids: Vec<BodyId> = (0..6)
+        .map(|i| {
+            let at = RVec3::new(2.0 * i as Real, 0.0, 0.0);
+            let settings = BodySettings::new_dynamic().position(at);
+            world.create_body(&shape, &settings).unwrap()
+        })
+        .collect();
+    let raw: Vec<JPH_BodyID> = ids.iter().map(|id| id.raw).collect();
+    assert_eq!(active_list(&world), raw);
+    let chosen: Vec<BodyId> = order.iter().map(|&i| ids[i]).collect();
+    if batched {
+        world.deactivate_bodies(&chosen).unwrap();
+    } else {
+        for &id in &chosen {
+            world.body_mut(id).unwrap().deactivate().unwrap();
+        }
+    }
+    active_list(&world)
+}
+
+#[test]
+fn deactivate_bodies_leaves_the_active_list_of_one_by_one_deactivation() {
+    let given = active_list_after_deactivating(&[1, 4, 0], true);
+    assert_eq!(given, active_list_after_deactivating(&[1, 4, 0], false));
+    // Jolt moves the last awake body into each freed slot, so the order is state.
+    let ascending = active_list_after_deactivating(&[0, 1, 4], true);
+    assert_eq!(ascending, active_list_after_deactivating(&[0, 1, 4], false));
+    assert_ne!(given, ascending);
+}
