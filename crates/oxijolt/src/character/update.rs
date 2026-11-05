@@ -1,6 +1,5 @@
 //! Creating, removing and updating characters.
 
-use std::marker::PhantomData;
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::ptr::{null, NonNull};
 
@@ -204,10 +203,11 @@ impl PhysicsWorld {
 
     /// Write access to a character.
     pub fn character_mut(&mut self, id: CharacterId) -> Result<CharacterMut<'_>, CharacterError> {
-        let entry = self.character_entry(id)?;
+        let character = self.character_entry(id)?.character.as_non_null();
         Ok(CharacterMut {
-            character: entry.character.as_non_null(),
-            _world: PhantomData,
+            world: self,
+            id,
+            character,
         })
     }
 
@@ -371,11 +371,11 @@ impl PhysicsWorld {
         })
     }
 
-    /// Runs `run`, a joltc update or refresh of `character` (the native character of `id`),
-    /// with the joltc filters of `filter` and the world's character contact listener attached,
-    /// retains the materials of the contacts it left, then delivers the removals the listener
+    /// Runs `run`, a joltc update, refresh or shape change of `character` (the native character
+    /// of `id`), with the joltc filters of `filter` and the world's character contact listener
+    /// attached, retains the materials of the contacts it left, then delivers the removals the listener
     /// collected. The materials are retained also when a callback panic is resumed.
-    fn with_character_filters(
+    pub(super) fn with_character_filters(
         &mut self,
         id: CharacterId,
         character: NonNull<JPH_CharacterVirtual>,
@@ -393,8 +393,8 @@ impl PhysicsWorld {
                     return Vec::<Removal>::new();
                 };
                 // SAFETY: `character` is a live character of this world, which the caller
-                // holds mutably for the whole call, and `run` updates or refreshes only that
-                // character.
+                // holds mutably for the whole call, and `run` updates, refreshes or reshapes
+                // only that character.
                 let ((), removed) = unsafe {
                     with_character_listener(state, &**listener, world, character, || run(raw))
                 };
@@ -459,6 +459,6 @@ impl PhysicsWorld {
 }
 
 /// A query filter error as a character error.
-fn query_error(error: crate::QueryError) -> CharacterError {
+pub(super) fn query_error(error: crate::QueryError) -> CharacterError {
     CharacterError::Query(error)
 }

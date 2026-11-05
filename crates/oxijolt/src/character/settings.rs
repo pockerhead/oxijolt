@@ -293,25 +293,21 @@ impl<'a> CharacterSettings<'a> {
         if !is_unit(self.up) {
             return invalid(UP_RULE);
         }
-        if !is_unit(self.supporting_volume_normal) {
-            return invalid("supporting volume normal must be a finite unit vector");
+        check_supporting_volume(
+            self.supporting_volume_normal,
+            self.supporting_volume_constant,
+        )?;
+        if !is_max_slope_angle(self.max_slope_angle) {
+            return invalid(MAX_SLOPE_ANGLE_RULE);
         }
-        if !self.supporting_volume_constant.is_finite() {
-            return invalid("supporting volume constant must be finite");
-        }
-        if !(is_finite_non_negative(self.max_slope_angle)
-            && self.max_slope_angle <= std::f32::consts::FRAC_PI_2)
-        {
-            return invalid("max slope angle must be between 0 and pi/2");
-        }
-        if !(0.0..=limits::MAX_MASS).contains(&self.mass) {
-            return invalid("mass must be between 0 and limits::MAX_MASS");
+        if !is_mass(self.mass) {
+            return invalid(MASS_RULE);
         }
         if !is_finite_non_negative(self.max_strength) {
-            return invalid("max strength must be finite and not negative");
+            return invalid(MAX_STRENGTH_RULE);
         }
         if !limits::is_local_offset(self.shape_offset) {
-            return invalid("shape offset must be finite and within limits::MAX_SHAPE_EXTENT");
+            return invalid(SHAPE_OFFSET_RULE);
         }
         if !limits::is_local_distance(self.predictive_contact_distance) {
             return invalid(
@@ -334,29 +330,20 @@ impl<'a> CharacterSettings<'a> {
             return invalid("character padding must be between 0 and limits::MAX_SHAPE_EXTENT");
         }
         if self.max_num_hits == 0 {
-            return invalid("max num hits must be at least 1");
+            return invalid(MAX_NUM_HITS_RULE);
         }
         if !self.hit_reduction_cos_max_angle.is_finite() {
-            return invalid("hit reduction cos max angle must be finite");
+            return invalid(HIT_REDUCTION_RULE);
         }
         if !is_recovery_speed(self.penetration_recovery_speed) {
             return invalid(RECOVERY_SPEED_RULE);
         }
-        // SAFETY: the shape is live for the call; the getter only reads it.
-        if unsafe { JPH_Shape_GetType(self.shape.get().as_ptr()) } != JPH_ShapeType_Convex {
-            return invalid("the character shape must be convex");
-        }
+        check_character_shape(self.shape.get())?;
         if let Some(inner) = &self.inner_body {
             if inner.object_layer.get() >= object_layer_count {
                 return invalid("inner body object layer does not exist in this world");
             }
-            if inner.shape.must_be_static() {
-                return invalid("inner body shape can only be used by static bodies");
-            }
-            // Jolt creates the inner body kinematic, which computes mass properties.
-            if !has_finite_inverse(&mass_properties(inner.shape, None)) {
-                return invalid(INNER_BODY_INERTIA_RULE);
-            }
+            check_inner_body_shape(inner.shape)?;
         }
         Ok(())
     }
@@ -459,6 +446,76 @@ pub(super) const RECOVERY_SPEED_RULE: &str = "penetration recovery speed must be
 /// Whether `value` is a penetration recovery speed: finite and in `[0, 1]`.
 pub(super) fn is_recovery_speed(value: f32) -> bool {
     is_finite_non_negative(value) && value <= 1.0
+}
+
+/// What a maximum slope angle must satisfy ([`is_max_slope_angle`]).
+pub(super) const MAX_SLOPE_ANGLE_RULE: &str = "max slope angle must be between 0 and pi/2";
+
+/// What a character mass must satisfy ([`is_mass`]).
+pub(super) const MASS_RULE: &str = "mass must be between 0 and limits::MAX_MASS";
+
+/// What a maximum strength must satisfy.
+pub(super) const MAX_STRENGTH_RULE: &str = "max strength must be finite and not negative";
+
+/// What a shape offset must satisfy ([`limits::is_local_offset`]).
+pub(super) const SHAPE_OFFSET_RULE: &str =
+    "shape offset must be finite and within limits::MAX_SHAPE_EXTENT";
+
+/// What a maximum number of hits must satisfy.
+pub(super) const MAX_NUM_HITS_RULE: &str = "max num hits must be at least 1";
+
+/// What a hit reduction cosine must satisfy.
+pub(super) const HIT_REDUCTION_RULE: &str = "hit reduction cos max angle must be finite";
+
+/// Whether `radians` is a maximum slope angle: finite and in `[0, π/2]`.
+pub(super) fn is_max_slope_angle(radians: f32) -> bool {
+    is_finite_non_negative(radians) && radians <= std::f32::consts::FRAC_PI_2
+}
+
+/// Whether `kg` is a character mass: in `[0, limits::MAX_MASS]`.
+pub(super) fn is_mass(kg: f32) -> bool {
+    (0.0..=limits::MAX_MASS).contains(&kg)
+}
+
+/// Checks a supporting volume: a finite unit normal and a finite constant.
+pub(super) fn check_supporting_volume(normal: Vec3, constant: f32) -> Result<(), CharacterError> {
+    if !is_unit(normal) {
+        return Err(CharacterError::InvalidValue(
+            "supporting volume normal must be a finite unit vector",
+        ));
+    }
+    if !constant.is_finite() {
+        return Err(CharacterError::InvalidValue(
+            "supporting volume constant must be finite",
+        ));
+    }
+    Ok(())
+}
+
+/// Checks that `shape` can be a character's shape: convex, because the character moves by
+/// casting it.
+pub(super) fn check_character_shape(shape: &Shape) -> Result<(), CharacterError> {
+    // SAFETY: the shape is live for the call; the getter only reads it.
+    if unsafe { JPH_Shape_GetType(shape.as_ptr()) } != JPH_ShapeType_Convex {
+        return Err(CharacterError::InvalidValue(
+            "the character shape must be convex",
+        ));
+    }
+    Ok(())
+}
+
+/// Checks that `shape` suits a character's kinematic inner body ([`INNER_BODY_INERTIA_RULE`]).
+pub(super) fn check_inner_body_shape(shape: &Shape) -> Result<(), CharacterError> {
+    if shape.must_be_static() {
+        return Err(CharacterError::InvalidValue(
+            "inner body shape can only be used by static bodies",
+        ));
+    }
+    // Jolt creates the inner body kinematic, which computes mass properties.
+    if !has_finite_inverse(&mass_properties(shape, None)) {
+        return Err(CharacterError::InvalidValue(INNER_BODY_INERTIA_RULE));
+    }
+    Ok(())
 }
 
 /// Whether `v` is finite and of unit length within Jolt's `Vec3::IsNormalized` tolerance

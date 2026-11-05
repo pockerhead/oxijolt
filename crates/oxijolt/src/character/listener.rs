@@ -233,12 +233,13 @@ impl Drop for Attached {
     }
 }
 
-/// Runs `run` (a joltc update or refresh of `character`) with `listener` attached to the
-/// character, and returns its result with the removals the update reported, sorted.
+/// Runs `run` (a joltc update, refresh or shape change of `character`) with `listener`
+/// attached to the character, and returns its result with the removals the update reported,
+/// sorted.
 ///
 /// # Safety
 /// `character` is a live character of the world `state` belongs to, which the caller holds
-/// mutably for the whole call, and `run` updates or refreshes only that character.
+/// mutably for the whole call, and `run` updates, refreshes or reshapes only that character.
 pub(super) unsafe fn with_character_listener<R>(
     state: &FilterState<'_>,
     listener: &dyn CharacterContactListener,

@@ -640,6 +640,46 @@ mod materials {
     }
 
     #[test]
+    fn a_shape_swap_retains_the_materials_of_the_new_contacts_only() {
+        let floor_material = PhysicsMaterial::new(1).unwrap();
+        let wall_material = PhysicsMaterial::new(2).unwrap();
+        let Corner {
+            mut world,
+            wall_shape: _wall_shape,
+            character: id,
+            ..
+        } = corner(&floor_material, &wall_material);
+        assert_eq!(
+            wall_material.reference_count(),
+            3,
+            "the test's, the shape's, the list's"
+        );
+
+        // A small sphere at the capsule's centre touches neither the wall nor the floor.
+        let sphere = Shape::new_sphere(0.1).unwrap();
+        let fits = world
+            .character_mut(id)
+            .unwrap()
+            .set_shape(&sphere, 0.0, &QueryFilter::new())
+            .unwrap();
+        assert!(fits);
+        assert!(world.character(id).unwrap().active_contacts().is_empty());
+        assert_eq!(
+            wall_material.reference_count(),
+            2,
+            "the test's and the shape's"
+        );
+
+        let capsule = Shape::new_capsule(HALF_HEIGHT, RADIUS).unwrap();
+        assert!(world
+            .character_mut(id)
+            .unwrap()
+            .set_shape(&capsule, 0.1, &QueryFilter::new())
+            .unwrap());
+        assert_eq!(wall_material.reference_count(), 3, "the list's again");
+    }
+
+    #[test]
     fn a_world_restore_releases_the_contact_materials() {
         let floor_material = PhysicsMaterial::new(1).unwrap();
         let wall_material = PhysicsMaterial::new(2).unwrap();

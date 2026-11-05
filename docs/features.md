@@ -26,7 +26,9 @@ what is planned next.
   direction that can change every update, for walking on a planet, and a character contact
   listener for moving platforms, ignored contacts, push settings and added, persisted and removed
   contacts ([guide](events.md#character-contacts-charactercontactlistener)); a humanoid preset,
-  `CharacterSettings::humanoid(height, radius)`.
+  `CharacterSettings::humanoid(height, radius)`. Mass, strength, slope limit, supporting volume,
+  shape offset, the shape (only where the new one fits, crouch to stand), the inner body's shape
+  and the contact settings change on a live character ([guide](guide.md#characters)).
 - Wheeled vehicles with suspension, engine, automatic transmission, differentials and anti-roll
   bars; tracked vehicles (tanks) with two tracks; motorcycles with a lean controller
   ([guide](vehicles.md)); presets for a car and a motorcycle (`WheeledVehicleSettings::car`,

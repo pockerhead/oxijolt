@@ -6,6 +6,19 @@ All notable changes to this fork. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- `CharacterMut` changes the settings Jolt can change on a live character, so tuning one no longer
+  means recreating it with new ids and lost contacts: `set_mass`, `set_max_strength`,
+  `set_max_slope_angle`, `set_supporting_volume`, `set_shape_offset` (also moves the inner body),
+  `set_hit_reduction_cos_max_angle`, `set_enhanced_internal_edge_removal`, `set_max_num_hits`,
+  `set_user_data` (also the inner body's), `update_ground_velocity`, `set_inner_body_shape` and
+  `set_shape`. Each checks its value as `CharacterSettings` does at creation and changes nothing
+  when it refuses it. `set_shape` tests the new shape's contacts with the caller's `QueryFilter`
+  and returns whether it fit; on `false` the old shape stays. `CharacterRef` reads the values back
+  (`mass`, `max_strength`, `cos_max_slope_angle`, `supporting_volume`, `shape_offset`,
+  `hit_reduction_cos_max_angle`, `enhanced_internal_edge_removal`, `max_num_hits`, `user_data`),
+  and `CharacterError::NoInnerBody` refuses an inner body shape for a character without one. The
+  C extension adds `JPH_CharacterVirtual_SetShape2` with explicit filters and temp allocator and
+  `JPH_CharacterBase_SetSupportingVolume`/`_GetSupportingVolume`. Refs #22.
 - `PhysicsWorld::check_body(shape, settings)` runs the checks of `create_body` without creating
   anything and returns the same error; `Ok` means `create_body` with the same arguments succeeds
   unless the world is full, which it does not check. Earlier states stay restorable. The rustdoc of
