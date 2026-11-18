@@ -187,7 +187,7 @@ jobs:
         run: |
           CARGO_TARGET_DIR="$RUNNER_TEMP/t" cargo build --locked -p "$CRATE" --release --target "$RUST_TARGET" --features "$FEATURES"
           shopt -s nullglob
-          dirs=("$RUNNER_TEMP/t/$RUST_TARGET/release/build/$CRATE"-*/out/joltc)
+          dirs=("$RUNNER_TEMP/t/$RUST_TARGET/release/build/$CRATE"-*/out/joltc "$RUNNER_TEMP/t/$RUST_TARGET/release/build/$CRATE"/*/out/joltc)
           [ ${#dirs[@]} -eq 1 ] || { echo "expected exactly one native prefix, found ${#dirs[@]}"; exit 1; }
           echo "PREFIX=${dirs[0]}" >> "$GITHUB_ENV"
           tag=${FEATURES:-default}

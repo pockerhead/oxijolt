@@ -76,7 +76,7 @@ jobs:
         run: |
           cargo build --workspace --exclude playground --exclude comparison $FEATURE_ARGS
           shopt -s nullglob
-          dirs=(target/debug/build/oxijolt-sys-*/out/joltc)
+          dirs=(target/debug/build/oxijolt-sys-*/out/joltc target/debug/build/oxijolt-sys/*/out/joltc)
           [ ${#dirs[@]} -eq 1 ] || { echo "expected exactly one native prefix, found ${#dirs[@]}"; exit 1; }
           mkdir -p "$RUNNER_TEMP/joltc-prefix"
           cp -r "${dirs[0]}/lib" "${dirs[0]}/include" "${dirs[0]}/$NATIVE_MANIFEST" "$RUNNER_TEMP/joltc-prefix/"
@@ -214,7 +214,7 @@ jobs:
         run: |
           CARGO_TARGET_DIR="$RUNNER_TEMP/native" cargo build -p playground --no-default-features $FEATURE_ARGS
           shopt -s nullglob
-          dirs=("$RUNNER_TEMP"/native/debug/build/oxijolt-sys-*/out/joltc)
+          dirs=("$RUNNER_TEMP"/native/debug/build/oxijolt-sys-*/out/joltc "$RUNNER_TEMP"/native/debug/build/oxijolt-sys/*/out/joltc)
           [ ${#dirs[@]} -eq 1 ] || { echo "expected exactly one native prefix, found ${#dirs[@]}"; exit 1; }
           mkdir -p "$RUNNER_TEMP/joltc-prefix"
           cp -r "${dirs[0]}/lib" "${dirs[0]}/include" "${dirs[0]}/$NATIVE_MANIFEST" "$RUNNER_TEMP/joltc-prefix/"
@@ -295,7 +295,7 @@ jobs:
         run: |
           CARGO_TARGET_DIR="$RUNNER_TEMP/native" cargo build -p oxijolt-sys
           shopt -s nullglob
-          dirs=("$RUNNER_TEMP"/native/debug/build/oxijolt-sys-*/out/joltc)
+          dirs=("$RUNNER_TEMP"/native/debug/build/oxijolt-sys-*/out/joltc "$RUNNER_TEMP"/native/debug/build/oxijolt-sys/*/out/joltc)
           [ ${#dirs[@]} -eq 1 ] || { echo "expected exactly one native prefix, found ${#dirs[@]}"; exit 1; }
           mkdir -p "$RUNNER_TEMP/joltc-prefix"
           cp -r "${dirs[0]}/lib" "${dirs[0]}/include" "${dirs[0]}/$NATIVE_MANIFEST" "$RUNNER_TEMP/joltc-prefix/"
@@ -383,7 +383,7 @@ jobs:
         run: |
           CARGO_TARGET_DIR="$RUNNER_TEMP/native" cargo build -p oxijolt $FEATURE_ARGS
           shopt -s nullglob
-          dirs=("$RUNNER_TEMP"/native/debug/build/oxijolt-sys-*/out/joltc)
+          dirs=("$RUNNER_TEMP"/native/debug/build/oxijolt-sys-*/out/joltc "$RUNNER_TEMP"/native/debug/build/oxijolt-sys/*/out/joltc)
           [ ${#dirs[@]} -eq 1 ] || { echo "expected exactly one native prefix, found ${#dirs[@]}"; exit 1; }
           mkdir -p "$RUNNER_TEMP/joltc-prefix"
           cp -r "${dirs[0]}/lib" "${dirs[0]}/include" "${dirs[0]}/$NATIVE_MANIFEST" "$RUNNER_TEMP/joltc-prefix/"
@@ -489,7 +489,7 @@ jobs:
         run: |
           CARGO_TARGET_DIR="$RUNNER_TEMP/native" cargo build -p oxijolt-sys
           shopt -s nullglob
-          dirs=("$RUNNER_TEMP"/native/debug/build/oxijolt-sys-*/out/joltc)
+          dirs=("$RUNNER_TEMP"/native/debug/build/oxijolt-sys-*/out/joltc "$RUNNER_TEMP"/native/debug/build/oxijolt-sys/*/out/joltc)
           [ ${#dirs[@]} -eq 1 ] || { echo "expected exactly one native prefix, found ${#dirs[@]}"; exit 1; }
           mkdir -p "$RUNNER_TEMP/joltc-prefix"
           cp -r "${dirs[0]}/lib" "${dirs[0]}/include" "${dirs[0]}/$NATIVE_MANIFEST" "$RUNNER_TEMP/joltc-prefix/"
