@@ -183,7 +183,7 @@ check() {
   elif [ "$made" -ne "$want_requests" ]; then
     problems+=("$made requests, expected $want_requests")
   fi
-  local rerun_pattern='Running `[^`]*oxijolt-sys[-/][0-9a-f]+[/\\]([^`]*[/\\])?build-script-build'
+  local rerun_pattern='Running `[^`]*oxijolt-sys[-/][0-9a-f]+[/\\]([^`]*[/\\])?build[-_]script[-_]build'
   for c in ${checks[@]+"${checks[@]}"}; do
     case "$c" in
       has:*) grep -qF -- "${c#has:}" "$log" || problems+=("missing '${c#has:}'") ;;
