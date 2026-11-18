@@ -281,7 +281,8 @@ It points at an install prefix:
 <prefix>/oxijolt-sys-manifest.txt
 ```
 
-A source build leaves such a prefix in `target/<profile>/build/oxijolt-sys-*/out/joltc`, and an
+A source build leaves such a prefix in `target/<profile>/build/oxijolt-sys-*/out/joltc` (or
+`target/<profile>/build/oxijolt-sys/*/out/joltc` with the newer cargo build directory layout), and an
 unpacked release archive is one. A prefix is tied to the target, the C runtime, the crate features
 and the pinned joltc and Jolt commits. The build script checks all of them against the manifest
 (refusing a manifest with a repeated key) and refuses a prefix built for another configuration. CI

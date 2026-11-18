@@ -183,7 +183,7 @@ check() {
   elif [ "$made" -ne "$want_requests" ]; then
     problems+=("$made requests, expected $want_requests")
   fi
-  local rerun_pattern='Running `[^`]*oxijolt-sys-[0-9a-f]+[/\\]build-script-build'
+  local rerun_pattern='Running `[^`]*oxijolt-sys[-/][0-9a-f]+[/\\]([^`]*[/\\])?build[-_]script[-_]build'
   for c in ${checks[@]+"${checks[@]}"}; do
     case "$c" in
       has:*) grep -qF -- "${c#has:}" "$log" || problems+=("missing '${c#has:}'") ;;
@@ -339,7 +339,8 @@ fi
 case_env=(JOLTC_PREBUILT_URL="$good_url" JOLTC_PREBUILT=require PATH="$work/empty-bin:$PATH")
 check cached-new-path t_ok ok 0 reran "has:$success" -- "${smoke[@]}"
 flipped=0
-for library in "$work"/t_ok/debug/build/oxijolt-sys-*/out/prebuilt/"$name"/lib/"$joltc_lib"; do
+for library in "$work"/t_ok/debug/build/oxijolt-sys-*/out/prebuilt/"$name"/lib/"$joltc_lib" \
+  "$work"/t_ok/debug/build/oxijolt-sys/*/out/prebuilt/"$name"/lib/"$joltc_lib"; do
   [ -f "$library" ] || continue
   "$python" -c 'import sys; p = sys.argv[1]; b = bytearray(open(p, "rb").read()); b[0] ^= 1; open(p, "wb").write(b)' \
     "$(native "$library")"
