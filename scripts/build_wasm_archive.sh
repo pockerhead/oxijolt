@@ -86,7 +86,7 @@ mkdir -p "$work/stage/$name/licenses" "$work/licenses" "$work/u"
 (cd "$repo" && env -u JOLTC_LIB_DIR JOLTC_PREBUILT=off CARGO_TARGET_DIR="$(native "$work/t")" \
   cargo build --locked -p "$crate" --release --target "$target" --features "$features")
 shopt -s nullglob
-prefixes=("$work/t/$target/release/build/$crate"-*/out/joltc)
+prefixes=("$work/t/$target/release/build/$crate"-*/out/joltc "$work/t/$target/release/build/$crate"/*/out/joltc)
 shopt -u nullglob
 [ ${#prefixes[@]} -eq 1 ] || fail "expected exactly one native prefix, found ${#prefixes[@]}"
 prefix=${prefixes[0]}
